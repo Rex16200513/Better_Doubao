@@ -399,6 +399,46 @@ export class CorpusBoard {
       const rect = range.getBoundingClientRect();
       console.log('[CorpusBoard] Selection rect:', rect);
       
+      const container = range.commonAncestorContainer;
+      const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
+      
+      if (containerEl.closest('.dbx-popup-content')) {
+        console.log('[CorpusBoard] Selection in dbx-popup-content, not showing button');
+        return;
+      }
+      
+      const isInChatMessageArea = (el: Element | null): boolean => {
+        if (!el) return false;
+        const testid = el.getAttribute('data-testid') || '';
+        let className = '';
+        try {
+          className = (el as HTMLElement).className?.toString() || '';
+        } catch (e) {
+          className = '';
+        }
+        
+        if (testid.includes('message') || 
+            testid.includes('message-list') ||
+            testid.includes('message_content') ||
+            testid.includes('message_text') ||
+            className.includes('message-list') ||
+            className.includes('message-block')) {
+          return true;
+        }
+        
+        if (el.classList.contains('flow-markdown-body') ||
+            el.closest('[data-testid="message-list"]')) {
+          return true;
+        }
+        
+        return isInChatMessageArea(el.parentElement);
+      };
+      
+      if (!isInChatMessageArea(containerEl)) {
+        console.log('[CorpusBoard] Selection not in chat message area, not showing button');
+        return;
+      }
+      
       if (!selectionButton) {
         selectionButton = document.createElement('div');
         selectionButton.className = 'dbx-corpus-selection-btn';
@@ -473,41 +513,47 @@ export class CorpusBoard {
         if (containerEl) {
               console.log('[CorpusBoard] Selection container:', containerEl.tagName, containerEl.className);
               
-              const excludedSelectors = [
-                'input[type="text"]',
-                'input:not([type])',
-                'textarea', 
-                '[contenteditable="true"]'
-              ];
-              
-              for (const sel of excludedSelectors) {
-                const matched = containerEl.matches(sel) || containerEl.closest(sel);
-                if (matched) {
-                  console.log('[CorpusBoard] Selection in excluded element:', sel);
-                  if (selectionButton) {
-                    selectionButton.style.display = 'none';
-                  }
-                  return;
+              if (containerEl.closest('.dbx-popup-content')) {
+                console.log('[CorpusBoard] Selection in dbx-popup-content');
+                if (selectionButton) {
+                  selectionButton.style.display = 'none';
                 }
+                return;
               }
               
-              let parent: Element | null = containerEl;
-              let depth = 0;
-              while (parent && depth < 5) {
-                const className = (parent as HTMLElement).className || '';
-                if (typeof className === 'string' && 
-                    (className.includes('flex-col-reverse') || 
-                     className.includes('items-end') ||
-                     className.includes('input-area') ||
-                     className.includes('composer'))) {
-                  console.log('[CorpusBoard] Selection in input area parent:', className);
-                  if (selectionButton) {
-                    selectionButton.style.display = 'none';
-                  }
-                  return;
+              const isInChatMessageArea = (el: Element | null): boolean => {
+                if (!el) return false;
+                const testid = el.getAttribute('data-testid') || '';
+                let className = '';
+                try {
+                  className = (el as HTMLElement).className?.toString() || '';
+                } catch (e) {
+                  className = '';
                 }
-                parent = parent.parentElement;
-                depth++;
+                
+                if (testid.includes('message') || 
+                    testid.includes('message-list') ||
+                    testid.includes('message_content') ||
+                    testid.includes('message_text') ||
+                    className.includes('message-list') ||
+                    className.includes('message-block')) {
+                  return true;
+                }
+                
+                if (el.classList.contains('flow-markdown-body') ||
+                    el.closest('[data-testid="message-list"]')) {
+                  return true;
+                }
+                
+                return isInChatMessageArea(el.parentElement);
+              };
+              
+              if (!isInChatMessageArea(containerEl)) {
+                console.log('[CorpusBoard] Selection not in chat message area');
+                if (selectionButton) {
+                  selectionButton.style.display = 'none';
+                }
+                return;
               }
           }
         
@@ -523,7 +569,41 @@ export class CorpusBoard {
 
     document.addEventListener('mousedown', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.dbx-corpus-selection-btn') && selectionButton) {
+      
+      const isInChatMessageArea = (el: Element | null): boolean => {
+        if (!el) return false;
+        const testid = el.getAttribute('data-testid') || '';
+        let className = '';
+        try {
+          className = (el as HTMLElement).className?.toString() || '';
+        } catch (e) {
+          className = '';
+        }
+        
+        if (testid.includes('message') || 
+            testid.includes('message-list') ||
+            testid.includes('message_content') ||
+            testid.includes('message_text') ||
+            className.includes('message-list') ||
+            className.includes('message-block')) {
+          return true;
+        }
+        
+        if (el.classList.contains('flow-markdown-body') ||
+            el.closest('[data-testid="message-list"]')) {
+          return true;
+        }
+        
+        return isInChatMessageArea(el.parentElement);
+      };
+      
+      const isInCorpusUI = target.closest('.dbx-corpus-selection-btn') || 
+                          target.closest('.dbx-corpus-panel') || 
+                          target.closest('.dbx-corpus-trigger');
+      
+      const inPopup = target.closest('.dbx-popup-content');
+      
+      if (!isInCorpusUI && !isInChatMessageArea(target) && !inPopup && selectionButton) {
         selectionButton.style.display = 'none';
       }
     });

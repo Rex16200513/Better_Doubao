@@ -562,8 +562,14 @@ export class FolderManager {
       });
     });
 
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (this.popupElement && !this.popupElement.contains(e.target as Node)) {
+        this.hidePopup();
+      }
+    };
+    
     setTimeout(() => {
-      document.addEventListener('click', this.hidePopup.bind(this), { once: true });
+      document.addEventListener('click', handleOutsideClick, { once: true });
     }, 0);
   }
 
