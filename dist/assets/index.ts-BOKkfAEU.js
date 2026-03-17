@@ -1,1 +1,0 @@
-console.log("[Better Doubao] Background service worker started");const e=globalThis.chrome;e.runtime.onInstalled.addListener(()=>{console.log("[Better Doubao] Extension installed")});e.runtime.onMessage.addListener((o,n,t)=>{if(o.type==="GET_FOLDER_DATA")return e.storage.local.get("dvFolderData").then(r=>{t(r)}),!0});
