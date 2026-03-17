@@ -21,7 +21,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 点击消息项快速跳转
 - 点击星标图标收藏/取消收藏
 
-![快速定位](docs/images/1.png)
+![快速定位](docs/images/3.png)
 
 ---
 
@@ -40,7 +40,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 创建新文件夹并选择颜色
 - 拖拽对话到目标文件夹
 
-![文件夹管理](docs/images/2.png)
+![文件夹管理](docs/images/1.png)
 
 ---
 
@@ -59,7 +59,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 选中文本点击「添加到语料板」
 - 点击语料板中的项目插入输入框
 
-![语料板](docs/images/3.png)
+![语料板](docs/images/2.png)
 
 ---
 
