@@ -250,10 +250,12 @@ export class ExportManager {
         });
         content = clone.innerHTML.trim();
       } else {
-        content = clone.textContent?.trim() || '';
+        content = (clone.textContent?.trim() || '').replace(/\s+/g, ' ').trim();
       }
       
-      if (content && (typeof content === 'string' ? content.length > 0 : content !== '')) {
+      const cleanContent = typeof content === 'string' ? content.replace(/\s+/g, ' ').trim() : content;
+      
+      if (cleanContent && cleanContent.length > 0) {
         messages.push({
           id: `msg_${messages.length}`,
           role,
@@ -352,41 +354,41 @@ export class ExportManager {
         <style>
           @page {
             size: A4;
-            margin: 20mm;
+            margin: 15mm;
           }
           * {
             box-sizing: border-box;
           }
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: 12px;
+            line-height: 1.4;
             color: #1f2937;
             background: #fff;
-            padding: 20px;
+            padding: 15px;
             max-width: 100%;
           }
           h1 {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
-            margin: 0 0 16px 0;
-            padding-bottom: 12px;
+            margin: 0 0 12px 0;
+            padding-bottom: 8px;
             border-bottom: 1px solid #e5e7eb;
           }
           .meta {
-            font-size: 12px;
+            font-size: 11px;
             color: #6b7280;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
           }
           .conversation {
             display: flex;
             flex-direction: column;
-            gap: 12px;
           }
           .message {
-            padding: 12px;
-            border-radius: 8px;
+            padding: 10px 12px;
+            border-radius: 6px;
             break-inside: avoid;
+            margin-bottom: 8px;
           }
           .message-user {
             background: #f3f4f6;
@@ -396,10 +398,13 @@ export class ExportManager {
             background: #f9fafb;
             margin-left: 40px;
           }
+          .message:last-child {
+            margin-bottom: 0;
+          }
           .role {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
           }
@@ -412,6 +417,14 @@ export class ExportManager {
           .content {
             white-space: pre-wrap;
             word-wrap: break-word;
+            margin: 0;
+            padding: 0;
+          }
+          .content p {
+            margin: 0 0 4px 0;
+          }
+          .content p:last-child {
+            margin-bottom: 0;
           }
           @media print {
             body {
@@ -554,8 +567,9 @@ export class ExportManager {
   }
 
   private escapeHtml(text: string): string {
+    const cleaned = text.replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim();
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = cleaned;
     return div.innerHTML;
   }
 }

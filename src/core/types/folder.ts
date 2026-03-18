@@ -27,6 +27,7 @@ export interface CorpusItem {
   conversationId: string;
   conversationTitle: string;
   addedAt: number;
+  selected?: boolean;
 }
 
 export interface FolderData {

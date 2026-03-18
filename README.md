@@ -87,30 +87,39 @@ A powerful browser extension to enhance your Doubao chat experience
 ### 项目结构
 
 ```
-doubao-voyager/
-├── src/
-│   ├── core/                    # 核心模块
+better-doubao/
+├── src/                        # 共享源代码
+│   ├── core/                   # 核心模块
 │   │   ├── services/
-│   │   │   └── StorageService.ts  # 存储服务
+│   │   │   └── StorageService.ts
 │   │   ├── types/
-│   │   │   └── folder.ts         # 类型定义
+│   │   │   └── folder.ts
 │   │   └── index.ts
-│   ├── features/                 # 功能模块
-│   │   ├── quicklocator/        # 快速定位
-│   │   ├── folder/              # 文件夹管理
-│   │   ├── corpusboard/         # 语料板
-│   │   └── export/              # 导出功能
+│   ├── features/               # 功能模块
+│   │   ├── quicklocator/       # 快速定位
+│   │   ├── folder/            # 文件夹管理
+│   │   ├── corpusboard/       # 语料板
+│   │   └── export/            # 导出功能
 │   ├── pages/
-│   │   ├── content/             # 内容脚本
-│   │   ├── background/          # 后台脚本
-│   │   ├── popup/               # 弹出页面
-│   │   └── options/             # 设置页面
+│   │   ├── content/            # 内容脚本
+│   │   ├── background/        # 后台脚本
+│   │   ├── popup/             # 弹出页面
+│   │   └── options/           # 设置页面
 │   └── assets/
 │       └── styles/
-│           └── content.css      # 样式
-├── manifest.json                # 插件清单
-├── vite.config.ts               # Vite 配置
-└── package.json                 # 依赖配置
+│           └── content.css
+│
+├── chrome/                     # Chrome 版本配置
+│   ├── manifest.json          # Chrome 专用清单
+│   ├── vite.config.ts        # Chrome 专用构建配置
+│   └── dist/                  # Chrome 构建输出 (gitignore)
+│
+├── edge/                       # Edge 版本配置
+│   ├── manifest.json          # Edge 专用清单
+│   ├── vite.config.ts        # Edge 专用构建配置
+│   └── dist/                  # Edge 构建输出 (gitignore)
+│
+└── package.json
 ```
 
 ### 技术栈
@@ -121,35 +130,56 @@ doubao-voyager/
 - **存储**: chrome.storage.local
 - **样式**: 原生 CSS
 
-### 开发命令
+---
+
+## 安装使用
+
+> ⚠️ **重要提示**：项目同时支持 Chrome 和 Edge，请根据自己的浏览器选择对应的版本构建！
+
+### 使用方法
+
+1. **删除不需要的版本文件夹**：
+   - 只用 Chrome？删除 `edge/` 文件夹
+   - 只用 Edge？删除 `chrome/` 文件夹
+
+2. **安装依赖并构建**：
+
+```bash
+# 安装依赖
+npm install
+
+# 构建 Chrome 版本（保留 chrome 文件夹时使用）
+npm run build:chrome
+
+# 构建 Edge 版本（保留 edge 文件夹时使用）
+npm run build:edge
+```
+
+3. **加载扩展**：
+
+**Chrome 用户**：
+1. 打开 `chrome://extensions/`
+2. 开启「开发者模式」
+3. 点击「加载已解压的扩展程序」
+4. 选择 `chrome/dist` 目录
+
+**Edge 用户**：
+1. 打开 `edge://extensions/`
+2. 开启「开发者模式」
+3. 点击「加载已解压的扩展程序」
+4. 选择 `edge/dist` 目录
+
+---
+
+## 开发命令
 
 ```bash
 # 开发模式（监听文件变化）
 npm run dev
 
-# 构建生产版本
+# 构建生产版本（根据保留的文件夹自动选择）
 npm run build
 
 # 类型检查
 npm run typecheck
 ```
-
-### 技术实现要点
-
-1. **DOM 注入**: 通过 content script 注入功能代码到页面
-2. **元素定位**: 使用 CSS 选择器和 MutationObserver 监听页面变化
-3. **状态管理**: 单例模式管理各功能模块状态
-4. **持久化**: 使用 chrome.storage API 存储用户数据
-5. **样式隔离**: 使用唯一 class 前缀避免冲突
-
----
-
-## 安装使用
-
-1. 克隆项目
-2. 安装依赖：`npm install`
-3. 构建项目：`npm run build`
-4. 在 Chrome 中打开 `chrome://extensions/`
-5. 开启「开发者模式」
-6. 点击「加载已解压的扩展程序」
-7. 选择 `dist` 目录

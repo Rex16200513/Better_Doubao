@@ -49,12 +49,15 @@ export class CorpusBoard {
 
   private async loadCorpusItems(): Promise<void> {
     try {
-      this.corpusItems = await storageService.getCorpusBoard();
+      const allItems = await storageService.getCorpusBoard();
+      const currentConversationId = this.getConversationId();
+      this.corpusItems = allItems.filter(item => item.conversationId === currentConversationId);
     } catch (error) {
       console.error('[CorpusBoard] Failed to load corpus items:', error);
+      this.corpusItems = [];
     }
   }
-
+ 
   private createTriggerButton(): void {
     if (this.triggerBtn) return;
 
@@ -313,6 +316,7 @@ export class CorpusBoard {
     if (!this.panel) return;
 
     const count = this.corpusItems.length;
+    const selectedCount = this.corpusItems.filter(item => item.selected).length;
     
     this.panel.innerHTML = `
       <div class="dbx-corpus-header">
@@ -322,18 +326,26 @@ export class CorpusBoard {
       </div>
       <div class="dbx-corpus-list">
         ${this.corpusItems.length === 0 ? '<div class="dbx-corpus-empty">暂无语料<br><small>选中文本后右键添加到语料板</small></div>' : ''}
+        ${this.corpusItems.length > 0 ? `
+          <div class="dbx-corpus-select-all">
+            <input type="checkbox" id="dbx-corpus-select-all" ${selectedCount === count && count > 0 ? 'checked' : ''}>
+            <label for="dbx-corpus-select-all">全选</label>
+          </div>
+        ` : ''}
         ${this.corpusItems.map(item => `
-          <div class="dbx-corpus-item" data-id="${item.id}">
-            <div class="dbx-corpus-item-content">${this.escapeHtml(item.text)}</div>
-            <div class="dbx-corpus-item-meta">
-              <span class="dbx-corpus-item-source">${this.escapeHtml(item.conversationTitle || '未知对话')}</span>
-              <button class="dbx-corpus-item-remove" title="删除">×</button>
+          <div class="dbx-corpus-item ${item.selected ? 'selected' : ''}" data-id="${item.id}">
+            <div class="dbx-corpus-item-checkbox">
+              <input type="checkbox" ${item.selected ? 'checked' : ''}>
             </div>
+            <div class="dbx-corpus-item-body">
+              <div class="dbx-corpus-item-content">${this.escapeHtml(item.text)}</div>
+            </div>
+            <button class="dbx-corpus-item-remove" title="删除">×</button>
           </div>
         `).join('')}
       </div>
       <div class="dbx-corpus-footer">
-        <button class="dbx-corpus-add-btn" ${count === 0 ? 'disabled' : ''}>添加到对话框</button>
+        <button class="dbx-corpus-add-btn" ${selectedCount === 0 ? 'disabled' : ''}>添加到对话框${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>
       </div>
     `;
 
@@ -343,8 +355,33 @@ export class CorpusBoard {
       this.clearCorpus();
     });
 
+    const selectAllCheckbox = this.panel.querySelector('#dbx-corpus-select-all') as HTMLInputElement;
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        const checked = selectAllCheckbox.checked;
+        this.corpusItems.forEach(item => {
+          item.selected = checked;
+        });
+        this.updatePanelContent();
+      });
+    }
+
+    this.panel.querySelectorAll('.dbx-corpus-item').forEach(item => {
+      const checkbox = item.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      checkbox?.addEventListener('change', () => {
+        const id = item.getAttribute('data-id');
+        const corpusItem = this.corpusItems.find(i => i.id === id);
+        if (corpusItem) {
+          corpusItem.selected = checkbox.checked;
+          item.classList.toggle('selected', checkbox.checked);
+          this.updatePanelContent();
+        }
+      });
+    });
+
     this.panel.querySelectorAll('.dbx-corpus-item-remove').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = (e.target as HTMLElement).closest('.dbx-corpus-item')?.getAttribute('data-id');
         if (id) this.removeCorpusItem(id);
       });
@@ -674,9 +711,10 @@ export class CorpusBoard {
   }
 
   private async addToInput(): Promise<void> {
-    if (this.corpusItems.length === 0) return;
+    const selectedItems = this.corpusItems.filter(item => item.selected);
+    if (selectedItems.length === 0) return;
 
-    const text = this.corpusItems.map(item => `[${item.text}]`).join('\n');
+    const text = selectedItems.map(item => `[${item.text}]`).join('\n');
     
     const inputArea = this.findInputArea();
     if (inputArea) {
@@ -694,6 +732,9 @@ export class CorpusBoard {
       }
     }
 
+    this.corpusItems.forEach(item => {
+      item.selected = false;
+    });
     this.isExpanded = false;
     this.hidePanel();
   }
@@ -726,7 +767,7 @@ export class CorpusBoard {
 
   private getConversationId(): string {
     const urlMatch = window.location.pathname.match(/\/chat\/([^/?#]+)/);
-    return urlMatch ? urlMatch[1] : '';
+    return urlMatch ? urlMatch[1] : 'unknown';
   }
 
   private getConversationTitle(): string {

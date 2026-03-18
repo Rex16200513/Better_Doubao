@@ -1,6 +1,6 @@
 {
   "name": "better-doubao",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Better Doubao is a powerful browser extension designed to enhance your Doubao chat experience. Features include: Quick Locator for easy message navigation, Folder Management for organizing conversations, Corpus Board for collecting and reusing text snippets across chats, and Export functionality supporting PDF, TXT, and Markdown formats. Open source on GitHub. Inspired by gemini-voyage.",
   "license": "MIT",
   "author": "Better Doubao Team",
@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "vite build --config vite.config.ts --watch",
     "build": "vite build --config vite.config.ts",
+    "build:chrome": "vite build --config chrome/vite.config.ts",
+    "build:edge": "vite build --config edge/vite.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

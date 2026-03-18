@@ -1,4 +1,9 @@
 node_modules/
+dist/
+chrome/dist/
+edge/dist/
 dist.zip
+chrome/dist.zip
+edge/dist.zip
 *.log
 .DS_Store

@@ -14,7 +14,7 @@ export class QuickLocator {
   private initialized = false;
   private observer: MutationObserver | null = null;
   private starredMarkers: Set<number> = new Set();
-  private conversationId: string = '';
+  private conversationId: string = 'unknown';
 
   private get scrollContainer(): HTMLElement | null {
     return document.querySelector('[data-testid="flow_chat_page"], [class*="chat-container"], main, [class*="page-main"]') as HTMLElement;
@@ -24,10 +24,43 @@ export class QuickLocator {
     if (this.initialized) return;
     
     this.conversationId = this.getConversationId();
-    console.log('[QuickLocator] Conversation ID:', this.conversationId);
-    
+    this.loadStarredMessages();
     this.waitForChatContainer();
+    this.setupUrlChangeListener();
     this.initialized = true;
+  }
+
+  private setupUrlChangeListener(): void {
+    let lastUrl = window.location.href;
+    new MutationObserver(() => {
+      if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
+        this.onConversationChange();
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    
+    setInterval(() => {
+      if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
+        this.onConversationChange();
+      }
+    }, 1000);
+  }
+
+  private async onConversationChange(): Promise<void> {
+    const newConversationId = this.getConversationId();
+    if (newConversationId !== this.conversationId) {
+      this.conversationId = newConversationId;
+      
+      this.markers = [];
+      if (this.locatorBar) {
+        this.locatorBar.remove();
+        this.locatorBar = null;
+      }
+      
+      await this.loadStarredMessages();
+      await this.waitForChatContainer();
+    }
   }
 
   private getConversationId(): string {
@@ -35,7 +68,7 @@ export class QuickLocator {
     if (urlMatch) {
       return urlMatch[1];
     }
-    return '';
+    return 'unknown';
   }
 
   private async waitForChatContainer(): Promise<void> {
@@ -46,13 +79,10 @@ export class QuickLocator {
       const container = this.scrollContainer;
       if (container || retries >= maxRetries) {
         if (container) {
-          console.log('[QuickLocator] Chat container found, scanning messages...');
           await this.loadStarredMessages();
           this.scanMessages();
           this.createLocatorBar();
           this.setupObserver();
-        } else {
-          console.log('[QuickLocator] Chat container not found after max retries');
         }
         return;
       }
@@ -64,56 +94,54 @@ export class QuickLocator {
   }
 
   private async loadStarredMessages(): Promise<void> {
-    if (!this.conversationId) {
-      console.log('[QuickLocator] No conversation ID, skipping starred messages load');
+    if (!this.conversationId || this.conversationId === 'unknown') {
       return;
     }
     
     try {
+      this.starredMarkers = new Set();
       const starred = await storageService.getStarredMessages(this.conversationId);
       this.starredMarkers = new Set(starred);
-      console.log('[QuickLocator] Loaded starred messages:', this.starredMarkers);
     } catch (error) {
-      console.error('[QuickLocator] Failed to load starred messages:', error);
     }
   }
 
   private scanMessages(): void {
     const container = this.scrollContainer;
     if (!container) {
-      console.log('[QuickLocator] scrollContainer not found');
       return;
     }
 
-    const messageContents = container.querySelectorAll('[data-testid="message_text_content"]');
-    console.log('[QuickLocator] Found message contents:', messageContents.length);
+    this.conversationId = this.getConversationId();
+    this.loadStarredMessages();
+
+    let messageElements = container.querySelectorAll('[data-testid="union_message"]');
+    
+    if (messageElements.length === 0) {
+      messageElements = container.querySelectorAll('[data-testid="message-block-container"]');
+    }
     
     const userMessages: HTMLElement[] = [];
     
-    messageContents.forEach((el) => {
-      const parent = el.closest('[data-testid="union_message"]') || el.closest('[class*="item"]');
-      if (parent && !userMessages.includes(parent as HTMLElement)) {
-        const html = parent.innerHTML?.toLowerCase() || '';
-        if (!html.includes('receive_message')) {
-          userMessages.push(parent as HTMLElement);
-        }
+    messageElements.forEach((el) => {
+      const html = el.innerHTML?.toLowerCase() || '';
+      if (html.includes('send_message')) {
+        userMessages.push(el as HTMLElement);
       }
     });
 
-    console.log('[QuickLocator] Found user messages:', userMessages.length);
-
     this.markers = userMessages.slice(0, 20).map((el, index) => {
       const text = this.extractMessageText(el);
+      const finalText = text || `问题 ${index + 1}`;
       return {
         id: `marker_${index}`,
         element: el,
-        text: text || `问题 ${index + 1}`,
+        text: finalText,
         index,
         starred: this.starredMarkers.has(index),
       };
-    }).filter(m => m.text && m.text.length > 0);
+    });
 
-    console.log('[QuickLocator] Found markers:', this.markers.length);
     this.updateLocatorDots();
   }
 
@@ -132,6 +160,16 @@ export class QuickLocator {
     let text = clone.textContent?.trim() || '';
     text = text.replace(/\s+/g, ' ').trim();
     
+    if (!text) {
+      const hasImage = clone.querySelector('img') || 
+                       clone.querySelector('[class*="image"]') ||
+                       clone.querySelector('[data-testid*="image"]') ||
+                       clone.innerHTML.includes('imagex-type');
+      if (hasImage) {
+        return '[图片]';
+      }
+    }
+    
     if (text.length > 40) {
       return text.substring(0, 40) + '...';
     }
@@ -141,8 +179,6 @@ export class QuickLocator {
   private createLocatorBar(): void {
     if (this.locatorBar) return;
 
-    console.log('[QuickLocator] Creating locator bar');
-    
     const bar = document.createElement('div');
     bar.id = 'dbx-quick-locator';
     bar.innerHTML = `
@@ -151,7 +187,6 @@ export class QuickLocator {
     
     document.body.appendChild(bar);
     this.locatorBar = bar;
-    console.log('[QuickLocator] Locator bar created, markers:', this.markers.length);
     this.updateLocatorDots();
   }
 
@@ -269,9 +304,7 @@ export class QuickLocator {
           } else {
             await storageService.removeStarredMessage(this.conversationId, marker.index);
           }
-          console.log('[QuickLocator] Saved starred message:', marker.index, isNowStarred);
         } catch (error) {
-          console.error('[QuickLocator] Failed to save starred message:', error);
         }
       }
     };
