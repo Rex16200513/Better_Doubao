@@ -80,7 +80,7 @@ export class QuickLocator {
       if (container || retries >= maxRetries) {
         if (container) {
           await this.loadStarredMessages();
-          this.scanMessages();
+          await this.scanMessages();
           this.createLocatorBar();
           this.setupObserver();
         }
@@ -106,14 +106,14 @@ export class QuickLocator {
     }
   }
 
-  private scanMessages(): void {
+  private async scanMessages(): Promise<void> {
     const container = this.scrollContainer;
     if (!container) {
       return;
     }
 
     this.conversationId = this.getConversationId();
-    this.loadStarredMessages();
+    await this.loadStarredMessages();
 
     let messageElements = container.querySelectorAll('[data-testid="union_message"]');
     
@@ -130,7 +130,7 @@ export class QuickLocator {
       }
     });
 
-    this.markers = userMessages.slice(0, 20).map((el, index) => {
+    this.markers = userMessages.map((el, index) => {
       const text = this.extractMessageText(el);
       const finalText = text || `问题 ${index + 1}`;
       return {
@@ -335,6 +335,30 @@ export class QuickLocator {
     setTimeout(() => {
       marker.element.classList.remove('dbx-message-highlight');
     }, 2000);
+    
+    this.scrollLocatorToMarker(marker.index);
+  }
+  
+  private scrollLocatorToMarker(index: number): void {
+    const track = this.locatorBar?.querySelector('.dbx-locator-track');
+    if (!track) return;
+    
+    const dots = track.querySelectorAll('.dbx-locator-dot');
+    const targetDot = dots[index] as HTMLElement;
+    if (!targetDot) return;
+    
+    const trackRect = track.getBoundingClientRect();
+    const dotRect = targetDot.getBoundingClientRect();
+    
+    const trackHeight = trackRect.height;
+    const dotTop = dotRect.top - trackRect.top;
+    const dotCenter = dotTop + dotRect.height / 2;
+    const scrollTarget = track.scrollTop + dotCenter - trackHeight / 2;
+    
+    track.scrollTo({
+      top: scrollTarget,
+      behavior: 'smooth'
+    });
   }
 
   private setupObserver(): void {
@@ -358,12 +382,12 @@ export class QuickLocator {
     this.observer.observe(container, { childList: true, subtree: true });
   }
 
-  private debounceScan = this.debounce(() => {
-    this.scanMessages();
+  private debounceScan = this.debounce(async () => {
+    await this.scanMessages();
     this.updateLocatorDots();
   }, 1000);
 
-  private debounce(fn: () => void, delay: number): () => void {
+  private debounce(fn: () => void | Promise<void>, delay: number): () => void {
     let timer: number | null = null;
     return () => {
       if (timer) clearTimeout(timer);

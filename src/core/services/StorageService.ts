@@ -3,6 +3,38 @@ import type { FolderData, Folder, CorpusItem } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
+const ACCOUNT_KEY = 'dvAccountId';
+
+function getCurrentAccountId(): string {
+  try {
+    const keys = ['token', 'auth_token', 'accessToken', 'userInfo', 'user_id', 'accountId'];
+    for (const key of keys) {
+      const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (value) {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed.id) return `user_${parsed.id}`;
+          if (parsed.userId) return `user_${parsed.userId}`;
+          if (parsed.sub) return `user_${parsed.sub}`;
+        } catch {
+          if (value.length > 10 && value.length < 100) {
+            return `token_${key}_${value.substring(0, 20)}`;
+          }
+        }
+      }
+    }
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name && value && value.length > 10 && value.length < 100) {
+        return `cookie_${name}_${value.substring(0, 20)}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[Storage] Failed to get account ID:', e);
+  }
+  return 'default';
+}
 
 function validateFolderData(data: unknown): data is FolderData {
   if (typeof data !== 'object' || data === null) return false;
@@ -10,20 +42,21 @@ function validateFolderData(data: unknown): data is FolderData {
   return Array.isArray(d.folders) && typeof d.folderContents === 'object' && typeof d.starredMessages === 'object' && Array.isArray(d.corpusBoard);
 }
 
-function createBackup(data: FolderData): void {
+function createBackup(data: FolderData, accountId: string): void {
   try {
-    localStorage.setItem(BACKUP_KEY, JSON.stringify({
+    localStorage.setItem(`${BACKUP_KEY}_${accountId}`, JSON.stringify({
       data,
       timestamp: Date.now(),
+      accountId,
     }));
   } catch (e) {
     console.warn('[Storage] Backup failed:', e);
   }
 }
 
-function restoreFromBackup(): FolderData | null {
+function restoreFromBackup(accountId: string): FolderData | null {
   try {
-    const stored = localStorage.getItem(BACKUP_KEY);
+    const stored = localStorage.getItem(`${BACKUP_KEY}_${accountId}`);
     if (stored) {
       const backup = JSON.parse(stored);
       if (backup.data && validateFolderData(backup.data)) {
@@ -39,34 +72,54 @@ function restoreFromBackup(): FolderData | null {
 export class StorageService {
   private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
   private saveTimer: number | null = null;
+  private currentAccountId: string = '';
+
+  private getStorageKey(): string {
+    return `${STORAGE_KEY}_${this.currentAccountId}`;
+  }
 
   async init(): Promise<void> {
-    try {
-      const stored = await browser.storage.local.get(STORAGE_KEY);
-      if (stored[STORAGE_KEY] && validateFolderData(stored[STORAGE_KEY])) {
-        this.data = stored[STORAGE_KEY] as FolderData;
-        console.log('[Storage] Loaded from chrome.storage');
-      } else {
-        const backup = restoreFromBackup();
+    this.currentAccountId = getCurrentAccountId();
+    console.log('[Storage] Current account:', this.currentAccountId);
+    
+    const savedAccountId = localStorage.getItem(ACCOUNT_KEY);
+    
+    if (savedAccountId && savedAccountId !== this.currentAccountId) {
+      console.log('[Storage] Account changed from', savedAccountId, 'to', this.currentAccountId);
+      this.data = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
+      localStorage.setItem(ACCOUNT_KEY, this.currentAccountId);
+      await this.persist();
+      console.log('[Storage] Cleared data for new account');
+    } else {
+      localStorage.setItem(ACCOUNT_KEY, this.currentAccountId);
+      
+      try {
+        const stored = await browser.storage.local.get(this.getStorageKey());
+        if (stored[this.getStorageKey()] && validateFolderData(stored[this.getStorageKey()])) {
+          this.data = stored[this.getStorageKey()] as FolderData;
+          console.log('[Storage] Loaded from chrome.storage for account:', this.currentAccountId);
+        } else {
+          const backup = restoreFromBackup(this.currentAccountId);
+          if (backup) {
+            this.data = backup;
+            await this.persist();
+            console.log('[Storage] Restored from localStorage backup');
+          }
+        }
+      } catch (error) {
+        console.error('[Storage] Init error:', error);
+        const backup = restoreFromBackup(this.currentAccountId);
         if (backup) {
           this.data = backup;
-          await this.persist();
-          console.log('[Storage] Restored from localStorage backup');
         }
-      }
-    } catch (error) {
-      console.error('[Storage] Init error:', error);
-      const backup = restoreFromBackup();
-      if (backup) {
-        this.data = backup;
       }
     }
   }
 
   private async persist(): Promise<void> {
-    createBackup(this.data);
+    createBackup(this.data, this.currentAccountId);
     try {
-      await browser.storage.local.set({ [STORAGE_KEY]: this.data });
+      await browser.storage.local.set({ [this.getStorageKey()]: this.data });
     } catch (error) {
       console.error('[Storage] Save failed:', error);
     }

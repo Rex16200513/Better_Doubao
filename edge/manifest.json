@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Doubao",
-  "description": "Better Doubao is a powerful browser extension designed to enhance your Doubao chat experience. Features include: Quick Locator for easy message navigation, Folder Management for organizing conversations, Corpus Board for collecting and reusing text snippets across chats, and Export functionality supporting PDF, TXT, and Markdown formats. Open source on GitHub. Inspired by gemini-voyage.",
+  "description": "A powerful browser extension to enhance your Doubao chat experience.",
   "version": "1.0.1",
   "icons": {
     "19": "icons/icon19.png",
