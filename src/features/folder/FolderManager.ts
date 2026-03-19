@@ -455,7 +455,29 @@ export class FolderManager {
         selectedColor = (opt as HTMLElement).dataset.color || 'blue';
       });
     });
-    colorOptions[4]?.classList.add('selected');
+    colorOptions[0]?.classList.add('selected');
+    selectedColor = (colorOptions[0] as HTMLElement)?.dataset.color || 'blue';
+
+    const colorPicker = popup.querySelector('.dbx-color-picker') as HTMLInputElement;
+    const customColorOption = popup.querySelector('.dbx-color-custom');
+    
+    customColorOption?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      colorPicker?.click();
+    });
+    
+    colorPicker?.addEventListener('input', () => {
+      colorOptions.forEach(o => o.classList.remove('selected'));
+      customColorOption?.classList.add('selected');
+      customColorOption?.classList.add('has-custom-color');
+      (customColorOption as HTMLElement).style.setProperty('--custom-color', colorPicker.value);
+      (customColorOption as HTMLElement).setAttribute('data-color', colorPicker.value);
+      selectedColor = colorPicker.value;
+    });
+    
+    colorPicker?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
 
     popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
     popup.querySelector('.dbx-popup-btn-confirm')?.addEventListener('click', async () => {
@@ -494,9 +516,17 @@ export class FolderManager {
       { id: 'gray', value: '#6b7280' },
     ];
     
+    const isCustom = selected && !colors.find(c => c.id === selected);
+    const customValue = isCustom ? selected : '#3b82f6';
+    const customColorHtml = `
+      <div class="dbx-color-option dbx-color-custom ${isCustom ? 'selected' : ''}" data-color="${customValue}" style="background-color: ${isCustom ? selected : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'}">
+        <input type="color" class="dbx-color-picker" value="${customValue}">
+      </div>
+    `;
+    
     return colors.map(c => 
       `<div class="dbx-color-option ${selected === c.id ? 'selected' : ''}" data-color="${c.id}" style="background-color: ${c.value}"></div>`
-    ).join('');
+    ).join('') + customColorHtml;
   }
 
   private showFolderMenu(folderId: string, button: HTMLElement): void {
@@ -636,6 +666,10 @@ export class FolderManager {
         <div class="dbx-popup-colors dbx-popup-colors-lg">
           ${this.getColorOptionsHTML(folder.color)}
         </div>
+        <div class="dbx-popup-actions">
+          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
+          <button class="dbx-popup-btn dbx-popup-btn-confirm">确定</button>
+        </div>
       </div>
     `;
 
@@ -657,8 +691,14 @@ export class FolderManager {
 
     let selectedColor = folder.color;
     const colorOptions = popup.querySelectorAll('.dbx-color-option');
+    const colorPicker = popup.querySelector('.dbx-color-picker') as HTMLInputElement;
+    const customColorOption = popup.querySelector('.dbx-color-custom');
+    
     colorOptions.forEach(opt => {
-      opt.addEventListener('click', async () => {
+      opt.addEventListener('click', async (e) => {
+        if ((opt as HTMLElement).classList.contains('dbx-color-custom')) {
+          return;
+        }
         colorOptions.forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
         selectedColor = (opt as HTMLElement).dataset.color || folder.color;
@@ -670,6 +710,35 @@ export class FolderManager {
         this.hidePopup();
       });
     });
+    
+    customColorOption?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      colorPicker?.click();
+    });
+    
+    colorPicker?.addEventListener('input', () => {
+      colorOptions.forEach(o => o.classList.remove('selected'));
+      customColorOption?.classList.add('selected');
+      customColorOption?.classList.add('has-custom-color');
+      (customColorOption as HTMLElement).style.setProperty('--custom-color', colorPicker.value);
+      (customColorOption as HTMLElement).setAttribute('data-color', colorPicker.value);
+      selectedColor = colorPicker.value;
+    });
+    
+    colorPicker?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    let confirmBtn = popup.querySelector('.dbx-popup-btn-confirm') as HTMLButtonElement;
+    confirmBtn?.addEventListener('click', async () => {
+      await storageService.updateFolder(folder.id, { color: selectedColor });
+      this.data = await storageService.getData();
+      this.render();
+      this.refreshAllIndicators();
+      this.hidePopup();
+    });
+    
+    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
 
     popup.addEventListener('click', (e) => {
       if (e.target === popup) this.hidePopup();

@@ -312,7 +312,23 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+}
+
+.dbx-color-picker {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+}
+
+.dbx-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.dbx-color-picker::-webkit-color-swatch {
+  border: none;
 }
 
 .dbx-popup-colors-lg .dbx-color-option {
@@ -334,7 +350,27 @@
 }
 
 .dbx-color-option.selected {
-  border-color: var(--dbx-folder-text-primary);
+  border-color: #000 !important;
+  transform: scale(1.1);
+}
+
+.dbx-color-custom {
+  background-image: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  background-color: transparent;
+  position: relative;
+}
+
+.dbx-color-custom.has-custom-color {
+  background-image: none;
+  background-color: var(--custom-color, #3b82f6) !important;
+}
+
+.dbx-color-custom input[type="color"] {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 .dbx-popup-actions {
@@ -445,7 +481,13 @@
   flex-direction: column;
   gap: 12px;
   max-height: 55vh;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dbx-locator-track::-webkit-scrollbar {
+  display: none;
 }
 
 .dbx-locator-dot {

@@ -61,6 +61,9 @@ export const FOLDER_COLORS = [
 export type FolderColorId = typeof FOLDER_COLORS[number]['id'];
 
 export function getFolderColor(colorId: string): string {
+  if (colorId && colorId.startsWith('#')) {
+    return colorId;
+  }
   const color = FOLDER_COLORS.find(c => c.id === colorId);
   return color?.value ?? FOLDER_COLORS[7].value;
 }
