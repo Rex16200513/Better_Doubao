@@ -183,3 +183,9 @@ npm run build
 # 类型检查
 npm run typecheck
 ```
+
+---
+
+## 许可证
+
+本项目基于 [MIT License](LICENSE) 开源。
