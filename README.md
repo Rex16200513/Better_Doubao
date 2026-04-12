@@ -98,6 +98,8 @@ A powerful browser extension to enhance your Doubao chat experience
 - 点击下载按钮下载完整的 .tex 文档
 - 点击复制按钮直接复制 LaTeX 代码
 
+![LaTeX 公式下载](docs/images/5.png)
+
 ---
 
 ## 技术架构
