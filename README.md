@@ -82,6 +82,24 @@ A powerful browser extension to enhance your Doubao chat experience
 
 ---
 
+### 5. LaTeX 公式下载 (LaTeX Downloader)
+
+快速下载或复制页面中的 LaTeX 数学公式。
+
+**功能特点：**
+- 自动识别页面中的 LaTeX 公式
+- 支持内联公式和块级公式
+- 支持 LaTeX 代码块
+- 一键下载为 .tex 文件
+- 一键复制到剪贴板
+
+**使用方式：**
+- 鼠标悬停在公式上，显示下载和复制按钮
+- 点击下载按钮下载完整的 .tex 文档
+- 点击复制按钮直接复制 LaTeX 代码
+
+---
+
 ## 技术架构
 
 ### 项目结构
@@ -99,7 +117,8 @@ better-doubao/
 │   │   ├── quicklocator/       # 快速定位
 │   │   ├── folder/            # 文件夹管理
 │   │   ├── corpusboard/       # 语料板
-│   │   └── export/            # 导出功能
+│   │   ├── export/            # 导出功能
+│   │   └── latex/             # LaTeX 公式下载
 │   ├── pages/
 │   │   ├── content/            # 内容脚本
 │   │   ├── background/        # 后台脚本

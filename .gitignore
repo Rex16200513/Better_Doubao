@@ -7,3 +7,5 @@ chrome/dist.zip
 edge/dist.zip
 *.log
 .DS_Store
+*.mp4
+*.zip
