@@ -17,8 +17,8 @@ function getCurrentAccountId(): string {
           if (parsed.userId) return `user_${parsed.userId}`;
           if (parsed.sub) return `user_${parsed.sub}`;
         } catch {
-          if (value.length > 10 && value.length < 100) {
-            return `token_${key}_${value.substring(0, 20)}`;
+          if (value.length > 10 && value.length < 200) {
+            return `token_${key}_${value.substring(0, 50)}`;
           }
         }
       }
@@ -26,8 +26,11 @@ function getCurrentAccountId(): string {
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
-      if (name && value && value.length > 10 && value.length < 100) {
-        return `cookie_${name}_${value.substring(0, 20)}`;
+      if (name && value && value.length > 10 && value.length < 200) {
+        if (name.includes('slardar') || name.includes('session') || name.includes('timestamp')) {
+          continue;
+        }
+        return `cookie_${name}_${value.substring(0, 30)}`;
       }
     }
   } catch (e) {

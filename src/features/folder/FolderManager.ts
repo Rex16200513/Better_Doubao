@@ -8,7 +8,7 @@ interface DragData {
 }
 
 export class FolderManager {
-  private data: FolderData = { folders: [], folderContents: {} };
+  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
   private containerElement: HTMLElement | null = null;
   private sidebarContainer: HTMLElement | null = null;
   private popupElement: HTMLElement | null = null;
@@ -23,30 +23,47 @@ export class FolderManager {
   async init(): Promise<void> {
     await storageService.init();
     this.data = await storageService.getData();
+    console.log('[FolderManager] Loaded data, folders:', this.data.folders.length);
     this.data.folders.forEach(f => f.isExpanded = false);
     await this.waitForSidebar();
+    console.log('[FolderManager] Sidebar ready, creating folder section');
     this.findSidebarContainer();
-    this.render();
     this.setupObservers();
+    
+    if (this.containerElement) {
+      console.log('[FolderManager] Container exists, rendering');
+      this.render();
+    } else {
+      console.log('[FolderManager] Container not found!');
+    }
+    
     this.addConversationIndicators();
+    this.setupFolderDropZones();
     this.initialized = true;
   }
 
   private waitForSidebar(): Promise<void> {
     return new Promise((resolve) => {
-      const sidebar = document.querySelector('[data-testid="flow_chat_sidebar"]');
-      if (sidebar) {
-        resolve();
-        return;
-      }
+      const checkSidebar = () => {
+        const sidebar = document.querySelector('#flow_chat_sidebar');
+        if (sidebar) {
+          resolve();
+          return true;
+        }
+        return false;
+      };
+
+      if (checkSidebar()) return;
 
       let retries = 0;
-      const maxRetries = 20;
-      
+      const maxRetries = 100;
+
       const checkInterval = setInterval(() => {
-        const existingSidebar = document.querySelector('[data-testid="flow_chat_sidebar"]');
-        if (existingSidebar || retries >= maxRetries) {
+        if (checkSidebar() || retries >= maxRetries) {
           clearInterval(checkInterval);
+          if (retries >= maxRetries) {
+            console.warn('[FolderManager] Sidebar not found after max retries');
+          }
           resolve();
         }
         retries++;
@@ -55,7 +72,7 @@ export class FolderManager {
   }
 
   private findSidebarContainer(): void {
-    this.sidebarContainer = document.querySelector('[data-testid="flow_chat_sidebar"]') as HTMLElement;
+    this.sidebarContainer = document.querySelector('#flow_chat_sidebar') as HTMLElement;
     if (this.sidebarContainer) {
       this.containerElement = this.sidebarContainer.querySelector('#dbx-folder-section') as HTMLElement;
       if (!this.containerElement) {
@@ -69,17 +86,20 @@ export class FolderManager {
   private createFolderSection(): void {
     if (!this.sidebarContainer) return;
 
-    const historySection = this.sidebarContainer.querySelector('[data-testid="sidebar-section-item"]');
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = createFolderSectionHTML();
     const folderSection = tempDiv.firstElementChild as HTMLElement;
 
-    if (historySection && historySection.parentNode) {
-      historySection.parentNode.insertBefore(folderSection, historySection);
+    const moreButton = this.sidebarContainer.querySelector('[title="更多"]');
+    if (moreButton && moreButton.parentElement?.parentElement) {
+      const moreContainer = moreButton.parentElement.parentElement.parentElement;
+      if (moreContainer && moreContainer.parentNode) {
+        moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
+      }
     } else {
-      const firstChild = this.sidebarContainer.firstChild;
-      if (firstChild) {
-        this.sidebarContainer.insertBefore(folderSection, firstChild);
+      const historySection = this.sidebarContainer.querySelector('[class*="history"]');
+      if (historySection && historySection.parentNode) {
+        historySection.parentNode.insertBefore(folderSection, historySection);
       } else {
         this.sidebarContainer.appendChild(folderSection);
       }
@@ -102,18 +122,23 @@ export class FolderManager {
   }
 
   private setupObservers(): void {
-    const sidebar = document.querySelector('[data-testid="flow_chat_sidebar"]');
-    if (!sidebar) return;
-
     let observerTimeout: number | null = null;
     const observer = new MutationObserver(() => {
       if (observerTimeout) clearTimeout(observerTimeout);
       observerTimeout = window.setTimeout(() => {
+        const sidebar = document.querySelector('#flow_chat_sidebar');
+        if (!sidebar) return;
+
+        this.sidebarContainer = sidebar as HTMLElement;
+
         if (this.initialized) {
           const existingSection = document.querySelector('#dbx-folder-section');
           if (!existingSection) {
             this.findSidebarContainer();
             this.render();
+          } else {
+            this.containerElement = existingSection as HTMLElement;
+            this.setupFolderEvents();
           }
           this.addConversationIndicators();
           this.setupFolderDropZones();
@@ -123,11 +148,14 @@ export class FolderManager {
       }, 100);
     });
 
-    observer.observe(sidebar, { childList: true, subtree: true });
+    const sidebar = document.querySelector('#flow_chat_sidebar');
+    if (sidebar) {
+      observer.observe(sidebar, { childList: true, subtree: true });
+    }
   }
 
   private addConversationIndicators(): void {
-    const conversations = document.querySelectorAll('[data-testid="chat_list_thread_item"]');
+    const conversations = document.querySelectorAll('[data-empty-conversation="false"] a[href^="/chat/"]');
     conversations.forEach((el) => {
       const element = el as HTMLElement;
       if (element.dataset.dvProcessed) return;
@@ -155,7 +183,7 @@ export class FolderManager {
       const color = firstFolder ? getFolderColor(firstFolder.color) : '#6b7280';
       
       if (existingIndicator) {
-        existingIndicator.style.backgroundColor = color;
+        (existingIndicator as HTMLElement).style.backgroundColor = color;
       } else {
         const indicator = createIndicator(color);
         const wrapper = element.querySelector('.wrapper-Xy3kj9') || element.querySelector('div:first-child') || element;
@@ -170,7 +198,7 @@ export class FolderManager {
   }
 
   private refreshAllIndicators(): void {
-    const conversations = document.querySelectorAll('[data-testid="chat_list_thread_item"]');
+    const conversations = document.querySelectorAll('[data-empty-conversation="false"] a[href^="/chat/"]');
     conversations.forEach((el) => {
       const element = el as HTMLElement;
       const idMatch = element.id.match(/conversation_(\d+)/);
@@ -487,6 +515,7 @@ export class FolderManager {
       const folder: Folder = {
         id: `folder_${Date.now()}`,
         name,
+        parentId: null,
         color: selectedColor,
         isExpanded: false,
         createdAt: Date.now(),
