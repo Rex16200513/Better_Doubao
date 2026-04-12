@@ -115,7 +115,11 @@ export class QuickLocator {
     this.conversationId = this.getConversationId();
     await this.loadStarredMessages();
 
-    let messageElements = container.querySelectorAll('[data-testid="union_message"]');
+    let messageElements = container.querySelectorAll('.inner-item-w21SQO');
+    
+    if (messageElements.length === 0) {
+      messageElements = container.querySelectorAll('[data-testid="union_message"]');
+    }
     
     if (messageElements.length === 0) {
       messageElements = container.querySelectorAll('[data-testid="message-block-container"]');
@@ -125,7 +129,7 @@ export class QuickLocator {
     
     messageElements.forEach((el) => {
       const html = el.innerHTML?.toLowerCase() || '';
-      if (html.includes('send_message')) {
+      if (html.includes('send_message') || el.querySelector('.bg-g-send-msg-bubble-bg')) {
         userMessages.push(el as HTMLElement);
       }
     });
