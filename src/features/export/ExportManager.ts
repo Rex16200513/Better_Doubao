@@ -268,22 +268,7 @@ export class ExportManager {
       let content = '';
       const hasImages = clone.querySelectorAll('img').length > 0;
 
-      if (hasImages) {
-        const imgs = clone.querySelectorAll('img');
-        imgs.forEach((img) => {
-          const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
-          if (src) {
-            if (src.startsWith('data:') || src.startsWith('http')) {
-              img.setAttribute('src', src);
-            } else if (src.startsWith('//') || src.startsWith('/')) {
-              img.setAttribute('src', 'https:' + src);
-            }
-          }
-        });
-        content = clone.innerHTML.trim();
-      } else {
-        content = (clone.textContent?.trim() || '').replace(/\s+/g, ' ').trim();
-      }
+      content = clone.innerHTML.trim();
 
       const cleanContent = typeof content === 'string' ? content.replace(/\s+/g, ' ').trim() : content;
 
@@ -324,57 +309,69 @@ export class ExportManager {
     const userMessages = messages.filter(m => m.role === 'user');
     const assistantMessages = messages.filter(m => m.role === 'assistant');
     
-    const processContentForPdf = (content: string, hasImages: boolean): string => {
-       if (!hasImages) return this.escapeHtml(content);
-       
+    const processContentForPdf = (content: string): string => {
        const temp = document.createElement('div');
        temp.innerHTML = content;
-       
-       const imgs = temp.querySelectorAll('img');
-       if (imgs.length === 0) return this.escapeHtml(content);
-       
-       const imgArray = Array.from(imgs);
-       
-       const wrapper = document.createElement('div');
-       
-       let textContent = '';
-       temp.childNodes.forEach((node) => {
-         if (node.nodeType === Node.TEXT_NODE) {
-           textContent += node.textContent;
-         } else if (node.nodeType === Node.ELEMENT_NODE) {
-           const el = node as Element;
-           if (el.tagName !== 'IMG') {
-             textContent += el.textContent;
-           }
+
+       const codeBlocks = temp.querySelectorAll('pre code, pre');
+       codeBlocks.forEach((block) => {
+         const pre = block.tagName === 'PRE' ? block as HTMLElement : block.parentElement as HTMLElement;
+         if (pre) {
+           pre.style.cssText = 'background: #f6f8fa; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; font-family: monospace; font-size: 11px; line-height: 1.4; border: 1px solid #e1e4e8;';
          }
        });
-       
-       if (textContent.trim()) {
-         const textDiv = document.createElement('div');
-         textDiv.textContent = textContent.trim();
-         textDiv.style.marginBottom = '12px';
-         wrapper.appendChild(textDiv);
-       }
-       
-       imgArray.forEach((img) => {
+
+       const imgs = temp.querySelectorAll('img');
+       imgs.forEach((img) => {
          const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
          if (!src) return;
-         
+
          const lowerSrc = src.toLowerCase();
          if (lowerSrc.includes('data:image/svg') || lowerSrc.includes('width=2048') || lowerSrc.includes('width="2048')) {
+           img.remove();
            return;
          }
-         
-         const imgEl = document.createElement('img');
-         imgEl.src = src;
-         imgEl.style.cssText = 'max-width: 200px; height: auto; border-radius: 4px; margin: 4px; display: inline-block; vertical-align: top;';
-         imgEl.onerror = function() {
-           this.style.display = 'none';
+
+         if (src.startsWith('//') || src.startsWith('/')) {
+           img.setAttribute('src', 'https:' + src);
+         }
+         (img as HTMLElement).style.cssText = 'max-width: 200px; height: auto; border-radius: 4px; margin: 4px; display: inline-block; vertical-align: top;';
+         img.onerror = function() {
+           (this as HTMLImageElement).style.display = 'none';
          };
-         wrapper.appendChild(imgEl);
        });
-       
-       return wrapper.innerHTML;
+
+       const h1s = temp.querySelectorAll('h1');
+       h1s.forEach((h1) => {
+         (h1 as HTMLElement).style.cssText = 'font-size: 14px; font-weight: 600; margin: 12px 0 8px 0; color: #1f2937;';
+       });
+
+       const h2s = temp.querySelectorAll('h2');
+       h2s.forEach((h2) => {
+         (h2 as HTMLElement).style.cssText = 'font-size: 13px; font-weight: 600; margin: 10px 0 6px 0; color: #374151;';
+       });
+
+       const uls = temp.querySelectorAll('ul, ol');
+       uls.forEach((ul) => {
+         (ul as HTMLElement).style.cssText = 'margin: 8px 0; padding-left: 20px;';
+       });
+
+       const lis = temp.querySelectorAll('li');
+       lis.forEach((li) => {
+         (li as HTMLElement).style.cssText = 'margin: 4px 0;';
+       });
+
+       const ps = temp.querySelectorAll('p');
+       ps.forEach((p) => {
+         (p as HTMLElement).style.cssText = 'margin: 8px 0;';
+       });
+
+       const srs = temp.querySelectorAll('strong');
+       srs.forEach((s) => {
+         (s as HTMLElement).style.cssText = 'font-weight: 600;';
+       });
+
+       return temp.innerHTML;
      };
     
     const htmlContent = `
@@ -475,7 +472,7 @@ export class ExportManager {
           ${messages.map(m => `
             <div class="message message-${m.role}">
               <div class="role">${m.role === 'user' ? '用户' : 'AI'}</div>
-              <div class="content">${processContentForPdf(m.content, !!m.hasImages)}</div>
+              <div class="content">${processContentForPdf(m.content)}</div>
             </div>
           `).join('')}
         </div>
