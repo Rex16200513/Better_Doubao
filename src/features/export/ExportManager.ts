@@ -228,17 +228,27 @@ export class ExportManager {
     console.log('[ExportManager] Found message wrappers:', messageWrappers.length);
 
     messageWrappers.forEach((wrapper) => {
-      const contentElements = wrapper.querySelectorAll('[data-render-engine="node"]');
-      if (contentElements.length === 0) return;
+      const contentElements = wrapper.querySelectorAll('[data-render-engine="node"], [data-render-engine="block"]');
+      const pluginIdentifiers = Array.from(contentElements).map(el => el.getAttribute('data-plugin-identifier') || '');
 
-      const blockTypes = Array.from(contentElements).map(el => el.getAttribute('data-plugin-identifier') || '');
-      const isThinking = blockTypes.some(bt => bt.includes('block_type:10040'));
-      const isRegular = blockTypes.some(bt => bt.includes('block_type:10000'));
+      const blockTypes = pluginIdentifiers.map(id => {
+        const match = id.match(/block_type:(\d+)/);
+        return match ? match[1] : '';
+      });
 
-      if (!isRegular && !isThinking) return;
+      const isThinking = blockTypes.some(bt => bt === '10040');
+      const isRegular = blockTypes.some(bt => bt === '10000');
+
+      const hasSkillContent = pluginIdentifiers.some(id => id.includes('Symbol('));
+      const hasMessageBubble = wrapper.querySelector('[class*="bubble"], [class*="send-msg"], [class*="message-bubble"]');
+      const hasMarkdownBody = wrapper.querySelector('.flow-markdown-body, [class*="markdown-body"]');
+      const hasImageBox = wrapper.querySelector('[class*="image-box"], [class*="image-grid"]');
+
+      if (!isRegular && !isThinking && !hasSkillContent && !hasMessageBubble && !hasMarkdownBody && !hasImageBox) return;
 
       const wrapperHtml = wrapper.innerHTML?.toLowerCase() || '';
-      const role: 'user' | 'assistant' = wrapperHtml.includes('send_message') || wrapper.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"]') ? 'user' : 'assistant';
+      const role: 'user' | 'assistant' = wrapperHtml.includes('send_message') ||
+        wrapper.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]') ? 'user' : 'assistant';
 
       const clone = wrapper.cloneNode(true) as HTMLElement;
 
@@ -255,6 +265,10 @@ export class ExportManager {
         '[class*="collapse-wrapper"]',
         '[class*="scroll-content"]',
         '[class*="scroll-view"]',
+        '[class*="action-bar"]',
+        '[class*="message-action"]',
+        '[class*="select-none"]',
+        '[class*="opacity-0"]',
         'script',
         'style',
         '.children-wrapper',
@@ -318,6 +332,32 @@ export class ExportManager {
          const pre = block.tagName === 'PRE' ? block as HTMLElement : block.parentElement as HTMLElement;
          if (pre) {
            pre.style.cssText = 'background: #f6f8fa; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; font-family: monospace; font-size: 11px; line-height: 1.4; border: 1px solid #e1e4e8;';
+         }
+       });
+
+       const cleanImageWrappers = temp.querySelectorAll('[class*="image-wrapper"], [class*="image-box-grid"], [class*="container-MzuYIN"], [class*="container-dLabXv"], [class*="image-box-grid-item"]');
+       cleanImageWrappers.forEach((wrapper) => {
+         const imgs = wrapper.querySelectorAll('img');
+         imgs.forEach((img) => {
+           const parent = wrapper.parentElement;
+           if (parent) {
+             parent.insertBefore(img.cloneNode(true), wrapper);
+           }
+         });
+         wrapper.remove();
+       });
+
+       const pictureElements = temp.querySelectorAll('picture');
+       pictureElements.forEach((picture) => {
+         const sources = picture.querySelectorAll('source');
+         const img = picture.querySelector('img');
+         if (img) {
+           sources.forEach((source) => {
+             const srcset = source.getAttribute('srcset');
+             if (srcset && !srcset.includes('data:')) {
+               img.setAttribute('src', srcset.split(' ')[0]);
+             }
+           });
          }
        });
 
