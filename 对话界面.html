@@ -1,0 +1,43 @@
+<div data-message-id="42487087819319298" class="relative flex-row flex w-full"><div class="flex w-full flex-col space-y-20 [&amp;&gt;div:not(:has(*))]:-mt-20"><div class="mb-12!" data-render-engine="node" data-plugin-identifier="block_type:10040 | thinking_block.scene:undefined"><div class="container-ZdJroW z-0 isolate relative" data-expand="false"><div class="collapse-wrapper-K8DEfQ !mb-0"><div class="collapse-collapse-button-BLR92e"><div class="z-10 flex flex-col items-start justify-center gap-2 py-10"><span class="think-block-title-PEifqZ">已完成思考</span></div><div class="collapse-button-suffix-czkI3o"><span role="img" class="semi-icon semi-icon-default collapse-button-suffix-icon-fYfPHX"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M22 3v7a1 1 0 1 1-2 0V4h-6a1 1 0 1 1 0-2h7a1 1 0 0 1 1 1M11.005 21a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-7a1 1 0 0 1 2.002 0v6h6.003a1 1 0 0 1 1 1"></path></svg></span></div></div><div><div class="scroll-content-mK_B2t" data-showed="disappear"><div class="scroll-view-OEiNXD scroll-view-aeO5BC"><div class="content-Xv_Zw0"><div class="scrollable-Se7zNt"><div class="children-wrapper-NkFi7R children-wrapper"><div class="collapse-quota-block-XD7BD3"><div class="collapse-quota-block-inner-iyafAF collapse-quota-block-inner-default-collapsed-YbXGnc"><div class="think-block-container-lQMMrW"><div class=""><div class="" data-render-engine="node" data-plugin-identifier="block_type:10000"><div theme-mode="light" class="container-P2rR72 flow-markdown-body theme-samantha-uDexJL mdbox-theme-next" dir="ltr" data-show-indicator="false"><div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">用户现在问的是 AgentMiddleware 里两个方法的参数：after_model 是 state 和 runtime，wrap_model_call 是 request 和 handler，需要精准解释清楚，结合他的代码场景。</div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">首先，先明确<strong>AgentMiddleware 两个核心方法的参数和作用</strong>，对应用户的问题：</div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<ol class="auto-hide-last-sibling-br">
+<li>先回答用户的问题：<strong>对！完全正确</strong></li>
+<li>分两个方法讲清楚：<ul class="auto-hide-last-sibling-br">
+<li>after_model (state: 状态，runtime: 运行时信息) → 模型调用<strong>之后</strong>执行，读结果、改状态（他用来统计 token）</li>
+<li>wrap_model_call (request: ModelRequest, handler: 调用处理器) → 模型调用<strong>之前 / 包裹</strong>执行，改请求参数</li>
+</ul><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+</li>
+<li>结合他的代码，讲为什么他用 after_model，参数含义</li>
+<li>简单对比两个方法的执行时机、参数、用途</li>
+</ol><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">要简洁，符合用户之前要精准、不啰嗦的要求。</div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+</div></div></div></div></div></div></div></div></div></div></div></div></div></div></div><div class="" data-render-engine="node" data-plugin-identifier="block_type:10000"><div theme-mode="light" class="container-P2rR72 flow-markdown-body theme-samantha-uDexJL mdbox-theme-next" dir="ltr" data-show-indicator="false"><div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">对！<strong>完全正确！</strong> 我给你用最精准的话讲清楚这两个方法的<strong>参数含义 + 执行时机</strong>，和你的代码完美对应：</div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<hr class="auto-hide-last-sibling-br"><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<h1 class="header-iWP5WJ auto-hide-last-sibling-br">1. <code>after_model(self, state, runtime)</code></h1><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space"><strong>你正在用的方法</strong></div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<ul class="auto-hide-last-sibling-br">
+<li><strong>执行时机</strong>：<strong>模型调用完成后</strong>（AI 返回回答之后）</li>
+<li><strong>参数</strong>：<ul class="auto-hide-last-sibling-br">
+<li><code>state</code>：<strong>当前完整的状态对象</strong>（包含 <code>messages</code> + 你的 <code>total_tokens/last_model</code>）</li>
+<li><code>runtime</code>：Agent 运行时的上下文信息（一般用不到）</li>
+</ul><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+</li>
+<li><strong>你的用途</strong>：读取 AI 消息的 token → 累计 → 更新状态</li>
+</ul><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<hr class="auto-hide-last-sibling-br"><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<h1 class="header-iWP5WJ auto-hide-last-sibling-br">2. <code>wrap_model_call(self, request, handler)</code></h1><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space"><strong>你没用到的钩子方法</strong></div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<ul class="auto-hide-last-sibling-br">
+<li><strong>执行时机</strong>：<strong>模型调用之前</strong>（发送请求给大模型之前）</li>
+<li><strong>参数</strong>：<ul class="auto-hide-last-sibling-br">
+<li><code>request</code>：<code>ModelRequest</code> 对象（包含要发给模型的<strong>所有入参</strong>：prompt、模型名、温度等）</li>
+<li><code>handler</code>：模型调用的执行函数（你可以手动调用它，触发模型请求）</li>
+</ul><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+</li>
+<li><strong>用途</strong>：修改请求参数（比如动态改模型、加 prompt、拦截请求）</li>
+</ul><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<hr class="auto-hide-last-sibling-br"><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<h1 class="header-iWP5WJ auto-hide-last-sibling-br">一句话总结</h1><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">✅ <strong>after_model = 模型调用后 → 拿 state 做统计 / 更新</strong>（你统计 Token 用这个）<div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>✅ <strong>wrap_model_call = 模型调用前 → 改 request 参数</strong></div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+<div class="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space">你现在的 Token 统计逻辑，<strong>用 after_model 是完全正确的</strong>！</div><div class="container-Uxvbjy md-box-line-break wrapper-GYqxgQ undefined"></div>
+</div></div></div></div>

@@ -217,33 +217,56 @@ export class ExportManager {
 
   private async getConversationMessages(): Promise<Message[]> {
     const messages: Message[] = [];
-    
-    const chatContainer = document.querySelector('[data-testid="flow_chat_page"], [class*="chat-container"], main, [class*="page-main"]');
+
+    const chatContainer = document.querySelector('[data-message-id]')?.closest('main, [class*="page-main"], [class*="chat-container"]') || document.querySelector('main');
     if (!chatContainer) {
       console.log('[ExportManager] Chat container not found');
       return messages;
     }
 
-    const messageContents = chatContainer.querySelectorAll('[data-testid="message_text_content"]');
-    console.log('[ExportManager] Found message elements:', messageContents.length);
-    
-    messageContents.forEach((el) => {
-      const parent = el.closest('[data-testid="union_message"]') || el.closest('[class*="item"]') || el.closest('[class*="message"]');
-      if (!parent) return;
-      
-      const html = parent.innerHTML?.toLowerCase() || '';
-      const role: 'user' | 'assistant' = html.includes('receive_message') ? 'assistant' : 'user';
-      
-      const clone = parent.cloneNode(true) as HTMLElement;
-      
-      const removeSelectors = ['svg', 'button', '[class*="avatar"]', '[class*="time"]', '[class*="tool"]', 'script', 'style'];
+    const messageWrappers = chatContainer.querySelectorAll('[data-message-id]');
+    console.log('[ExportManager] Found message wrappers:', messageWrappers.length);
+
+    messageWrappers.forEach((wrapper) => {
+      const contentElements = wrapper.querySelectorAll('[data-render-engine="node"]');
+      if (contentElements.length === 0) return;
+
+      const blockTypes = Array.from(contentElements).map(el => el.getAttribute('data-plugin-identifier') || '');
+      const isThinking = blockTypes.some(bt => bt.includes('block_type:10040'));
+      const isRegular = blockTypes.some(bt => bt.includes('block_type:10000'));
+
+      if (!isRegular && !isThinking) return;
+
+      const role: 'user' | 'assistant' = wrapper.querySelector('[class*="user-avatar"], [class*="userMessage"], [class*="user_message"]') ? 'user' : 'assistant';
+
+      const clone = wrapper.cloneNode(true) as HTMLElement;
+
+      const removeSelectors = [
+        'svg:not([data-dbx-name])',
+        'button:not([data-dbx-name])',
+        '[class*="avatar"]',
+        '[class*="time"]',
+        '[class*="tool"]',
+        '[class*="collapse"]',
+        '[class*="think-block"]',
+        '[class*="thinking"]',
+        '[class*="collapse-button"]',
+        '[class*="collapse-wrapper"]',
+        '[class*="scroll-content"]',
+        '[class*="scroll-view"]',
+        'script',
+        'style',
+        '.children-wrapper',
+        '.scrollable-Se7zNt'
+      ];
+
       removeSelectors.forEach(sel => {
         clone.querySelectorAll(sel).forEach(node => node.remove());
       });
-      
+
       let content = '';
       const hasImages = clone.querySelectorAll('img').length > 0;
-      
+
       if (hasImages) {
         const imgs = clone.querySelectorAll('img');
         imgs.forEach((img) => {
@@ -260,12 +283,12 @@ export class ExportManager {
       } else {
         content = (clone.textContent?.trim() || '').replace(/\s+/g, ' ').trim();
       }
-      
+
       const cleanContent = typeof content === 'string' ? content.replace(/\s+/g, ' ').trim() : content;
-      
+
       if (cleanContent && cleanContent.length > 0) {
         messages.push({
-          id: `msg_${messages.length}`,
+          id: wrapper.getAttribute('data-message-id') || `msg_${messages.length}`,
           role,
           content,
           hasImages
