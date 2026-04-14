@@ -89,6 +89,7 @@ export class ExportManager {
       cursor: pointer;
       transition: background-color 0.15s ease;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      flex-shrink: 0;
     `;
 
     this.exportButton.setAttribute('data-dbx-name', 'button');
@@ -107,9 +108,16 @@ export class ExportManager {
       this.toggleDropdown();
     });
 
-    const targetContainer = topbar.querySelector('div[class*="flex-row"]');
-    if (targetContainer) {
-      targetContainer.appendChild(this.exportButton);
+    const leftContainer = topbar.querySelector('[class*="flex-row"]');
+    const rightContainer = topbar.querySelector('div[class*="justify-end"]');
+
+    if (rightContainer) {
+      rightContainer.insertBefore(this.exportButton, rightContainer.firstChild);
+    } else if (leftContainer && leftContainer.parentElement === topbar) {
+      const newRightContainer = document.createElement('div');
+      newRightContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-shrink: 0;';
+      topbar.appendChild(newRightContainer);
+      newRightContainer.appendChild(this.exportButton);
     } else {
       topbar.appendChild(this.exportButton);
     }
