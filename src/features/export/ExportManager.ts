@@ -237,7 +237,8 @@ export class ExportManager {
 
       if (!isRegular && !isThinking) return;
 
-      const role: 'user' | 'assistant' = wrapper.querySelector('[class*="user-avatar"], [class*="userMessage"], [class*="user_message"]') ? 'user' : 'assistant';
+      const wrapperHtml = wrapper.innerHTML?.toLowerCase() || '';
+      const role: 'user' | 'assistant' = wrapperHtml.includes('send_message') || wrapper.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"]') ? 'user' : 'assistant';
 
       const clone = wrapper.cloneNode(true) as HTMLElement;
 
