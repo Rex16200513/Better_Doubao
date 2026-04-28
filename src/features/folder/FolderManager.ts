@@ -167,7 +167,7 @@ export class FolderManager {
       if (!conversationId) return;
 
       const folders = this.findConversationFolders(conversationId);
-      this.updateConversationIndicator(element, conversationId, folders);
+      this.updateConversationIndicator(element, folders);
 
       this.setupConversationDrag(element, conversationId);
     });
@@ -175,7 +175,7 @@ export class FolderManager {
     this.setupFolderDropZones();
   }
 
-  private updateConversationIndicator(element: HTMLElement, conversationId: string, folders: string[]): void {
+  private updateConversationIndicator(element: HTMLElement, folders: string[]): void {
     const existingIndicator = element.querySelector('.dbx-folder-indicator');
     
     if (folders.length > 0) {
@@ -206,7 +206,7 @@ export class FolderManager {
       if (!conversationId) return;
 
       const folders = this.findConversationFolders(conversationId);
-      this.updateConversationIndicator(element, conversationId, folders);
+      this.updateConversationIndicator(element, folders);
     });
   }
 
@@ -724,7 +724,7 @@ export class FolderManager {
     const customColorOption = popup.querySelector('.dbx-color-custom');
     
     colorOptions.forEach(opt => {
-      opt.addEventListener('click', async (e) => {
+      opt.addEventListener('click', async () => {
         if ((opt as HTMLElement).classList.contains('dbx-color-custom')) {
           return;
         }

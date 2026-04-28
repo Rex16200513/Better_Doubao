@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.2.1",
+    "@types/chrome": "^0.1.40",
     "@types/webextension-polyfill": "^0.12.5",
     "typescript": "^5.3.3",
     "vite": "^5.4.0"

@@ -1,5 +1,3 @@
-import { storageService } from '../../core/services/StorageService';
-
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -633,13 +631,6 @@ export class ExportManager {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
-
-  private escapeHtml(text: string): string {
-    const cleaned = text.replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim();
-    const div = document.createElement('div');
-    div.textContent = cleaned;
-    return div.innerHTML;
   }
 }
 

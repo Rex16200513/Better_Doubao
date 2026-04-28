@@ -48,7 +48,7 @@ export class LatexDownloader {
     latexCodeBlocks.forEach(el => this.addLatexCodeDownloadButton(el as HTMLElement));
   }
 
-  private extractLatexCode(element: HTMLElement, type: 'inline' | 'block'): string | null {
+  private extractLatexCode(element: HTMLElement): string | null {
     const copyText = element.getAttribute('data-custom-copy-text');
     if (copyText) {
       const match = copyText.match(/\\\((.*)\\\)/s) || copyText.match(/\\\[(.*)\\\]/s);
@@ -60,10 +60,10 @@ export class LatexDownloader {
     return null;
   }
 
-  private addDownloadButton(element: HTMLElement, type: 'inline' | 'block'): void {
+  private addDownloadButton(element: HTMLElement, _type: 'inline' | 'block'): void {
     if (element.querySelector('.dbx-latex-download-btn')) return;
 
-    const latex = this.extractLatexCode(element, type);
+    const latex = this.extractLatexCode(element);
     if (!latex) return;
 
     const wrapper = document.createElement('span');
@@ -113,7 +113,7 @@ export class LatexDownloader {
 
     downloadBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.downloadLatex(latex, type);
+      this.downloadLatex(latex);
     });
 
     const copyBtn = document.createElement('span');
@@ -260,7 +260,7 @@ export class LatexDownloader {
     }
   }
 
-  private downloadLatex(latex: string, type: 'inline' | 'block'): void {
+  private downloadLatex(latex: string): void {
     const content = this.wrapLatexDocument(latex);
     const filename = `formula_${Date.now()}.tex`;
     this.downloadFile(content, filename, 'text/plain');

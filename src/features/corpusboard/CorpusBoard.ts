@@ -1,4 +1,4 @@
-import { storageService, StorageService } from '../../core/services/StorageService';
+import { storageService } from '../../core/services/StorageService';
 import type { CorpusItem } from '../../core/types/folder';
 
 export class CorpusBoard {
@@ -87,7 +87,7 @@ export class CorpusBoard {
 
     console.log('[CorpusBoard] Trigger button created, in DOM:', document.body?.contains(this.triggerBtn));
 
-    this.triggerBtn.addEventListener('click', (e) => {
+    this.triggerBtn.addEventListener('click', () => {
       if (!this.isDragging) {
         this.togglePanel();
       }
@@ -438,8 +438,8 @@ export class CorpusBoard {
       
       const container = range.commonAncestorContainer;
       const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
-      
-      if (containerEl.closest('.dbx-popup-content')) {
+
+      if (!containerEl || containerEl.closest('.dbx-popup-content')) {
         console.log('[CorpusBoard] Selection in dbx-popup-content, not showing button');
         return;
       }
