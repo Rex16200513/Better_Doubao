@@ -299,17 +299,104 @@ export class ExportManager {
   }
 
   private getConversationTitle(): string {
-    const titleEl = document.querySelector('[class*="title"], [data-testid*="title"], h1');
-    if (titleEl) {
-      return titleEl.textContent?.trim() || '对话导出';
+    const titleEl = document.querySelector('[class*="title"]:not([class*="icon"]):not([class*="button"]):not([class*="tooltip"])');
+    if (titleEl && titleEl.textContent?.trim()) {
+      return titleEl.textContent.trim().substring(0, 50);
     }
-    
+
+    const h1El = document.querySelector('h1');
+    if (h1El && h1El.textContent?.trim()) {
+      return h1El.textContent.trim().substring(0, 50);
+    }
+
+    const mainTitle = document.querySelector('[data-testid*="title"], [data-title]');
+    if (mainTitle && mainTitle.textContent?.trim()) {
+      return mainTitle.textContent.trim().substring(0, 50);
+    }
+
     const urlMatch = window.location.pathname.match(/\/chat\/([^/?#]+)/);
     if (urlMatch) {
       return `对话_${urlMatch[1].substring(0, 8)}`;
     }
-    
+
     return '对话导出';
+  }
+
+  private htmlToMarkdown(html: string): string {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    const processNode = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent || '';
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return '';
+      }
+
+      const el = node as HTMLElement;
+      const tagName = el.tagName.toLowerCase();
+
+      switch (tagName) {
+        case 'br':
+          return '\n';
+        case 'p':
+          return Array.from(el.childNodes).map(processNode).join('\n\n') + '\n';
+        case 'div':
+          return Array.from(el.childNodes).map(processNode).join('\n') + '\n';
+        case 'span':
+          return Array.from(el.childNodes).map(processNode).join('');
+        case 'strong':
+        case 'b':
+          return `**${Array.from(el.childNodes).map(processNode).join('')}**`;
+        case 'em':
+        case 'i':
+          return `*${Array.from(el.childNodes).map(processNode).join('')}*`;
+        case 'code':
+          const codeContent = Array.from(el.childNodes).map(processNode).join('');
+          if (el.closest('pre')) {
+            return `\`\`\`\n${codeContent}\n\`\`\``;
+          }
+          return `\`${codeContent}\``;
+        case 'pre':
+          return `\`\`\`\n${el.textContent || ''}\n\`\`\`\n`;
+        case 'a':
+          const href = el.getAttribute('href') || '';
+          return `[${el.textContent || ''}](${href})`;
+        case 'img':
+          const src = el.getAttribute('src') || el.getAttribute('data-src') || '';
+          const alt = el.getAttribute('alt') || 'image';
+          return src ? `![${alt}](${src})` : '';
+        case 'ul':
+          return Array.from(el.childNodes).map(li => `  - ${processNode(li)}`).join('\n') + '\n';
+        case 'ol':
+          let idx = 1;
+          return Array.from(el.childNodes).map(li => `  ${idx++}. ${processNode(li).replace(/^\s*-\s*/, '')}`).join('\n') + '\n';
+        case 'li':
+          return Array.from(el.childNodes).map(processNode).join('');
+        case 'h1':
+          return `# ${el.textContent || ''}\n`;
+        case 'h2':
+          return `## ${el.textContent || ''}\n`;
+        case 'h3':
+          return `### ${el.textContent || ''}\n`;
+        case 'h4':
+          return `#### ${el.textContent || ''}\n`;
+        case 'blockquote':
+          return `> ${el.textContent || ''}\n`;
+        case 'hr':
+          return '---\n';
+        case 'table':
+          return el.textContent || '';
+        default:
+          return Array.from(el.childNodes).map(processNode).join('');
+      }
+    };
+
+    let markdown = processNode(temp);
+    markdown = markdown.replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim();
+    return markdown;
   }
 
   private async exportToPdf(): Promise<void> {
@@ -555,11 +642,11 @@ export class ExportManager {
       '',
       ...messages.map(m => {
         const role = m.role === 'user' ? '【用户】' : '【AI】';
-        let msgContent = m.hasImages ? this.extractTextFromHtml(m.content) : m.content;
+        const msgContent = this.htmlToMarkdown(m.content);
         if (m.hasImages) {
           const imgUrls = extractImgUrls(m.content);
           if (imgUrls.length > 0) {
-            msgContent += '\n\n[图片: ' + imgUrls.join(', ') + ']';
+            return `${role}\n${msgContent}\n\n[图片: ${imgUrls.join(', ')}]\n`;
           }
         }
         return `${role}\n${msgContent}\n`;
@@ -567,12 +654,6 @@ export class ExportManager {
     ].join('\n');
 
     this.downloadFile(content, `${title}.txt`, 'text/plain;charset=utf-8');
-  }
-  
-  private extractTextFromHtml(html: string): string {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    return temp.textContent || temp.innerText || '';
   }
 
   private async exportToMarkdown(): Promise<void> {
@@ -604,16 +685,16 @@ export class ExportManager {
       '',
       ...messages.map(m => {
         const role = m.role === 'user' ? '**用户**' : '**AI**';
-        let msgContent = m.hasImages ? this.extractTextFromHtml(m.content) : m.content;
+        const msgContent = this.htmlToMarkdown(m.content);
         let mdContent = `### ${role}\n\n${msgContent}`;
-        
+
         if (m.hasImages) {
           const imgUrls = extractImgUrls(m.content);
           imgUrls.forEach(url => {
             mdContent += `\n\n![图片](${url})`;
           });
         }
-        
+
         return mdContent;
       })
     ].join('\n');
