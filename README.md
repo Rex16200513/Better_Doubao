@@ -25,6 +25,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 支持收藏重要消息
 - 收藏信息持久化存储，跨对话可用
 - 点击消息自动滚动定位
+- 支持图片、PDF 等纯媒体用户消息
 
 **使用方式：**
 - 点击页面左上角的定位图标展开悬浮窗
@@ -80,7 +81,9 @@ A powerful browser extension to enhance your Doubao chat experience
 **功能特点：**
 - 支持 PDF、TXT、Markdown 三种格式
 - 正确区分用户/AI 消息
-- 支持图片导出（过滤占位图）
+- 支持图片导出（过滤 base64 占位图）
+- Markdown 格式完整保留代码块、表格、加粗等样式
+- 使用对话标题命名导出文件
 - 与豆包原生界面风格一致
 
 **使用方式：**

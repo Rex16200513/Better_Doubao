@@ -356,7 +356,6 @@ export class ExportManager {
         case 'code':
           const codeContent = Array.from(el.childNodes).map(processNode).join('');
           if (el.closest('pre')) {
-            const lang = el.className.match(/language-(\w+)/) || [];
             return `\n\`\`\`\n${codeContent}\n\`\`\`\n`;
           }
           return `\`${codeContent}\``;

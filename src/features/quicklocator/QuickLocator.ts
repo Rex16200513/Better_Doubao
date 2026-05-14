@@ -115,22 +115,30 @@ export class QuickLocator {
     this.conversationId = this.getConversationId();
     await this.loadStarredMessages();
 
-    let messageElements = container.querySelectorAll('.inner-item-w21SQO');
-    
-    if (messageElements.length === 0) {
-      messageElements = container.querySelectorAll('[data-testid="union_message"]');
-    }
-    
-    if (messageElements.length === 0) {
-      messageElements = container.querySelectorAll('[data-testid="message-block-container"]');
-    }
-    
     const userMessages: HTMLElement[] = [];
-    
+
+    const messageElements = container.querySelectorAll('[data-message-id]');
     messageElements.forEach((el) => {
-      const html = el.innerHTML?.toLowerCase() || '';
-      if (html.includes('send_message') || el.querySelector('.bg-g-send-msg-bubble-bg')) {
-        userMessages.push(el as HTMLElement);
+      const parent = el.closest('.inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]');
+      if (!parent) return;
+
+      const html = parent.innerHTML?.toLowerCase() || '';
+      const hasSendClass = html.includes('send_message') ||
+        html.includes('send-msg') ||
+        html.includes('user-bubble') ||
+        html.includes('bubble-bg');
+
+      const hasBubble = parent.querySelector('.bg-g-send-msg-bubble-bg, [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]');
+
+      if (hasSendClass || hasBubble) {
+        userMessages.push(parent as HTMLElement);
+        return;
+      }
+
+      const hasUserImageBlock = parent.querySelector('[data-plugin-identifier*="block_type:10052"]');
+      const hasJustifyEnd = parent.querySelector('[class*="justify-end"]');
+      if (hasUserImageBlock && hasJustifyEnd) {
+        userMessages.push(parent as HTMLElement);
       }
     });
 
