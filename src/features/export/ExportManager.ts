@@ -356,16 +356,24 @@ export class ExportManager {
         case 'code':
           const codeContent = Array.from(el.childNodes).map(processNode).join('');
           if (el.closest('pre')) {
-            return `\`\`\`\n${codeContent}\n\`\`\``;
+            const lang = el.className.match(/language-(\w+)/) || [];
+            return `\n\`\`\`\n${codeContent}\n\`\`\`\n`;
           }
           return `\`${codeContent}\``;
         case 'pre':
-          return `\`\`\`\n${el.textContent || ''}\n\`\`\`\n`;
+          const preCode = el.querySelector('code');
+          const codeText = preCode ? preCode.textContent || '' : el.textContent || '';
+          const langClass = preCode?.className.match(/language-(\w+)/);
+          const lang = langClass ? langClass[1] : '';
+          return `\n\`\`\`${lang}\n${codeText.trim()}\n\`\`\`\n`;
         case 'a':
           const href = el.getAttribute('href') || '';
           return `[${el.textContent || ''}](${href})`;
         case 'img':
           const src = el.getAttribute('src') || el.getAttribute('data-src') || '';
+          if (src.startsWith('data:') || src.includes('base64')) {
+            return '';
+          }
           const alt = el.getAttribute('alt') || 'image';
           return src ? `![${alt}](${src})` : '';
         case 'ul':
@@ -388,7 +396,19 @@ export class ExportManager {
         case 'hr':
           return '---\n';
         case 'table':
-          return el.textContent || '';
+          const rows: string[][] = [];
+          el.querySelectorAll('tr').forEach(tr => {
+            const cells: string[] = [];
+            tr.querySelectorAll('th, td').forEach(cell => {
+              cells.push(processNode(cell).trim());
+            });
+            if (cells.length > 0) rows.push(cells);
+          });
+          if (rows.length === 0) return '';
+          const header = rows[0].join(' | ');
+          const separator = rows[0].map(() => '---').join(' | ');
+          const body = rows.slice(1).map(row => row.join(' | ')).join('\n');
+          return `\n| ${header} |\n| ${separator} |\n${body ? '| ' + body.replace(/\n/g, '\n| ') + '|' : ''}\n`;
         default:
           return Array.from(el.childNodes).map(processNode).join('');
       }
