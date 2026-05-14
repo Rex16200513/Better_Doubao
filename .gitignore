@@ -9,3 +9,10 @@ edge/dist.zip
 .DS_Store
 *.mp4
 *.zip
+
+# 导出的测试文件
+*.md
+!README.md
+!TESTING_NOTES*.md
+!LICENSE
+!CHANGELOG.md
