@@ -1,12 +1,16 @@
 export class LatexDownloader {
   private initialized = false;
+  private processedElements = new WeakSet<HTMLElement>();
 
   init(): void {
     if (this.initialized) return;
     this.initialized = true;
     
     this.setupObserver();
-    this.processExistingFormulas();
+    // Try multiple times with increasing delays
+    setTimeout(() => this.processExistingFormulas(), 500);
+    setTimeout(() => this.processExistingFormulas(), 1500);
+    setTimeout(() => this.processExistingFormulas(), 3000);
   }
 
   private setupObserver(): void {
@@ -17,47 +21,90 @@ export class LatexDownloader {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           for (const node of mutation.addedNodes) {
             if (node instanceof Element) {
-              if (node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex')) {
+              if (node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex, [copy-text]') ||
+                  node.classList?.contains('math-inline') || node.classList?.contains('math-block')) {
                 shouldProcess = true;
                 break;
               }
             }
           }
         }
+        // Detect when copy-text attribute is added to existing elements
+        if (mutation.type === 'attributes' && (mutation.attributeName === 'copy-text' || mutation.attributeName === 'data-custom-copy-text')) {
+          shouldProcess = true;
+          break;
+        }
         if (shouldProcess) break;
       }
       
       if (shouldProcess) {
-        setTimeout(() => this.processExistingFormulas(), 100);
+        setTimeout(() => this.processExistingFormulas(), 200);
       }
     });
 
     observer.observe(document.body, {
       childList: true,
       subtree: true,
+      attributes: true,
+      attributeFilter: ['copy-text', 'data-custom-copy-text'],
     });
   }
 
   private processExistingFormulas(): void {
-    const inlineMath = document.querySelectorAll('.math-inline');
-    const blockMath = document.querySelectorAll('.math-block');
+    // Find .math-inline or .math-block elements that have copy-text attribute
+    const formulaElements = document.querySelectorAll('.math-inline[copy-text], .math-block[copy-text], .math-inline[data-custom-copy-text], .math-block[data-custom-copy-text]');
+    
+    console.log(`[LatexDownloader] Found ${formulaElements.length} formula elements with copy-text`);
+
+    formulaElements.forEach(el => {
+      const element = el as HTMLElement;
+      if (!this.processedElements.has(element)) {
+        this.processedElements.add(element);
+        this.addDownloadButton(element, 'inline');
+      }
+    });
+
+    // Also try legacy approach for elements without copy-text
+    const inlineMath = document.querySelectorAll('.math-inline:not([copy-text]):not([data-custom-copy-text])');
+    const blockMath = document.querySelectorAll('.math-block:not([copy-text]):not([data-custom-copy-text])');
     const latexCodeBlocks = document.querySelectorAll('.custom-code-block-container--latex');
 
-    inlineMath.forEach(el => this.addDownloadButton(el as HTMLElement, 'inline'));
-    blockMath.forEach(el => this.addDownloadButton(el as HTMLElement, 'block'));
-    latexCodeBlocks.forEach(el => this.addLatexCodeDownloadButton(el as HTMLElement));
+    inlineMath.forEach(el => {
+      const element = el as HTMLElement;
+      if (!this.processedElements.has(element)) {
+        this.processedElements.add(element);
+        this.addDownloadButton(element, 'inline');
+      }
+    });
+    blockMath.forEach(el => {
+      const element = el as HTMLElement;
+      if (!this.processedElements.has(element)) {
+        this.processedElements.add(element);
+        this.addDownloadButton(element, 'block');
+      }
+    });
+    latexCodeBlocks.forEach(el => {
+      const element = el as HTMLElement;
+      if (!this.processedElements.has(element)) {
+        this.processedElements.add(element);
+        this.addLatexCodeDownloadButton(element);
+      }
+    });
   }
 
   private extractLatexCode(element: HTMLElement): string | null {
-    const copyText = element.getAttribute('data-custom-copy-text');
-    if (copyText) {
-      const match = copyText.match(/\\\((.*)\\\)/s) || copyText.match(/\\\[(.*)\\\]/s);
-      if (match) {
-        return match[1];
-      }
-      return copyText;
-    }
-    return null;
+    const copyText = element.getAttribute('copy-text') || element.getAttribute('data-custom-copy-text');
+    if (!copyText) return null;
+
+    // Try to extract content between \( and \) or \[ and \]
+    let match = copyText.match(/\\\(([\s\S]*?)\\\)/);
+    if (match) return match[1].trim();
+
+    match = copyText.match(/\\\[([\s\S]*?)\\\]/);
+    if (match) return match[1].trim();
+
+    // If no delimiters found, return as-is
+    return copyText.trim();
   }
 
   private addDownloadButton(element: HTMLElement, _type: 'inline' | 'block'): void {
@@ -66,18 +113,9 @@ export class LatexDownloader {
     const latex = this.extractLatexCode(element);
     if (!latex) return;
 
-    const wrapper = document.createElement('span');
-    wrapper.className = 'dbx-latex-wrapper';
-    wrapper.style.cssText = 'position: relative; display: inline-flex; align-items: center;';
-
-    const parent = element.parentElement;
-    if (!parent || parent.classList.contains('dbx-latex-wrapper')) return;
-
-    element.parentNode?.insertBefore(wrapper, element);
-    wrapper.appendChild(element);
-
     const btnContainer = document.createElement('span');
-    btnContainer.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; gap: 4px;';
+    btnContainer.className = 'dbx-latex-btn-container';
+    btnContainer.style.cssText = 'display: inline-flex; align-items: center; margin-left: 6px; gap: 4px; vertical-align: middle;';
 
     const downloadBtn = document.createElement('span');
     downloadBtn.className = 'dbx-latex-download-btn';
@@ -92,10 +130,10 @@ export class LatexDownloader {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       cursor: pointer;
-      color: #666;
+      color: #888;
       border-radius: 4px;
       transition: all 0.2s;
       flex-shrink: 0;
@@ -108,7 +146,7 @@ export class LatexDownloader {
 
     downloadBtn.addEventListener('mouseleave', () => {
       downloadBtn.style.backgroundColor = 'transparent';
-      downloadBtn.style.color = '#666';
+      downloadBtn.style.color = '#888';
     });
 
     downloadBtn.addEventListener('click', (e) => {
@@ -128,10 +166,10 @@ export class LatexDownloader {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       cursor: pointer;
-      color: #666;
+      color: #888;
       border-radius: 4px;
       transition: all 0.2s;
       flex-shrink: 0;
@@ -144,7 +182,7 @@ export class LatexDownloader {
 
     copyBtn.addEventListener('mouseleave', () => {
       copyBtn.style.backgroundColor = 'transparent';
-      copyBtn.style.color = '#666';
+      copyBtn.style.color = '#888';
     });
 
     copyBtn.addEventListener('click', (e) => {
@@ -154,7 +192,16 @@ export class LatexDownloader {
 
     btnContainer.appendChild(downloadBtn);
     btnContainer.appendChild(copyBtn);
-    wrapper.appendChild(btnContainer);
+
+    // Insert after the formula element
+    if (element.parentNode) {
+      const nextSibling = element.nextSibling;
+      if (nextSibling) {
+        element.parentNode.insertBefore(btnContainer, nextSibling);
+      } else {
+        element.parentNode.appendChild(btnContainer);
+      }
+    }
   }
 
   private addLatexCodeDownloadButton(element: HTMLElement): void {

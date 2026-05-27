@@ -17,7 +17,7 @@ export class QuickLocator {
   private conversationId: string = 'unknown';
 
   private get scrollContainer(): HTMLElement | null {
-    return document.querySelector('[data-testid="flow_chat_page"], [class*="chat-container"], main, [class*="page-main"]') as HTMLElement;
+    return document.querySelector('[class*="v_list_scroller"], [class*="scroller"], [data-testid="flow_chat_page"], [class*="chat-container"], main, [class*="page-main"]') as HTMLElement;
   }
 
   init(): void {
@@ -119,7 +119,7 @@ export class QuickLocator {
 
     const messageElements = container.querySelectorAll('[data-message-id]');
     messageElements.forEach((el) => {
-      const parent = el.closest('.inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]');
+      const parent = el.closest('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]');
       if (!parent) return;
 
       const html = parent.innerHTML?.toLowerCase() || '';

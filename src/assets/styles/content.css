@@ -11,10 +11,7 @@
 .dbx-folder-section {
   padding: 8px 12px;
   margin-bottom: 4px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: #f9f9f9;
+  background: var(--dbx-bg-base, #f9f9f9);
 }
 
 .dbx-folder-header {
@@ -64,6 +61,23 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dbx-folder-text-tertiary) transparent;
+}
+
+.dbx-folder-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dbx-folder-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dbx-folder-list::-webkit-scrollbar-thumb {
+  background: var(--dbx-folder-text-tertiary);
+  border-radius: 2px;
 }
 
 .dbx-folder-empty {

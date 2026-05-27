@@ -90,6 +90,7 @@ export class FolderManager {
     tempDiv.innerHTML = createFolderSectionHTML();
     const folderSection = tempDiv.firstElementChild as HTMLElement;
 
+    // 查找"更多"按钮
     const moreButton = this.sidebarContainer.querySelector('[title="更多"]');
     if (moreButton && moreButton.parentElement?.parentElement) {
       const moreContainer = moreButton.parentElement.parentElement.parentElement;
@@ -97,11 +98,19 @@ export class FolderManager {
         moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
       }
     } else {
+      // 查找历史对话区域
       const historySection = this.sidebarContainer.querySelector('[class*="history"]');
       if (historySection && historySection.parentNode) {
-        historySection.parentNode.insertBefore(folderSection, historySection);
+        historySection.parentNode.insertBefore(folderSection, historySection.nextSibling);
       } else {
-        this.sidebarContainer.appendChild(folderSection);
+        // 查找用户信息区域（底部），在它之前插入
+        const userSection = this.sidebarContainer.querySelector('[class*="-mx-12"]');
+        if (userSection && userSection.parentNode) {
+          userSection.parentNode.insertBefore(folderSection, userSection);
+        } else {
+          // 最后在侧边栏末尾添加
+          this.sidebarContainer.appendChild(folderSection);
+        }
       }
     }
 
@@ -460,10 +469,21 @@ export class FolderManager {
 
     if (button) {
       const rect = button.getBoundingClientRect();
+      const popupHeight = 280;
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      
+      let top: number;
+      if (spaceBelow >= popupHeight + 8) {
+        top = rect.bottom + 8;
+      } else {
+        top = rect.top - popupHeight - 8;
+      }
+      
       popup.style.cssText = `
         position: fixed;
         left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
+        top: ${top}px;
         background: transparent;
         display: flex;
         align-items: flex-start;
