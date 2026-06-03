@@ -6,7 +6,7 @@ A powerful browser extension to enhance your Doubao chat experience
 
 ## 📢 现已在微软商店成功上线！
 
-![微软商店截图](public/microfost_presentation.png)
+![微软商店截图](public/microfost_presentation.png)这里的microfost拼写错误，正确拼写应该是“microsoft”
 
 **Better Doubao** 已正式在 Microsoft Edge 插件商店上线！您可以直接在商店中搜索并安装插件。
 
@@ -105,6 +105,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 支持 LaTeX 代码块
 - 一键下载为 .tex 文件
 - 一键复制到剪贴板
+- 可以追加一个能随时高亮标记（荧光黄）重点的功能，用户看到自己想要的可以随时在页面标记（而不需要二次复制）
 
 **使用方式：**
 - 鼠标悬停在公式上，显示下载和复制按钮
