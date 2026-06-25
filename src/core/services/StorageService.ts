@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { FolderData, Folder, CorpusItem } from '../types/folder';
+import type { FolderData, Folder, CorpusItem, TextHighlight } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
@@ -73,7 +73,7 @@ function restoreFromBackup(accountId: string): FolderData | null {
 }
 
 export class StorageService {
-  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
+  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [] };
   private saveTimer: number | null = null;
   private currentAccountId: string = '';
 
@@ -271,6 +271,45 @@ export class StorageService {
     this.data.corpusBoard = [];
     this.debouncedSave();
   }
+
+  async getTextHighlights(conversationId: string): Promise<TextHighlight[]> {
+  return (this.data.textHighlights ?? []).filter(
+    item => item.conversationId === conversationId
+  );
+}
+
+async addTextHighlight(
+  highlight: Omit<TextHighlight, 'id' | 'createdAt'>
+): Promise<TextHighlight> {
+  const item: TextHighlight = {
+    ...highlight,
+    id: `highlight_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    createdAt: Date.now(),
+  };
+
+  if (!this.data.textHighlights) {
+    this.data.textHighlights = [];
+  }
+
+  this.data.textHighlights.push(item);
+  this.debouncedSave();
+  return item;
+}
+
+async updateTextHighlightColor(id: string, color: string): Promise<void> {
+  const item = this.data.textHighlights?.find(highlight => highlight.id === id);
+  if (item) {
+    item.color = color;
+    this.debouncedSave();
+  }
+}
+
+async removeTextHighlight(id: string): Promise<void> {
+  this.data.textHighlights = (this.data.textHighlights ?? []).filter(
+    item => item.id !== id
+  );
+  this.debouncedSave();
+}
 
   async save(): Promise<void> {
     if (this.saveTimer) {
