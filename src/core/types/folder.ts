@@ -30,11 +30,26 @@ export interface CorpusItem {
   selected?: boolean;
 }
 
+export interface TextHighlight {
+  id: string;
+  conversationId: string;
+  messageId?: string;
+  messageIndex: number;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  prefix: string;
+  suffix: string;
+  color: string;
+  createdAt: number;
+}
+
 export interface FolderData {
   folders: Folder[];
   folderContents: Record<string, ConversationReference[]>;
   starredMessages: Record<string, number[]>;
   corpusBoard: CorpusItem[];
+  textHighlights?: TextHighlight[];
 }
 
 export interface DragData {

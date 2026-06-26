@@ -858,3 +858,125 @@
 .dbx-corpus-add-menu > div:hover {
   background: #f3f4f6;
 }
+
+.dbx-corpus-add-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dbx-highlight-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.dbx-highlight-action,
+.dbx-highlight-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.dbx-highlight-action:hover,
+.dbx-highlight-menu-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dbx-highlight-action {
+  --dbx-highlight-color: #fde047;
+  color: #fff;
+}
+
+.dbx-highlight-icon {
+  display: block;
+  width: 12px !important;
+  height: 14px !important;
+  min-width: 12px;
+  flex: none;
+  overflow: visible;
+}
+
+.dbx-highlight-icon-body,
+.dbx-highlight-icon-tip {
+  fill: #fff;
+}
+
+.dbx-highlight-icon-color {
+  fill: var(--dbx-highlight-color);
+}
+
+.dbx-highlight-palette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  transform: none;
+  z-index: -1;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.dbx-highlight-palette[hidden] {
+  display: none;
+}
+.dbx-text-highlight {
+  padding: 1px 0;
+  color: inherit;
+  background: #fde047;
+  border-radius: 2px;
+}
+.dbx-highlight-palette .dbx-highlight-swatch {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  flex: 0 0 22px !important;
+  appearance: none;
+  border: 2px solid transparent !important;
+  border-radius: 50% !important;
+  background-color: var(--dbx-swatch-color) !important;
+  cursor: pointer;
+}
+
+.dbx-highlight-swatch:hover {
+  transform: scale(1.1);
+}
+
+.dbx-highlight-swatch.is-selected {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.dbx-highlight-palette .dbx-highlight-remove {
+  border-color: #111827 !important;
+  background-color: #fff !important;
+}
+
+.dbx-highlight-remove svg {
+  display: block;
+  width: 18px !important;
+  height: 18px !important;
+  overflow: visible;
+}
+
+.dbx-highlight-menu-toggle.is-open svg {
+  transform: rotate(180deg);
+}

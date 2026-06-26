@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { FolderData, Folder, CorpusItem } from '../types/folder';
+import type { FolderData, Folder, CorpusItem, TextHighlight } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
@@ -42,7 +42,11 @@ function getCurrentAccountId(): string {
 function validateFolderData(data: unknown): data is FolderData {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
-  return Array.isArray(d.folders) && typeof d.folderContents === 'object' && typeof d.starredMessages === 'object' && Array.isArray(d.corpusBoard);
+  return Array.isArray(d.folders) &&
+    typeof d.folderContents === 'object' &&
+    typeof d.starredMessages === 'object' &&
+    Array.isArray(d.corpusBoard) &&
+    (d.textHighlights === undefined || Array.isArray(d.textHighlights));
 }
 
 function createBackup(data: FolderData, accountId: string): void {
@@ -73,7 +77,7 @@ function restoreFromBackup(accountId: string): FolderData | null {
 }
 
 export class StorageService {
-  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
+  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [] };
   private saveTimer: number | null = null;
   private currentAccountId: string = '';
 
@@ -89,7 +93,7 @@ export class StorageService {
     
     if (savedAccountId && savedAccountId !== this.currentAccountId) {
       console.log('[Storage] Account changed from', savedAccountId, 'to', this.currentAccountId);
-      this.data = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
+      this.data = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [] };
       localStorage.setItem(ACCOUNT_KEY, this.currentAccountId);
       await this.persist();
       console.log('[Storage] Cleared data for new account');
@@ -99,12 +103,19 @@ export class StorageService {
       try {
         const stored = await browser.storage.local.get(this.getStorageKey());
         if (stored[this.getStorageKey()] && validateFolderData(stored[this.getStorageKey()])) {
-          this.data = stored[this.getStorageKey()] as FolderData;
+          const savedData = stored[this.getStorageKey()] as FolderData;
+          this.data = {
+            ...savedData,
+            textHighlights: savedData.textHighlights ?? [],
+          };
           console.log('[Storage] Loaded from chrome.storage for account:', this.currentAccountId);
         } else {
           const backup = restoreFromBackup(this.currentAccountId);
           if (backup) {
-            this.data = backup;
+            this.data = {
+              ...backup,
+              textHighlights: backup.textHighlights ?? [],
+            };
             await this.persist();
             console.log('[Storage] Restored from localStorage backup');
           }
@@ -113,7 +124,10 @@ export class StorageService {
         console.error('[Storage] Init error:', error);
         const backup = restoreFromBackup(this.currentAccountId);
         if (backup) {
-          this.data = backup;
+          this.data = {
+            ...backup,
+            textHighlights: backup.textHighlights ?? [],
+          };
         }
       }
     }
@@ -269,6 +283,45 @@ export class StorageService {
 
   async clearCorpusBoard(): Promise<void> {
     this.data.corpusBoard = [];
+    this.debouncedSave();
+  }
+
+  async getTextHighlights(conversationId: string): Promise<TextHighlight[]> {
+    return (this.data.textHighlights ?? []).filter(
+      item => item.conversationId === conversationId
+    );
+  }
+
+  async addTextHighlight(
+    highlight: Omit<TextHighlight, 'id' | 'createdAt'>
+  ): Promise<TextHighlight> {
+    const item: TextHighlight = {
+      ...highlight,
+      id: `highlight_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      createdAt: Date.now(),
+    };
+
+    if (!this.data.textHighlights) {
+      this.data.textHighlights = [];
+    }
+
+    this.data.textHighlights.push(item);
+    this.debouncedSave();
+    return item;
+  }
+
+  async updateTextHighlightColor(id: string, color: string): Promise<void> {
+    const item = this.data.textHighlights?.find(highlight => highlight.id === id);
+    if (item) {
+      item.color = color;
+      this.debouncedSave();
+    }
+  }
+
+  async removeTextHighlight(id: string): Promise<void> {
+    this.data.textHighlights = (this.data.textHighlights ?? []).filter(
+      item => item.id !== id
+    );
     this.debouncedSave();
   }
 

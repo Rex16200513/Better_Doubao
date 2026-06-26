@@ -1,5 +1,5 @@
 import { storageService } from '../../core/services/StorageService';
-import type { CorpusItem } from '../../core/types/folder';
+import type { CorpusItem, TextHighlight } from '../../core/types/folder';
 
 export class CorpusBoard {
   private triggerBtn: HTMLElement | null = null;
@@ -12,6 +12,12 @@ export class CorpusBoard {
   private positionX = 0;
   private positionY = 0;
   private corpusItems: CorpusItem[] = [];
+  private highlightObserver: MutationObserver | null = null;
+  private highlightRestoreTimer: number | null = null;
+  private highlightUrlTimer: number | null = null;
+  private lastHighlightUrl = '';
+  private isRestoringHighlights = false;
+  private highlightPaletteResizeHandler: (() => void) | null = null;
 
   init(): void {
     if (this.initialized) return;
@@ -21,6 +27,7 @@ export class CorpusBoard {
     this.loadCorpusItems();
     this.createTriggerButton();
     this.setupTextSelectionListener();
+    this.setupHighlightPersistence();
     this.initialized = true;
     console.log('[CorpusBoard] Initialized, trigger button:', this.triggerBtn);
     
@@ -417,6 +424,8 @@ export class CorpusBoard {
     let selectionButton: HTMLElement | null = null;
     let hideTimeout: number | null = null;
     let savedSelectionText: string = '';
+    let savedSelectionRange: Range | null = null;
+    let selectedHighlightColor = '#fde047';
     console.log('[CorpusBoard] Setting up text selection listener');
 
     const showSelectionButton = (selection: Selection, text: string) => {
@@ -433,6 +442,7 @@ export class CorpusBoard {
       console.log('[CorpusBoard] Saved selection text:', savedSelectionText);
       
       const range = selection.getRangeAt(0);
+      savedSelectionRange = range.cloneRange();
       const rect = range.getBoundingClientRect();
       console.log('[CorpusBoard] Selection rect:', rect);
       
@@ -480,12 +490,62 @@ export class CorpusBoard {
         selectionButton = document.createElement('div');
         selectionButton.className = 'dbx-corpus-selection-btn';
         selectionButton.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          添加到语料板
-        `;
+  <span class="dbx-corpus-add-action">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="12" y1="5" x2="12" y2="19"></line>
+      <line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+    <span>添加到语料板</span>
+  </span>
+
+  <span class="dbx-highlight-divider"></span>
+
+  <button type="button" class="dbx-highlight-action" title="高亮标记">
+    <svg class="dbx-highlight-icon" width="12" height="14"
+  viewBox="0 0 122 147" aria-hidden="true">
+  <rect
+    x="22.3711"
+    y="60.2461"
+    width="85.2099"
+    height="55.2471"
+    transform="rotate(-44.9923 22.3711 60.2461)"
+    class="dbx-highlight-icon-body"
+  />
+  <path
+    d="M56.7333 103.832L17.6786 64.5547V90.6656L1.00195 110.413H27.1126L32.8175 103.832H56.7333Z"
+    class="dbx-highlight-icon-tip"
+  />
+  <rect
+    y="124.074"
+    width="119.172"
+    height="22.9062"
+    class="dbx-highlight-icon-color"
+  />
+</svg>
+  </button>
+
+  <button type="button" class="dbx-highlight-menu-toggle" title="选择高亮颜色">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  </button>
+
+  <div class="dbx-highlight-palette" hidden>
+  <button type="button" class="dbx-highlight-swatch dbx-highlight-remove" title="取消高亮">
+    <svg viewBox="0 0 219 219" aria-hidden="true">
+      <circle cx="109.481" cy="109.481" r="104.981" stroke="black" stroke-width="9" fill="none"/>
+      <rect x="5.96094" y="185.586" width="254.852" height="23.1796" rx="11.5898"
+        transform="rotate(-41.4035 5.96094 185.586)" fill="#F2696A"/>
+    </svg>
+  </button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#FDEB00" style="--dbx-swatch-color: #FDEB00" title="黄色"></button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#00E52B" style="--dbx-swatch-color: #00E52B" title="绿色"></button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#09DCE5" style="--dbx-swatch-color: #09DCE5" title="青色"></button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#F000C8" style="--dbx-swatch-color: #F000C8" title="粉色"></button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#FF1616" style="--dbx-swatch-color: #FF1616" title="红色"></button>
+  <button type="button" class="dbx-highlight-swatch" data-color="#747A89" style="--dbx-swatch-color: #747A89" title="灰色"></button>
+</div>
+`;
         selectionButton.style.cssText = `
           position: fixed;
           z-index: 10000;
@@ -504,16 +564,162 @@ export class CorpusBoard {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         `;
         
-        selectionButton.addEventListener('click', (e) => {
-          e.stopPropagation();
-          console.log('[CorpusBoard] Button clicked, saved text:', savedSelectionText);
-          if (savedSelectionText) {
-            this.addToCorpus(savedSelectionText);
-            this.flashTriggerButton();
-          }
-          selectionButton!.style.display = 'none';
-          savedSelectionText = '';
-        });
+        const corpusAction = selectionButton.querySelector('.dbx-corpus-add-action');
+corpusAction?.addEventListener('click', (e) => {
+  e.stopPropagation();
+
+  if (savedSelectionText) {
+    this.addToCorpus(savedSelectionText);
+    this.flashTriggerButton();
+  }
+
+  selectionButton!.style.display = 'none';
+  savedSelectionText = '';
+  savedSelectionRange = null;
+});
+
+const highlightAction = selectionButton.querySelector(
+  '.dbx-highlight-action'
+) as HTMLElement | null;
+
+const applyHighlight = async (color: string) => {
+  if (!savedSelectionRange || savedSelectionRange.collapsed) return;
+
+  const range = savedSelectionRange.cloneRange();
+  const root = this.findHighlightMessageRoot(range.startContainer);
+  const highlightData = this.createTextHighlightAnchor(range, color);
+  if (!root || !highlightData || !root.contains(range.endContainer)) {
+    console.warn('[CorpusBoard] Could not locate the selected message');
+    return;
+  }
+
+  try {
+    await this.removeSelectedHighlightPortions(range.cloneRange());
+
+    const cleanRange = this.createRangeFromTextOffsets(
+      root,
+      highlightData.startOffset,
+      highlightData.endOffset
+    );
+    if (!cleanRange || cleanRange.toString() !== highlightData.text) {
+      console.warn('[CorpusBoard] Could not rebuild the selected range');
+      return;
+    }
+
+    const mark = this.wrapRangeWithHighlight(cleanRange, color);
+    if (!mark) return;
+
+    const item = await storageService.addTextHighlight(highlightData);
+    mark.dataset.dbxHighlightId = item.id;
+    mark.dataset.dbxConversationId = item.conversationId;
+    await storageService.save();
+
+    window.getSelection()?.removeAllRanges();
+    selectionButton!.style.display = 'none';
+    savedSelectionText = '';
+    savedSelectionRange = null;
+  } catch (error) {
+    console.error('[CorpusBoard] Failed to highlight text:', error);
+  }
+};
+
+highlightAction?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  void applyHighlight(selectedHighlightColor);
+});
+const menuToggle = selectionButton.querySelector(
+  '.dbx-highlight-menu-toggle'
+) as HTMLButtonElement | null;
+
+const palette = selectionButton.querySelector(
+  '.dbx-highlight-palette'
+) as HTMLElement | null;
+
+const positionHighlightPalette = () => {
+  if (!palette || palette.hidden || !selectionButton) return;
+
+  const viewportMargin = 8;
+  const horizontalOverlap = 64;
+  const verticalOverlap = 5;
+  const buttonRect = selectionButton.getBoundingClientRect();
+  const paletteRect = palette.getBoundingClientRect();
+
+  let left = buttonRect.right - horizontalOverlap;
+  let top = buttonRect.bottom - verticalOverlap;
+
+  if (left + paletteRect.width > window.innerWidth - viewportMargin) {
+    left = buttonRect.left - paletteRect.width + horizontalOverlap;
+  }
+
+  if (top + paletteRect.height > window.innerHeight - viewportMargin) {
+    top = buttonRect.top - paletteRect.height + verticalOverlap;
+  }
+
+  const maxLeft = Math.max(
+    viewportMargin,
+    window.innerWidth - paletteRect.width - viewportMargin
+  );
+  const maxTop = Math.max(
+    viewportMargin,
+    window.innerHeight - paletteRect.height - viewportMargin
+  );
+
+  palette.style.left = `${Math.min(Math.max(viewportMargin, left), maxLeft)}px`;
+  palette.style.top = `${Math.min(Math.max(viewportMargin, top), maxTop)}px`;
+};
+
+this.highlightPaletteResizeHandler = positionHighlightPalette;
+window.addEventListener('resize', positionHighlightPalette);
+
+menuToggle?.addEventListener('click', (e) => {
+  e.stopPropagation();
+
+  if (!palette) return;
+
+  palette.hidden = !palette.hidden;
+  menuToggle.classList.toggle('is-open', !palette.hidden);
+
+  if (!palette.hidden) {
+    window.requestAnimationFrame(positionHighlightPalette);
+  }
+});
+palette
+  ?.querySelectorAll<HTMLButtonElement>(
+    '.dbx-highlight-swatch[data-color]'
+  )
+  .forEach((swatch) => {
+    swatch.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const color = swatch.dataset.color;
+      if (!color) return;
+
+      selectedHighlightColor = color;
+
+      highlightAction?.style.setProperty(
+        '--dbx-highlight-color',
+        selectedHighlightColor
+      );
+
+      void applyHighlight(selectedHighlightColor);
+    });
+  });
+
+  const removeHighlightButton = selectionButton.querySelector(
+  '.dbx-highlight-remove'
+) as HTMLButtonElement | null;
+
+removeHighlightButton?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+
+  if (!savedSelectionRange) return;
+  await this.removeSelectedHighlightPortions(savedSelectionRange.cloneRange());
+
+  window.getSelection()?.removeAllRanges();
+  selectionButton!.style.display = 'none';
+  savedSelectionText = '';
+  savedSelectionRange = null;
+});
 
         document.body.appendChild(selectionButton);
       }
@@ -521,6 +727,17 @@ export class CorpusBoard {
       const buttonRect = selectionButton.getBoundingClientRect();
       const left = rect.left + rect.width / 2 - buttonRect.width / 2;
       const top = rect.bottom + 8;
+      const palette = selectionButton.querySelector(
+        '.dbx-highlight-palette'
+      ) as HTMLElement | null;
+      const menuToggle = selectionButton.querySelector(
+        '.dbx-highlight-menu-toggle'
+      );
+
+      if (palette) {
+        palette.hidden = true;
+      }
+      menuToggle?.classList.remove('is-open');
 
       selectionButton.style.left = `${Math.max(8, left)}px`;
       selectionButton.style.top = `${Math.min(top, window.innerHeight - 40)}px`;
@@ -644,6 +861,450 @@ export class CorpusBoard {
         selectionButton.style.display = 'none';
       }
     });
+  }
+
+  private setupHighlightPersistence(): void {
+    this.lastHighlightUrl = window.location.href;
+    this.scheduleHighlightRestore(300);
+
+    this.highlightObserver = new MutationObserver((mutations) => {
+      if (window.location.href !== this.lastHighlightUrl) {
+        void this.handleHighlightConversationChange();
+        return;
+      }
+
+      const hasPageChanges = mutations.some(
+        mutation => mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0
+      );
+
+      if (hasPageChanges) {
+        this.scheduleHighlightRestore(350);
+      }
+    });
+
+    this.highlightObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    this.highlightUrlTimer = window.setInterval(() => {
+      if (window.location.href !== this.lastHighlightUrl) {
+        void this.handleHighlightConversationChange();
+      }
+    }, 1000);
+  }
+
+  private async handleHighlightConversationChange(): Promise<void> {
+    this.lastHighlightUrl = window.location.href;
+    this.clearRenderedHighlights();
+    await this.loadCorpusItems();
+    this.updateTriggerCount();
+    this.scheduleHighlightRestore(500);
+  }
+
+  private scheduleHighlightRestore(delay: number): void {
+    if (this.highlightRestoreTimer) {
+      clearTimeout(this.highlightRestoreTimer);
+    }
+
+    this.highlightRestoreTimer = window.setTimeout(() => {
+      this.highlightRestoreTimer = null;
+      void this.restoreTextHighlights();
+    }, delay);
+  }
+
+  private async restoreTextHighlights(): Promise<void> {
+    if (this.isRestoringHighlights) return;
+
+    const conversationId = this.getConversationId();
+    if (conversationId === 'unknown') return;
+
+    this.isRestoringHighlights = true;
+
+    try {
+      const highlights = await storageService.getTextHighlights(conversationId);
+
+      for (const highlight of highlights) {
+        const alreadyRendered = Array.from(
+          document.querySelectorAll<HTMLElement>('.dbx-text-highlight')
+        ).some(mark => mark.dataset.dbxHighlightId === highlight.id);
+
+        if (alreadyRendered) continue;
+
+        const root = this.findRootForSavedHighlight(highlight);
+        if (!root) continue;
+
+        const startOffset = this.findSavedHighlightOffset(root, highlight);
+        if (startOffset === null) continue;
+
+        const range = this.createRangeFromTextOffsets(
+          root,
+          startOffset,
+          startOffset + highlight.text.length
+        );
+        if (!range || range.toString() !== highlight.text) continue;
+
+        const mark = this.wrapRangeWithHighlight(range, highlight.color);
+        if (!mark) continue;
+
+        mark.dataset.dbxHighlightId = highlight.id;
+        mark.dataset.dbxConversationId = highlight.conversationId;
+      }
+    } catch (error) {
+      console.error('[CorpusBoard] Failed to restore text highlights:', error);
+    } finally {
+      this.isRestoringHighlights = false;
+    }
+  }
+
+  private createTextHighlightAnchor(
+    range: Range,
+    color: string
+  ): Omit<TextHighlight, 'id' | 'createdAt'> | null {
+    const root = this.findHighlightMessageRoot(range.startContainer);
+    if (!root || !root.contains(range.endContainer)) return null;
+
+    const text = range.toString();
+    if (!text) return null;
+
+    try {
+      const beforeRange = range.cloneRange();
+      beforeRange.selectNodeContents(root);
+      beforeRange.setEnd(range.startContainer, range.startOffset);
+
+      const startOffset = beforeRange.toString().length;
+      const endOffset = startOffset + text.length;
+      const rootText = root.textContent ?? '';
+      const roots = this.getHighlightMessageRoots();
+      const messageIndex = Math.max(0, roots.indexOf(root));
+
+      return {
+        conversationId: this.getConversationId(),
+        messageId: this.getHighlightMessageId(root),
+        messageIndex,
+        text,
+        startOffset,
+        endOffset,
+        prefix: rootText.slice(Math.max(0, startOffset - 48), startOffset),
+        suffix: rootText.slice(endOffset, endOffset + 48),
+        color,
+      };
+    } catch (error) {
+      console.error('[CorpusBoard] Failed to capture highlight position:', error);
+      return null;
+    }
+  }
+
+  private findHighlightMessageRoot(node: Node): HTMLElement | null {
+    const element = node.nodeType === Node.ELEMENT_NODE
+      ? node as Element
+      : node.parentElement;
+    if (!element) return null;
+
+    const contentRoot = element.closest<HTMLElement>(
+      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
+    );
+    if (contentRoot) return contentRoot;
+
+    const messageContainer = element.closest<HTMLElement>(
+      '[data-message-id], [data-testid="union_message"], [data-testid="message-block-container"], [class*="message-block"]'
+    );
+    if (!messageContainer) return null;
+
+    return messageContainer.querySelector<HTMLElement>(
+      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
+    ) ?? messageContainer;
+  }
+
+  private getHighlightMessageRoots(): HTMLElement[] {
+    const roots: HTMLElement[] = [];
+    const addRoot = (root: HTMLElement): void => {
+      if (root.closest('.dbx-corpus-selection-btn, .dbx-corpus-panel')) return;
+      if (!roots.includes(root)) {
+        roots.push(root);
+      }
+    };
+
+    document.querySelectorAll<HTMLElement>(
+      '[data-message-id], [data-testid="union_message"], [data-testid="message-block-container"]'
+    ).forEach((container) => {
+      const root = container.querySelector<HTMLElement>(
+        '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
+      ) ?? container;
+      addRoot(root);
+    });
+
+    document.querySelectorAll<HTMLElement>(
+      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
+    ).forEach(addRoot);
+
+    return roots;
+  }
+
+  private getHighlightMessageId(root: HTMLElement): string | undefined {
+    const messageContainer = root.closest<HTMLElement>(
+      '[data-testid="union_message"], [data-testid="message-block-container"], [class*="message-block"]'
+    );
+    const messageElement = root.closest<HTMLElement>('[data-message-id]') ??
+      root.querySelector<HTMLElement>('[data-message-id]') ??
+      messageContainer?.querySelector<HTMLElement>('[data-message-id]');
+    return messageElement?.getAttribute('data-message-id') ?? undefined;
+  }
+
+  private findRootForSavedHighlight(highlight: TextHighlight): HTMLElement | null {
+    const roots = this.getHighlightMessageRoots();
+
+    if (highlight.messageId) {
+      const matchedById = roots.find(
+        root => this.getHighlightMessageId(root) === highlight.messageId
+      );
+      if (matchedById) return matchedById;
+    }
+
+    const indexedRoot = roots[highlight.messageIndex];
+    if (indexedRoot && this.findSavedHighlightOffset(indexedRoot, highlight) !== null) {
+      return indexedRoot;
+    }
+
+    return roots.find(
+      root => this.findSavedHighlightOffset(root, highlight) !== null
+    ) ?? null;
+  }
+
+  private findSavedHighlightOffset(
+    root: HTMLElement,
+    highlight: TextHighlight
+  ): number | null {
+    const rootText = root.textContent ?? '';
+    if (!highlight.text || !rootText.includes(highlight.text)) return null;
+
+    if (
+      rootText.slice(highlight.startOffset, highlight.endOffset) === highlight.text
+    ) {
+      return highlight.startOffset;
+    }
+
+    const fullContext = `${highlight.prefix}${highlight.text}${highlight.suffix}`;
+    const contextIndex = fullContext ? rootText.indexOf(fullContext) : -1;
+    if (contextIndex >= 0) {
+      return contextIndex + highlight.prefix.length;
+    }
+
+    let bestOffset: number | null = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    let searchFrom = 0;
+
+    while (searchFrom <= rootText.length) {
+      const offset = rootText.indexOf(highlight.text, searchFrom);
+      if (offset < 0) break;
+
+      const prefixMatches = !highlight.prefix ||
+        rootText.slice(Math.max(0, offset - highlight.prefix.length), offset)
+          .endsWith(highlight.prefix);
+      const suffixMatches = !highlight.suffix ||
+        rootText.slice(
+          offset + highlight.text.length,
+          offset + highlight.text.length + highlight.suffix.length
+        ).startsWith(highlight.suffix);
+      const distance = Math.abs(offset - highlight.startOffset);
+      const score = (prefixMatches ? 1000 : 0) +
+        (suffixMatches ? 1000 : 0) -
+        distance;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestOffset = offset;
+      }
+
+      searchFrom = offset + Math.max(1, highlight.text.length);
+    }
+
+    return bestOffset;
+  }
+
+  private createRangeFromTextOffsets(
+    root: HTMLElement,
+    startOffset: number,
+    endOffset: number
+  ): Range | null {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let currentOffset = 0;
+    let startNode: Text | null = null;
+    let endNode: Text | null = null;
+    let startInNode = 0;
+    let endInNode = 0;
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const nextOffset = currentOffset + node.data.length;
+
+      if (!startNode && startOffset >= currentOffset && startOffset <= nextOffset) {
+        startNode = node;
+        startInNode = startOffset - currentOffset;
+      }
+
+      if (!endNode && endOffset >= currentOffset && endOffset <= nextOffset) {
+        endNode = node;
+        endInNode = endOffset - currentOffset;
+      }
+
+      currentOffset = nextOffset;
+      if (startNode && endNode) break;
+    }
+
+    if (!startNode || !endNode) return null;
+
+    const range = document.createRange();
+    range.setStart(startNode, startInNode);
+    range.setEnd(endNode, endInNode);
+    return range;
+  }
+
+  private wrapRangeWithHighlight(
+    range: Range,
+    color: string
+  ): HTMLElement | null {
+    try {
+      const mark = document.createElement('mark');
+      mark.className = 'dbx-text-highlight';
+      mark.style.backgroundColor = color;
+
+      const contents = range.extractContents();
+      mark.appendChild(contents);
+      range.insertNode(mark);
+      return mark;
+    } catch (error) {
+      console.error('[CorpusBoard] Failed to wrap highlighted text:', error);
+      return null;
+    }
+  }
+
+  private unwrapHighlight(mark: HTMLElement): void {
+    const parent = mark.parentNode;
+    if (!parent) return;
+
+    while (mark.firstChild) {
+      parent.insertBefore(mark.firstChild, mark);
+    }
+
+    mark.remove();
+    parent.normalize();
+  }
+
+  private async removeSelectedHighlightPortions(
+    selectionRange: Range
+  ): Promise<void> {
+    const selectionAnchor = this.createTextHighlightAnchor(selectionRange, '');
+    const root = this.findHighlightMessageRoot(selectionRange.startContainer);
+    if (!selectionAnchor || !root || !root.contains(selectionRange.endContainer)) {
+      return;
+    }
+
+    const selectedMarks = Array.from(
+      root.querySelectorAll<HTMLElement>('.dbx-text-highlight')
+    ).filter((mark) => {
+      try {
+        return selectionRange.intersectsNode(mark);
+      } catch {
+        return false;
+      }
+    });
+
+    if (selectedMarks.length === 0) return;
+
+    try {
+      const savedHighlights = await storageService.getTextHighlights(
+        selectionAnchor.conversationId
+      );
+      const highlightsById = new Map(
+        savedHighlights.map(highlight => [highlight.id, highlight])
+      );
+      const remainingSegments: Array<{
+        startOffset: number;
+        endOffset: number;
+        color: string;
+      }> = [];
+      const removedIds: string[] = [];
+
+      selectedMarks.forEach((mark) => {
+        const id = mark.dataset.dbxHighlightId;
+        const highlight = id ? highlightsById.get(id) : undefined;
+
+        if (!id || !highlight) {
+          this.unwrapHighlight(mark);
+          return;
+        }
+
+        const overlapStart = Math.max(
+          highlight.startOffset,
+          selectionAnchor.startOffset
+        );
+        const overlapEnd = Math.min(
+          highlight.endOffset,
+          selectionAnchor.endOffset
+        );
+
+        if (overlapStart >= overlapEnd) return;
+
+        if (highlight.startOffset < overlapStart) {
+          remainingSegments.push({
+            startOffset: highlight.startOffset,
+            endOffset: overlapStart,
+            color: highlight.color,
+          });
+        }
+
+        if (overlapEnd < highlight.endOffset) {
+          remainingSegments.push({
+            startOffset: overlapEnd,
+            endOffset: highlight.endOffset,
+            color: highlight.color,
+          });
+        }
+
+        removedIds.push(id);
+        this.unwrapHighlight(mark);
+      });
+
+      await Promise.all(
+        removedIds.map(id => storageService.removeTextHighlight(id))
+      );
+
+      remainingSegments.sort(
+        (a, b) => a.startOffset - b.startOffset
+      );
+
+      for (const segment of remainingSegments) {
+        if (segment.endOffset <= segment.startOffset) continue;
+
+        const range = this.createRangeFromTextOffsets(
+          root,
+          segment.startOffset,
+          segment.endOffset
+        );
+        if (!range || !range.toString()) continue;
+
+        const anchor = this.createTextHighlightAnchor(range, segment.color);
+        if (!anchor) continue;
+
+        const mark = this.wrapRangeWithHighlight(range, segment.color);
+        if (!mark) continue;
+
+        const item = await storageService.addTextHighlight(anchor);
+        mark.dataset.dbxHighlightId = item.id;
+        mark.dataset.dbxConversationId = item.conversationId;
+      }
+
+      await storageService.save();
+    } catch (error) {
+      console.error('[CorpusBoard] Failed to partially remove highlight:', error);
+    }
+  }
+
+  private clearRenderedHighlights(): void {
+    document
+      .querySelectorAll<HTMLElement>('.dbx-text-highlight')
+      .forEach(mark => this.unwrapHighlight(mark));
   }
 
   private flashTriggerButton(): void {
@@ -776,6 +1437,22 @@ export class CorpusBoard {
   }
 
   destroy(): void {
+    if (this.highlightPaletteResizeHandler) {
+      window.removeEventListener('resize', this.highlightPaletteResizeHandler);
+      this.highlightPaletteResizeHandler = null;
+    }
+    if (this.highlightObserver) {
+      this.highlightObserver.disconnect();
+      this.highlightObserver = null;
+    }
+    if (this.highlightRestoreTimer) {
+      clearTimeout(this.highlightRestoreTimer);
+      this.highlightRestoreTimer = null;
+    }
+    if (this.highlightUrlTimer) {
+      clearInterval(this.highlightUrlTimer);
+      this.highlightUrlTimer = null;
+    }
     if (this.triggerBtn) {
       this.triggerBtn.remove();
       this.triggerBtn = null;
