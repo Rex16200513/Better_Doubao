@@ -606,12 +606,14 @@ const applyHighlight = async (color: string) => {
       return;
     }
 
-    const mark = this.wrapRangeWithHighlight(cleanRange, color);
-    if (!mark) return;
+    const marks = this.wrapRangeWithHighlight(cleanRange, color);
+    if (marks.length === 0) return;
 
     const item = await storageService.addTextHighlight(highlightData);
-    mark.dataset.dbxHighlightId = item.id;
-    mark.dataset.dbxConversationId = item.conversationId;
+    marks.forEach((mark) => {
+      mark.dataset.dbxHighlightId = item.id;
+      mark.dataset.dbxConversationId = item.conversationId;
+    });
     await storageService.save();
 
     window.getSelection()?.removeAllRanges();
@@ -944,11 +946,13 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         );
         if (!range || range.toString() !== highlight.text) continue;
 
-        const mark = this.wrapRangeWithHighlight(range, highlight.color);
-        if (!mark) continue;
+        const marks = this.wrapRangeWithHighlight(range, highlight.color);
+        if (marks.length === 0) continue;
 
-        mark.dataset.dbxHighlightId = highlight.id;
-        mark.dataset.dbxConversationId = highlight.conversationId;
+        marks.forEach((mark) => {
+          mark.dataset.dbxHighlightId = highlight.id;
+          mark.dataset.dbxConversationId = highlight.conversationId;
+        });
       }
     } catch (error) {
       console.error('[CorpusBoard] Failed to restore text highlights:', error);
@@ -1160,22 +1164,67 @@ removeHighlightButton?.addEventListener('click', async (e) => {
     return range;
   }
 
+  private getTextPartsInRange(
+    range: Range
+  ): Array<{ node: Text; startOffset: number; endOffset: number }> {
+    const root =
+      range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+        ? range.commonAncestorContainer.parentElement
+        : range.commonAncestorContainer;
+
+    if (!root) return [];
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const parts: Array<{ node: Text; startOffset: number; endOffset: number }> = [];
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+
+      try {
+        if (!range.intersectsNode(node)) continue;
+      } catch {
+        continue;
+      }
+
+      const startOffset = node === range.startContainer ? range.startOffset : 0;
+      const endOffset = node === range.endContainer ? range.endOffset : node.data.length;
+
+      if (endOffset <= startOffset) continue;
+      if (!node.data.slice(startOffset, endOffset).trim()) continue;
+
+      parts.push({ node, startOffset, endOffset });
+    }
+
+    return parts;
+  }
+
   private wrapRangeWithHighlight(
     range: Range,
     color: string
-  ): HTMLElement | null {
+  ): HTMLElement[] {
     try {
-      const mark = document.createElement('mark');
-      mark.className = 'dbx-text-highlight';
-      mark.style.backgroundColor = color;
+      const parts = this.getTextPartsInRange(range);
+      const marks: HTMLElement[] = [];
 
-      const contents = range.extractContents();
-      mark.appendChild(contents);
-      range.insertNode(mark);
-      return mark;
+      [...parts].reverse().forEach(({ node, startOffset, endOffset }) => {
+        const mark = document.createElement('mark');
+        mark.className = 'dbx-text-highlight';
+        mark.style.backgroundColor = color;
+
+        const textRange = document.createRange();
+        textRange.setStart(node, startOffset);
+        textRange.setEnd(node, endOffset);
+
+        const contents = textRange.extractContents();
+        mark.appendChild(contents);
+        textRange.insertNode(mark);
+        marks.unshift(mark);
+      });
+
+      return marks;
     } catch (error) {
       console.error('[CorpusBoard] Failed to wrap highlighted text:', error);
-      return null;
+      return [];
     }
   }
 
@@ -1200,9 +1249,10 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       return;
     }
 
-    const selectedMarks = Array.from(
+    const allMarks = Array.from(
       root.querySelectorAll<HTMLElement>('.dbx-text-highlight')
-    ).filter((mark) => {
+    );
+    const directlySelectedMarks = allMarks.filter((mark) => {
       try {
         return selectionRange.intersectsNode(mark);
       } catch {
@@ -1210,7 +1260,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       }
     });
 
-    if (selectedMarks.length === 0) return;
+    if (directlySelectedMarks.length === 0) return;
 
     try {
       const savedHighlights = await storageService.getTextHighlights(
@@ -1224,16 +1274,19 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         endOffset: number;
         color: string;
       }> = [];
-      const removedIds: string[] = [];
+      const removedIds = new Set<string>();
+      const marksToUnwrap = new Set<HTMLElement>();
 
-      selectedMarks.forEach((mark) => {
+      directlySelectedMarks.forEach((mark) => {
         const id = mark.dataset.dbxHighlightId;
         const highlight = id ? highlightsById.get(id) : undefined;
 
         if (!id || !highlight) {
-          this.unwrapHighlight(mark);
+          marksToUnwrap.add(mark);
           return;
         }
+
+        if (removedIds.has(id)) return;
 
         const overlapStart = Math.max(
           highlight.startOffset,
@@ -1262,12 +1315,20 @@ removeHighlightButton?.addEventListener('click', async (e) => {
           });
         }
 
-        removedIds.push(id);
-        this.unwrapHighlight(mark);
+        removedIds.add(id);
       });
 
+      allMarks.forEach((mark) => {
+        const id = mark.dataset.dbxHighlightId;
+        if (id && removedIds.has(id)) {
+          marksToUnwrap.add(mark);
+        }
+      });
+
+      marksToUnwrap.forEach(mark => this.unwrapHighlight(mark));
+
       await Promise.all(
-        removedIds.map(id => storageService.removeTextHighlight(id))
+        Array.from(removedIds).map(id => storageService.removeTextHighlight(id))
       );
 
       remainingSegments.sort(
@@ -1287,12 +1348,14 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         const anchor = this.createTextHighlightAnchor(range, segment.color);
         if (!anchor) continue;
 
-        const mark = this.wrapRangeWithHighlight(range, segment.color);
-        if (!mark) continue;
+        const marks = this.wrapRangeWithHighlight(range, segment.color);
+        if (marks.length === 0) continue;
 
         const item = await storageService.addTextHighlight(anchor);
-        mark.dataset.dbxHighlightId = item.id;
-        mark.dataset.dbxConversationId = item.conversationId;
+        marks.forEach((mark) => {
+          mark.dataset.dbxHighlightId = item.id;
+          mark.dataset.dbxConversationId = item.conversationId;
+        });
       }
 
       await storageService.save();
