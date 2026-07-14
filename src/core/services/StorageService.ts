@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { FolderData, Folder, CorpusItem, TextHighlight } from '../types/folder';
+import type { FolderData, Folder, CorpusItem, TextHighlight, ConversationReference } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
@@ -77,7 +77,7 @@ function restoreFromBackup(accountId: string): FolderData | null {
 }
 
 export class StorageService {
-  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [] };
+  private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [], sectionCollapsed: false };
   private saveTimer: number | null = null;
   private currentAccountId: string = '';
 
@@ -156,6 +156,15 @@ export class StorageService {
     return this.data;
   }
 
+  async getSectionCollapsed(): Promise<boolean> {
+    return this.data.sectionCollapsed ?? false;
+  }
+
+  setSectionCollapsed(collapsed: boolean): void {
+    this.data.sectionCollapsed = collapsed;
+    this.debouncedSave();
+  }
+
   async saveFolders(folders: Folder[]): Promise<void> {
     this.data.folders = folders;
     this.debouncedSave();
@@ -203,6 +212,39 @@ export class StorageService {
       );
       this.debouncedSave();
     }
+  }
+
+  async moveConversationBetweenFolders(
+    fromFolderId: string,
+    toFolderId: string,
+    conversation: ConversationReference
+  ): Promise<void> {
+    if (fromFolderId === toFolderId) return;
+
+    const sourceContents = this.data.folderContents[fromFolderId];
+    if (!sourceContents) return;
+
+    const existingIndex = sourceContents.findIndex(c => c.conversationId === conversation.conversationId);
+    if (existingIndex === -1) return;
+
+    const existingConversation = sourceContents[existingIndex];
+    sourceContents.splice(existingIndex, 1);
+
+    if (!this.data.folderContents[toFolderId]) {
+      this.data.folderContents[toFolderId] = [];
+    }
+    const alreadyExists = this.data.folderContents[toFolderId].some(
+      c => c.conversationId === conversation.conversationId
+    );
+    if (!alreadyExists) {
+      this.data.folderContents[toFolderId].push({
+        ...existingConversation,
+        ...conversation,
+        addedAt: existingConversation.addedAt,
+      });
+    }
+
+    this.debouncedSave();
   }
 
   async getConversationFolders(conversationId: string): Promise<string[]> {

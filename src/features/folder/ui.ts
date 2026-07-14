@@ -38,7 +38,7 @@ export function createFolderItemHTML(folder: Folder, contents: ConversationRefer
 
 export function createConversationItemHTML(conversation: ConversationReference): string {
   return `
-    <div class="dbx-folder-conversation" data-conversation-id="${conversation.conversationId}">
+    <div class="dbx-folder-conversation" draggable="true" data-conversation-id="${conversation.conversationId}">
       <div class="dbx-conversation-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -68,11 +68,18 @@ export function createFolderSectionHTML(): string {
           </svg>
           <span class="dbx-folder-title">文件夹</span>
         </div>
-        <button class="dbx-folder-add-btn" title="新建文件夹">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"></path>
-          </svg>
-        </button>
+        <div class="dbx-folder-header-actions">
+          <button class="dbx-folder-toggle-btn" title="收起/展开">
+            <svg class="dbx-folder-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"></path>
+            </svg>
+          </button>
+          <button class="dbx-folder-add-btn" title="新建文件夹">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="dbx-folder-list"></div>
     </div>

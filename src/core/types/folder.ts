@@ -50,6 +50,7 @@ export interface FolderData {
   starredMessages: Record<string, number[]>;
   corpusBoard: CorpusItem[];
   textHighlights?: TextHighlight[];
+  sectionCollapsed?: boolean;
 }
 
 export interface DragData {

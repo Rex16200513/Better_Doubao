@@ -5,6 +5,7 @@ interface DragData {
   type: string;
   conversationId?: string;
   title: string;
+  sourceFolderId?: string;
 }
 
 export class FolderManager {
@@ -14,6 +15,7 @@ export class FolderManager {
   private popupElement: HTMLElement | null = null;
   private dragData: DragData | null = null;
   private initialized = false;
+  private sectionCollapsed = false;
 
   constructor() {
     this.init = this.init.bind(this);
@@ -23,6 +25,7 @@ export class FolderManager {
   async init(): Promise<void> {
     await storageService.init();
     this.data = await storageService.getData();
+    this.sectionCollapsed = await storageService.getSectionCollapsed();
     console.log('[FolderManager] Loaded data, folders:', this.data.folders.length);
     this.data.folders.forEach(f => f.isExpanded = false);
     await this.waitForSidebar();
@@ -83,6 +86,29 @@ export class FolderManager {
     }
   }
 
+  private findMoreButtonContainer(): HTMLElement | null {
+    if (!this.sidebarContainer) return null;
+
+    const spans = this.sidebarContainer.querySelectorAll('span.font-medium');
+    for (const span of Array.from(spans)) {
+      if (span.textContent?.trim() === '更多') {
+        // 排除我们自己 folder section 内部的 span
+        if ((span as HTMLElement).closest('#dbx-folder-section')) continue;
+
+        // 新版 DOM 中"更多"项外层是 <div data-expand="false">
+        const itemContainer = span.closest('div[data-expand="false"]') as HTMLElement | null;
+        if (itemContainer) return itemContainer;
+
+        // 回退：nav-link 的直接父元素
+        const navLink = span.closest('.nav-link-IkIer0') as HTMLElement | null;
+        if (navLink?.parentElement) return navLink.parentElement as HTMLElement;
+
+        return navLink;
+      }
+    }
+    return null;
+  }
+
   private createFolderSection(): void {
     if (!this.sidebarContainer) return;
 
@@ -90,13 +116,10 @@ export class FolderManager {
     tempDiv.innerHTML = createFolderSectionHTML();
     const folderSection = tempDiv.firstElementChild as HTMLElement;
 
-    // 查找"更多"按钮
-    const moreButton = this.sidebarContainer.querySelector('[title="更多"]');
-    if (moreButton && moreButton.parentElement?.parentElement) {
-      const moreContainer = moreButton.parentElement.parentElement.parentElement;
-      if (moreContainer && moreContainer.parentNode) {
-        moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
-      }
+    // 查找"更多"按钮并贴在它下方
+    const moreContainer = this.findMoreButtonContainer();
+    if (moreContainer?.parentNode) {
+      moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
     } else {
       // 查找历史对话区域
       const historySection = this.sidebarContainer.querySelector('[class*="history"]');
@@ -120,9 +143,19 @@ export class FolderManager {
 
   private setupFolderEvents(): void {
     if (!this.containerElement) return;
-    
+
+    const toggleBtn = this.containerElement.querySelector('.dbx-folder-toggle-btn');
+    if (toggleBtn && !toggleBtn.hasAttribute('data-dv-event-bound')) {
+      toggleBtn.setAttribute('data-dv-event-bound', 'true');
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleSectionCollapsed();
+      });
+    }
+
     const addBtn = this.containerElement.querySelector('.dbx-folder-add-btn');
-    if (addBtn) {
+    if (addBtn && !addBtn.hasAttribute('data-dv-event-bound')) {
+      addBtn.setAttribute('data-dv-event-bound', 'true');
       addBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.showCreateFolderDialog(addBtn as HTMLElement);
@@ -302,6 +335,7 @@ export class FolderManager {
 
     this.setupFolderElementEvents();
     this.setupFolderDropZones();
+    this.updateSectionCollapseUI();
   }
 
   private setupFolderElementEvents(): void {
@@ -350,7 +384,42 @@ export class FolderManager {
             this.showRemoveConfirm(folderId, convId, convTitle, removeBtn as HTMLElement);
           }
         });
+
+        this.setupFolderContentDrag(convEl, folderId);
       });
+    });
+  }
+
+  private setupFolderContentDrag(convEl: HTMLElement, sourceFolderId: string): void {
+    if (convEl.dataset.dvContentDragBound === 'true') return;
+    convEl.dataset.dvContentDragBound = 'true';
+
+    convEl.addEventListener('dragstart', (e) => {
+      convEl.classList.add('dbx-dragging');
+      const convId = convEl.dataset.conversationId;
+      const convTitle = convEl.querySelector('.dbx-conversation-title')?.textContent?.trim() || '对话';
+
+      if (e.dataTransfer && convId) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/json', JSON.stringify({
+          type: 'conversation',
+          conversationId: convId,
+          title: convTitle,
+          sourceFolderId,
+        }));
+      }
+
+      this.dragData = {
+        type: 'conversation',
+        conversationId: convId,
+        title: convTitle,
+        sourceFolderId,
+      };
+    });
+
+    convEl.addEventListener('dragend', () => {
+      convEl.classList.remove('dbx-dragging');
+      this.dragData = null;
     });
   }
 
@@ -403,6 +472,7 @@ export class FolderManager {
   private handleDrop(folderId: string): void {
     let conversationId = '';
     let title = '对话';
+    let sourceFolderId: string | undefined;
 
     const droppedEl = document.querySelector('.dbx-dragging') as HTMLElement;
     if (droppedEl) {
@@ -410,16 +480,23 @@ export class FolderManager {
       conversationId = idMatch ? idMatch[1] : droppedEl.getAttribute('href')?.replace('/chat/', '') || '';
       const titleEl = droppedEl.querySelector('[class*="content"]') || droppedEl.querySelector('div');
       title = titleEl?.textContent?.trim() || '对话';
+      sourceFolderId = droppedEl.dataset.sourceFolderId || undefined;
     }
 
     if (this.dragData?.conversationId) {
       conversationId = this.dragData.conversationId;
       title = this.dragData.title;
+      sourceFolderId = this.dragData.sourceFolderId;
     }
 
     if (!conversationId) return;
+    if (sourceFolderId === folderId) return;
 
-    this.addConversationToFolder(folderId, conversationId, title);
+    if (sourceFolderId) {
+      this.moveConversationBetweenFolders(sourceFolderId, folderId, conversationId, title);
+    } else {
+      this.addConversationToFolder(folderId, conversationId, title);
+    }
   }
 
   private async addConversationToFolder(folderId: string, conversationId: string, title: string): Promise<void> {
@@ -436,12 +513,44 @@ export class FolderManager {
     this.refreshAllIndicators();
   }
 
+  private async moveConversationBetweenFolders(
+    sourceFolderId: string,
+    targetFolderId: string,
+    conversationId: string,
+    title: string
+  ): Promise<void> {
+    const conversation: ConversationReference = {
+      conversationId,
+      title,
+      url: `/chat/${conversationId}`,
+      addedAt: Date.now(),
+    };
+
+    await storageService.moveConversationBetweenFolders(sourceFolderId, targetFolderId, conversation);
+    this.data = await storageService.getData();
+    this.render();
+    this.refreshAllIndicators();
+  }
+
   private toggleFolder(folderId: string): void {
     const folder = this.data.folders.find(f => f.id === folderId);
     if (folder) {
       folder.isExpanded = !folder.isExpanded;
       this.render();
     }
+  }
+
+  private toggleSectionCollapsed(): void {
+    this.sectionCollapsed = !this.sectionCollapsed;
+    this.updateSectionCollapseUI();
+    storageService.setSectionCollapsed(this.sectionCollapsed);
+  }
+
+  private updateSectionCollapseUI(): void {
+    if (!this.containerElement) return;
+    this.containerElement.classList.toggle('collapsed', this.sectionCollapsed);
+    const toggleBtn = this.containerElement.querySelector('.dbx-folder-toggle-btn');
+    toggleBtn?.classList.toggle('collapsed', this.sectionCollapsed);
   }
 
   private showCreateFolderDialog(button?: HTMLElement): void {

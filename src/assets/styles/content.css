@@ -57,6 +57,43 @@
   color: var(--dbx-folder-primary);
 }
 
+.dbx-folder-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dbx-folder-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--dbx-folder-text-tertiary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dbx-folder-toggle-btn:hover {
+  background: var(--dbx-folder-bg-hover);
+  color: var(--dbx-folder-primary);
+}
+
+.dbx-folder-toggle-icon {
+  transition: transform 0.2s ease;
+}
+
+.dbx-folder-toggle-btn.collapsed .dbx-folder-toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.dbx-folder-section.collapsed .dbx-folder-list {
+  display: none;
+}
+
 .dbx-folder-list {
   display: flex;
   flex-direction: column;
