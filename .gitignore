@@ -10,6 +10,10 @@ edge/dist.zip
 *.mp4
 *.zip
 
+# 不需要入库的文件
+privacy-policy.html
+public/microfost_presentation.png
+
 # 导出的测试文件
 *.md
 !README.md

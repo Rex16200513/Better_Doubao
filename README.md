@@ -6,8 +6,6 @@ A powerful browser extension to enhance your Doubao chat experience
 
 ## 📢 现已在微软商店成功上线！
 
-![微软商店截图](public/microfost_presentation.png)
-
 **Better Doubao** 已正式在 Microsoft Edge 插件商店上线！您可以直接在商店中搜索并安装插件。
 
 👉 [立即访问 Microsoft Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN)
