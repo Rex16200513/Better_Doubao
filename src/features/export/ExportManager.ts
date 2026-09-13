@@ -216,7 +216,7 @@ export class ExportManager {
   private async getConversationMessages(): Promise<Message[]> {
     const messages: Message[] = [];
 
-    const chatContainer = document.querySelector('[data-message-id]')?.closest('main, [class*="page-main"], [class*="chat-container"]') || document.querySelector('main');
+    const chatContainer = document.querySelector('[data-message-id]')?.closest('[class*="v_list_scroller"], main, [class*="page-main"], [class*="chat-container"]') || document.querySelector('main');
     if (!chatContainer) {
       console.log('[ExportManager] Chat container not found');
       return messages;
@@ -239,7 +239,7 @@ export class ExportManager {
 
       const hasSkillContent = pluginIdentifiers.some(id => id.includes('Symbol('));
       const hasMessageBubble = wrapper.querySelector('[class*="bubble"], [class*="send-msg"], [class*="message-bubble"]');
-      const hasMarkdownBody = wrapper.querySelector('.flow-markdown-body, [class*="markdown-body"]');
+      const hasMarkdownBody = wrapper.querySelector('.flow-markdown-body, [class*="markdown-body"], .md-box-root, [class*="md-box-root"]');
       const hasImageBox = wrapper.querySelector('[class*="image-box"], [class*="image-grid"]');
 
       if (!isRegular && !isThinking && !hasSkillContent && !hasMessageBubble && !hasMarkdownBody && !hasImageBox) return;

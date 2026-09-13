@@ -118,27 +118,32 @@ export class QuickLocator {
     const userMessages: HTMLElement[] = [];
 
     const messageElements = container.querySelectorAll('[data-message-id]');
+    // 记录上一条是否为用户消息，用于合并"上传文件 + 文字"被拆成连续两条的情况
+    let prevWasUser = false;
     messageElements.forEach((el) => {
-      const parent = el.closest('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]');
-      if (!parent) return;
+      // 新前端 data-message-id 元素本身即消息根；旧前端需向上找到 inner-item 容器
+      const root = (el as HTMLElement).closest('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') as HTMLElement | null || (el as HTMLElement);
 
-      const html = parent.innerHTML?.toLowerCase() || '';
+      const html = root.innerHTML?.toLowerCase() || '';
       const hasSendClass = html.includes('send_message') ||
         html.includes('send-msg') ||
         html.includes('user-bubble') ||
         html.includes('bubble-bg');
 
-      const hasBubble = parent.querySelector('.bg-g-send-msg-bubble-bg, [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]');
+      const hasBubble = root.querySelector('.bg-g-send-msg-bubble-bg, [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"], .content-KTJ1Rj, [class*="text-g-send-msg-bubble-text"]');
 
-      if (hasSendClass || hasBubble) {
-        userMessages.push(parent as HTMLElement);
-        return;
-      }
+      const hasUserImageBlock = root.querySelector('[data-plugin-identifier*="block_type:10052"]');
+      const hasJustifyEnd = root.querySelector('[class*="justify-end"]');
 
-      const hasUserImageBlock = parent.querySelector('[data-plugin-identifier*="block_type:10052"]');
-      const hasJustifyEnd = parent.querySelector('[class*="justify-end"]');
-      if (hasUserImageBlock && hasJustifyEnd) {
-        userMessages.push(parent as HTMLElement);
+      const isUser = hasSendClass || hasBubble || (hasUserImageBlock && hasJustifyEnd);
+
+      if (isUser) {
+        // 合并连续用户消息：文件上传 + 文字被豆包拆成两条 data-message-id，
+        // 这里只保留第一条作为定位目标，避免出现两个定位标签
+        if (!prevWasUser) userMessages.push(root);
+        prevWasUser = true;
+      } else {
+        prevWasUser = false;
       }
     });
 

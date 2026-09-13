@@ -121,8 +121,8 @@ export class FolderManager {
     if (moreContainer?.parentNode) {
       moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
     } else {
-      // 查找历史对话区域
-      const historySection = this.sidebarContainer.querySelector('[class*="history"]');
+      // 查找历史对话区域（新前端使用 data-history-container，旧前端用 class*="history"）
+      const historySection = this.sidebarContainer.querySelector('[data-history-container], [class*="history"]');
       if (historySection && historySection.parentNode) {
         historySection.parentNode.insertBefore(folderSection, historySection.nextSibling);
       } else {
@@ -197,7 +197,7 @@ export class FolderManager {
   }
 
   private addConversationIndicators(): void {
-    const conversations = document.querySelectorAll('[data-empty-conversation="false"] a[href^="/chat/"]');
+    const conversations = document.querySelectorAll('a[id^="conversation_"], [data-empty-conversation="false"] a[href^="/chat/"]');
     conversations.forEach((el) => {
       const element = el as HTMLElement;
       if (element.dataset.dvProcessed) return;
@@ -240,7 +240,7 @@ export class FolderManager {
   }
 
   private refreshAllIndicators(): void {
-    const conversations = document.querySelectorAll('[data-empty-conversation="false"] a[href^="/chat/"]');
+    const conversations = document.querySelectorAll('a[id^="conversation_"], [data-empty-conversation="false"] a[href^="/chat/"]');
     conversations.forEach((el) => {
       const element = el as HTMLElement;
       const idMatch = element.id.match(/conversation_(\d+)/);

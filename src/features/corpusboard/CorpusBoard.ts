@@ -37,21 +37,17 @@ export class CorpusBoard {
   }
   
   private recalculatePosition(): void {
-    console.log('[CorpusBoard] Recalculating position after delay...');
-    const newPos = this.getDefaultPosition();
-    console.log('[CorpusBoard] New default position:', newPos);
-    
-    console.log('[CorpusBoard] Current position:', { x: this.positionX, y: this.positionY });
-    console.log('[CorpusBoard] Should update (newPos.x > 1000):', newPos.x > 1000);
-    
-    if (newPos.x > 1000) {
-      this.positionX = newPos.x;
-      this.positionY = newPos.y;
-      this.applyTriggerPosition();
-      console.log('[CorpusBoard] Position updated to:', newPos);
-    } else {
-      console.log('[CorpusBoard] Position NOT updated, using current');
+    // 页面初次加载时输入框可能尚未渲染，2 秒后用真实输入框位置校正。
+    // 但若用户已拖动自定义过位置（localStorage 有记录），则尊重用户偏好不覆盖。
+    if (localStorage.getItem('dbx_corpus_trigger_pos')) {
+      console.log('[CorpusBoard] User has custom position, skip recalculation');
+      return;
     }
+    const newPos = this.getDefaultPosition();
+    this.positionX = newPos.x;
+    this.positionY = newPos.y;
+    this.applyTriggerPosition();
+    console.log('[CorpusBoard] Position recalculated to:', newPos);
   }
 
   private async loadCorpusItems(): Promise<void> {
@@ -134,51 +130,39 @@ export class CorpusBoard {
   }
 
   private getDefaultPosition(): { x: number; y: number } {
-    console.log('[CorpusBoard] Calculating default position...');
-    
+    // 触发按钮 44x44，留 12px 边距，并把坐标钳制在视口内，避免跑到屏幕外不可见
+    const btn = 44, margin = 12;
+    const clamp = (x: number, y: number): { x: number; y: number } => ({
+      x: Math.max(margin, Math.min(x, window.innerWidth - btn - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - btn - margin))
+    });
+
     const inputArea = this.findInputArea();
-    console.log('[CorpusBoard] inputArea found:', !!inputArea);
     if (inputArea) {
       const rect = inputArea.getBoundingClientRect();
-      console.log('[CorpusBoard] inputArea rect:', rect);
-      return {
-        x: rect.right + 16,
-        y: rect.top
-      };
+      return clamp(rect.right + margin, rect.top);
     }
-    
+
     const locatorBar = document.querySelector('#dbx-quick-locator');
-    console.log('[CorpusBoard] locatorBar found:', !!locatorBar);
     if (locatorBar) {
       const rect = locatorBar.getBoundingClientRect();
-      console.log('[CorpusBoard] locatorBar rect:', rect);
-      return {
-        x: rect.right + 16,
-        y: rect.top
-      };
+      return clamp(rect.right + margin, rect.top);
     }
-    
-    const defaultPos = { x: window.innerWidth - 70, y: window.innerHeight - 200 };
-    console.log('[CorpusBoard] Using fallback position:', defaultPos);
-    return defaultPos;
+
+    return clamp(window.innerWidth - btn - margin, window.innerHeight - 200);
   }
 
   private loadPosition(): { x: number; y: number } {
     const defaultPos = this.getDefaultPosition();
     console.log('[CorpusBoard] Default position calculated:', defaultPos);
-    
+
     try {
       const saved = localStorage.getItem('dbx_corpus_trigger_pos');
       console.log('[CorpusBoard] Loaded position from localStorage:', saved);
       if (saved) {
         const pos = JSON.parse(saved);
-        const defaultPosIsNearQuickLocator = defaultPos.x > 1000;
-        
-        if (pos.x >= 0 && pos.x < window.innerWidth && pos.y >= 0 && pos.y < window.innerHeight) {
-          if (defaultPosIsNearQuickLocator) {
-            console.log('[CorpusBoard] Default is near QuickLocator, using default position');
-            return defaultPos;
-          }
+        // 用户自定义过的位置，需保证按钮（44x44）完整落在视口内才保留
+        if (pos.x >= 0 && pos.x + 44 <= window.innerWidth && pos.y >= 0 && pos.y + 44 <= window.innerHeight) {
           console.log('[CorpusBoard] Using saved position:', pos);
           return pos;
         } else {
@@ -1439,20 +1423,32 @@ removeHighlightButton?.addEventListener('click', async (e) => {
     if (selectedItems.length === 0) return;
 
     const text = selectedItems.map(item => `[${item.text}]`).join('\n');
-    
+
     const inputArea = this.findInputArea();
     if (inputArea) {
-      const textarea = inputArea.querySelector('textarea');
-      const contenteditable = inputArea.querySelector('div[contenteditable="true"]');
-      
+      const textarea = (inputArea.matches('textarea') ? inputArea : inputArea.querySelector('textarea')) as HTMLTextAreaElement | null;
+      const contenteditable = (inputArea.matches('div[contenteditable="true"]') ? inputArea : inputArea.querySelector('div[contenteditable="true"]')) as HTMLElement | null;
+
       if (textarea) {
         const currentValue = textarea.value;
         textarea.value = currentValue + (currentValue ? '\n' : '') + text;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
       } else if (contenteditable) {
-        const currentValue = contenteditable.textContent || '';
-        contenteditable.textContent = currentValue + (currentValue ? '\n' : '') + text;
-        contenteditable.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        // 新前端为 Tiptap/ProseMirror，直接改 DOM 会被其 view 覆盖；
+        // 聚焦后用 execCommand insertText 触发其内部的输入事件链。
+        contenteditable.focus();
+        let inserted = false;
+        try {
+          inserted = document.execCommand('insertText', false, text);
+        } catch (e) {
+          inserted = false;
+        }
+        if (!inserted) {
+          // 回退：直接写入文本并派发事件（兼容旧版 contenteditable）
+          const currentValue = contenteditable.textContent || '';
+          contenteditable.textContent = currentValue + (currentValue ? '\n' : '') + text;
+          contenteditable.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        }
       }
     }
 
@@ -1464,7 +1460,12 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   private findInputArea(): HTMLElement | null {
+    // 新前端：输入框容器为 #input-engine-container，内部为 div.tiptap.ProseMirror[contenteditable]
+    // 旧前端：textarea 或 data-testid="send_textarea"
     const selectors = [
+      '#input-engine-container',
+      'div.tiptap.ProseMirror[contenteditable="true"]',
+      'div[contenteditable="true"]',
       '.relative.flex.flex-col-reverse.justify-between.items-end',
       '.flex-col-reverse.items-end.p-10',
       '[class*="flex-col-reverse"][class*="items-end"]',
@@ -1472,12 +1473,12 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       '[class*="justify-between"][class*="flex-col-reverse"]',
       '[data-testid="send_textarea"]',
       'textarea[placeholder*="发送"]',
-      'div[contenteditable="true"]',
+      'textarea',
       '[class*="input"]',
       '[class*="composer"]',
       '[class*="chat-input"]'
     ];
-    
+
     for (const sel of selectors) {
       const el = document.querySelector(sel);
       if (el) {
