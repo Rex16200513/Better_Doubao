@@ -15,27 +15,30 @@
 3. Start normal conversations to verify all features
 
 ### Locator Features
-1. Send multiple messages in a conversation (at least 20+)
+1. Open a long conversation with at least 20 user messages
 2. Locator dots will appear on the right side of the page
-3. Click any locator dot, the page will automatically scroll to the corresponding message
-4. The locator list will automatically scroll to center the selected dot
+3. Scroll from the top to the bottom and confirm earlier locator dots remain available
+4. From the bottom, click the first locator dot and confirm the matching message is restored and highlighted
+5. The locator list will automatically scroll to center the selected dot
 
 ### Folder Management
-1. Click the folder icon in the conversation list
+1. Find the Folder section in the left sidebar
 2. Click the "+" button to create a new folder
 3. Choose a preset color or custom color in the color picker
 4. Drag conversations into the folder
-5. Right-click folder to change color or delete
+5. Use the folder menu to rename it, change its color, or delete it
+6. Switch conversations or workspaces and confirm the Folder section remains available
 
 ### Corpus Board Features
-1. Select text and right-click to choose "Add to Corpus Board"
-2. Manage collected text snippets in the Corpus Board
-3. Click copy button to copy content
+1. Select conversation text and use the floating button to add it to the Corpus Board
+2. Confirm the Corpus Board button appears near the input area and remains on screen
+3. Select a saved snippet and insert it into the input area
+4. Resize the browser window and confirm the button stays within the viewport
 
 ## 3. Dependencies
 
 - **Doubao Web**: This extension runs entirely on Doubao official website, cannot be used without Doubao account
-- **Browser**: Supports Chrome, Edge, Firefox and other modern browsers
+- **Browser**: Supports Chrome and Edge
 - **Network**: Requires active internet connection to access Doubao servers
 
 ## Notes

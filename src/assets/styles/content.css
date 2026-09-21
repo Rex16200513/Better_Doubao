@@ -533,6 +533,9 @@
   gap: 12px;
   max-height: 55vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 4px 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

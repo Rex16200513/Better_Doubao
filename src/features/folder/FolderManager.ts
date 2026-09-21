@@ -16,6 +16,8 @@ export class FolderManager {
   private dragData: DragData | null = null;
   private initialized = false;
   private sectionCollapsed = false;
+  private sidebarObserver: MutationObserver | null = null;
+  private rootObserver: MutationObserver | null = null;
 
   constructor() {
     this.init = this.init.bind(this);
@@ -165,12 +167,16 @@ export class FolderManager {
 
   private setupObservers(): void {
     let observerTimeout: number | null = null;
-    const observer = new MutationObserver(() => {
+    const refresh = () => {
       if (observerTimeout) clearTimeout(observerTimeout);
       observerTimeout = window.setTimeout(() => {
         const sidebar = document.querySelector('#flow_chat_sidebar');
         if (!sidebar) return;
 
+        if (sidebar !== this.sidebarContainer) {
+          this.sidebarObserver?.disconnect();
+          this.observeSidebar(sidebar as HTMLElement, refresh);
+        }
         this.sidebarContainer = sidebar as HTMLElement;
 
         if (this.initialized) {
@@ -188,23 +194,34 @@ export class FolderManager {
           this.findSidebarContainer();
         }
       }, 100);
-    });
+    };
 
     const sidebar = document.querySelector('#flow_chat_sidebar');
     if (sidebar) {
-      observer.observe(sidebar, { childList: true, subtree: true });
+      this.observeSidebar(sidebar as HTMLElement, refresh);
     }
+
+    // 豆包切换工作区时会整体替换侧边栏；监听 document 才能重新挂载到新节点。
+    this.rootObserver?.disconnect();
+    this.rootObserver = new MutationObserver(() => {
+      const currentSidebar = document.querySelector('#flow_chat_sidebar');
+      if (currentSidebar !== this.sidebarContainer) refresh();
+    });
+    this.rootObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  private observeSidebar(sidebar: HTMLElement, refresh: () => void): void {
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = new MutationObserver(refresh);
+    this.sidebarObserver.observe(sidebar, { childList: true, subtree: true });
   }
 
   private addConversationIndicators(): void {
-    const conversations = document.querySelectorAll('a[id^="conversation_"], [data-empty-conversation="false"] a[href^="/chat/"]');
-    conversations.forEach((el) => {
-      const element = el as HTMLElement;
+    this.getConversationElements().forEach((element) => {
       if (element.dataset.dvProcessed) return;
       element.dataset.dvProcessed = 'true';
 
-      const idMatch = element.id.match(/conversation_(\d+)/);
-      const conversationId = idMatch ? idMatch[1] : element.getAttribute('href')?.replace('/chat/', '');
+      const conversationId = this.getConversationIdFromElement(element);
 
       if (!conversationId) return;
 
@@ -240,16 +257,30 @@ export class FolderManager {
   }
 
   private refreshAllIndicators(): void {
-    const conversations = document.querySelectorAll('a[id^="conversation_"], [data-empty-conversation="false"] a[href^="/chat/"]');
-    conversations.forEach((el) => {
-      const element = el as HTMLElement;
-      const idMatch = element.id.match(/conversation_(\d+)/);
-      const conversationId = idMatch ? idMatch[1] : element.getAttribute('href')?.replace('/chat/', '');
+    this.getConversationElements().forEach((element) => {
+      const conversationId = this.getConversationIdFromElement(element);
       if (!conversationId) return;
 
       const folders = this.findConversationFolders(conversationId);
       this.updateConversationIndicator(element, folders);
     });
+  }
+
+  private getConversationElements(): HTMLElement[] {
+    const elements = Array.from(document.querySelectorAll<HTMLElement>(
+      '#flow_chat_sidebar a[id^="conversation_"], #flow_chat_sidebar a[href^="/chat/"], #flow_chat_sidebar [data-conversation-id]'
+    ));
+    return Array.from(new Set(elements.map((element) => element.closest<HTMLElement>('a[href^="/chat/"]') || element)));
+  }
+
+  private getConversationIdFromElement(element: HTMLElement): string | undefined {
+    const idMatch = element.id.match(/conversation_([^/?#]+)/);
+    if (idMatch) return idMatch[1];
+
+    const dataId = element.dataset.conversationId || element.querySelector<HTMLElement>('[data-conversation-id]')?.dataset.conversationId;
+    if (dataId) return dataId;
+
+    return element.getAttribute('href')?.match(/\/chat\/([^/?#]+)/)?.[1];
   }
 
   private setupConversationDrag(element: HTMLElement, conversationId: string): void {
@@ -476,8 +507,7 @@ export class FolderManager {
 
     const droppedEl = document.querySelector('.dbx-dragging') as HTMLElement;
     if (droppedEl) {
-      const idMatch = droppedEl.id.match(/conversation_(\d+)/);
-      conversationId = idMatch ? idMatch[1] : droppedEl.getAttribute('href')?.replace('/chat/', '') || '';
+      conversationId = this.getConversationIdFromElement(droppedEl) || '';
       const titleEl = droppedEl.querySelector('[class*="content"]') || droppedEl.querySelector('div');
       title = titleEl?.textContent?.trim() || '对话';
       sourceFolderId = droppedEl.dataset.sourceFolderId || undefined;

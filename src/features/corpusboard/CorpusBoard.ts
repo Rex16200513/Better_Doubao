@@ -18,6 +18,7 @@ export class CorpusBoard {
   private lastHighlightUrl = '';
   private isRestoringHighlights = false;
   private highlightPaletteResizeHandler: (() => void) | null = null;
+  private positionResizeHandler: (() => void) | null = null;
 
   init(): void {
     if (this.initialized) return;
@@ -28,6 +29,7 @@ export class CorpusBoard {
     this.createTriggerButton();
     this.setupTextSelectionListener();
     this.setupHighlightPersistence();
+    this.setupPositionTracking();
     this.initialized = true;
     console.log('[CorpusBoard] Initialized, trigger button:', this.triggerBtn);
     
@@ -140,16 +142,43 @@ export class CorpusBoard {
     const inputArea = this.findInputArea();
     if (inputArea) {
       const rect = inputArea.getBoundingClientRect();
-      return clamp(rect.right + margin, rect.top);
+      const rightSideX = rect.right + margin;
+      const x = rightSideX + btn + margin <= window.innerWidth
+        ? rightSideX
+        : rect.left - btn - margin;
+      return clamp(x, rect.top + Math.max(0, (rect.height - btn) / 2));
     }
 
     const locatorBar = document.querySelector('#dbx-quick-locator');
     if (locatorBar) {
       const rect = locatorBar.getBoundingClientRect();
-      return clamp(rect.right + margin, rect.top);
+      return clamp(rect.left - btn - margin, rect.top);
     }
 
     return clamp(window.innerWidth - btn - margin, window.innerHeight - 200);
+  }
+
+  private setupPositionTracking(): void {
+    this.positionResizeHandler = this.debouncePositionUpdate(() => {
+      const saved = localStorage.getItem('dbx_corpus_trigger_pos');
+      if (!saved) {
+        this.recalculatePosition();
+        return;
+      }
+
+      this.positionX = Math.max(12, Math.min(this.positionX, window.innerWidth - 56));
+      this.positionY = Math.max(12, Math.min(this.positionY, window.innerHeight - 56));
+      this.applyTriggerPosition();
+    }, 150);
+    window.addEventListener('resize', this.positionResizeHandler);
+  }
+
+  private debouncePositionUpdate(fn: () => void, delay: number): () => void {
+    let timer: number | null = null;
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(fn, delay);
+    };
   }
 
   private loadPosition(): { x: number; y: number } {
@@ -161,6 +190,11 @@ export class CorpusBoard {
       console.log('[CorpusBoard] Loaded position from localStorage:', saved);
       if (saved) {
         const pos = JSON.parse(saved);
+        // 旧版本只保存 x/y，页面改版后这些坐标已失去锚点意义，自动重置一次。
+        if (!pos.viewportWidth || !pos.viewportHeight) {
+          localStorage.removeItem('dbx_corpus_trigger_pos');
+          return defaultPos;
+        }
         // 用户自定义过的位置，需保证按钮（44x44）完整落在视口内才保留
         if (pos.x >= 0 && pos.x + 44 <= window.innerWidth && pos.y >= 0 && pos.y + 44 <= window.innerHeight) {
           console.log('[CorpusBoard] Using saved position:', pos);
@@ -181,7 +215,9 @@ export class CorpusBoard {
     try {
       localStorage.setItem('dbx_corpus_trigger_pos', JSON.stringify({
         x: this.positionX,
-        y: this.positionY
+        y: this.positionY,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight
       }));
     } catch (e) {}
   }
@@ -1480,10 +1516,14 @@ removeHighlightButton?.addEventListener('click', async (e) => {
     ];
 
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
+      const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find((candidate) => {
+        if (candidate.closest('#dbx-corpus-panel, #dbx-corpus-trigger')) return false;
+        const rect = candidate.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
       if (el) {
         console.log('[CorpusBoard] findInputArea found:', sel);
-        return el as HTMLElement;
+        return el;
       }
     }
     console.log('[CorpusBoard] findInputArea: no element found');
@@ -1501,6 +1541,10 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   destroy(): void {
+    if (this.positionResizeHandler) {
+      window.removeEventListener('resize', this.positionResizeHandler);
+      this.positionResizeHandler = null;
+    }
     if (this.highlightPaletteResizeHandler) {
       window.removeEventListener('resize', this.highlightPaletteResizeHandler);
       this.highlightPaletteResizeHandler = null;

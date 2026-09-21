@@ -19,16 +19,16 @@ A powerful browser extension to enhance your Doubao chat experience
 快速导航到对话中的任意消息。
 
 **功能特点：**
-- 在页面悬浮窗中显示所有消息列表
+- 在页面右侧显示整个对话的用户消息定位点
+- 兼容豆包虚拟列表，滚动后不会丢失已加载的定位点
 - 支持收藏重要消息
 - 收藏信息持久化存储，跨对话可用
 - 点击消息自动滚动定位
 - 支持图片、PDF 等纯媒体用户消息
 
 **使用方式：**
-- 点击页面左上角的定位图标展开悬浮窗
-- 点击消息项快速跳转
-- 点击星标图标收藏/取消收藏
+- 点击右侧定位点快速跳转到对应消息
+- 悬停定位点后可收藏/取消收藏
 
 ![快速定位](docs/images/3.png)
 
@@ -45,7 +45,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 数据持久化存储
 
 **使用方式：**
-- 点击侧边栏文件夹图标
+- 在左侧边栏的「文件夹」区域点击「+」
 - 创建新文件夹并选择颜色
 - 拖拽对话到目标文件夹
 
@@ -189,15 +189,9 @@ better-doubao/
 
 ## 安装使用
 
-> ⚠️ **重要提示**：项目同时支持 Chrome 和 Edge，请根据自己的浏览器选择对应的版本构建！
+### 从源码安装
 
-### 使用方法
-
-1. **删除不需要的版本文件夹**：
-   - 只用 Chrome？删除 `edge/` 文件夹
-   - 只用 Edge？删除 `chrome/` 文件夹
-
-2. **安装依赖并构建**：
+1. **安装依赖并构建**：
 
 ```bash
 # 安装依赖
@@ -210,7 +204,7 @@ npm run build:chrome
 npm run build:edge
 ```
 
-3. **加载扩展**：
+2. **加载扩展**：
 
 **Chrome 用户**：
 1. 打开 `chrome://extensions/`
@@ -232,7 +226,11 @@ npm run build:edge
 # 开发模式（监听文件变化）
 npm run dev
 
-# 构建生产版本（根据保留的文件夹自动选择）
+# 分别监听 Chrome / Edge 构建
+npm run dev:chrome
+npm run dev:edge
+
+# 同时构建 Chrome 和 Edge
 npm run build
 
 # 类型检查

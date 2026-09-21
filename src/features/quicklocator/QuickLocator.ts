@@ -2,7 +2,9 @@ import { storageService } from '../../core/services/StorageService';
 
 export interface MessageMarker {
   id: string;
-  element: HTMLElement;
+  messageId: string;
+  element: HTMLElement | null;
+  scrollTop: number;
   text: string;
   index: number;
   starred: boolean;
@@ -15,9 +17,23 @@ export class QuickLocator {
   private observer: MutationObserver | null = null;
   private starredMarkers: Set<number> = new Set();
   private conversationId: string = 'unknown';
+  private messageCache = new Map<string, Omit<MessageMarker, 'id' | 'index' | 'starred'>>();
+  private isIndexing = false;
 
   private get scrollContainer(): HTMLElement | null {
-    return document.querySelector('[class*="v_list_scroller"], [class*="scroller"], [data-testid="flow_chat_page"], [class*="chat-container"], main, [class*="page-main"]') as HTMLElement;
+    const selectors = [
+      '[class*="v_list_scroller"]',
+      '[data-testid="flow_chat_page"] [class*="scroller"]',
+      '[class*="chat-container"]',
+      '[data-testid="flow_chat_page"]',
+      'main',
+      '[class*="page-main"]',
+    ];
+    for (const selector of selectors) {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (element) return element;
+    }
+    return null;
   }
 
   init(): void {
@@ -53,6 +69,9 @@ export class QuickLocator {
       this.conversationId = newConversationId;
       
       this.markers = [];
+      this.messageCache.clear();
+      this.observer?.disconnect();
+      this.observer = null;
       if (this.locatorBar) {
         this.locatorBar.remove();
         this.locatorBar = null;
@@ -80,7 +99,7 @@ export class QuickLocator {
       if (container || retries >= maxRetries) {
         if (container) {
           await this.loadStarredMessages();
-          await this.scanMessages();
+          await this.scanMessages(true);
           this.createLocatorBar();
           this.setupObserver();
         }
@@ -106,7 +125,7 @@ export class QuickLocator {
     }
   }
 
-  private async scanMessages(): Promise<void> {
+  private async scanMessages(indexEntireConversation = false): Promise<void> {
     const container = this.scrollContainer;
     if (!container) {
       return;
@@ -115,14 +134,27 @@ export class QuickLocator {
     this.conversationId = this.getConversationId();
     await this.loadStarredMessages();
 
-    const userMessages: HTMLElement[] = [];
+    if (indexEntireConversation && this.isVirtualList(container)) {
+      await this.indexEntireConversation(container);
+    } else {
+      this.collectVisibleMessages(container);
+      this.rebuildMarkers();
+    }
 
-    const messageElements = container.querySelectorAll('[data-message-id]');
-    // 记录上一条是否为用户消息，用于合并"上传文件 + 文字"被拆成连续两条的情况
+    this.updateLocatorDots();
+  }
+
+  private isVirtualList(container: HTMLElement): boolean {
+    return container.matches('[class*="v_list_scroller"]') || !!container.querySelector('.v_list_row, [data-name="scroll_holder"]');
+  }
+
+  private collectVisibleMessages(container: HTMLElement): void {
+    const messageElements = Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]'));
     let prevWasUser = false;
+
     messageElements.forEach((el) => {
       // 新前端 data-message-id 元素本身即消息根；旧前端需向上找到 inner-item 容器
-      const root = (el as HTMLElement).closest('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') as HTMLElement | null || (el as HTMLElement);
+      const root = el.closest<HTMLElement>('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') || el;
 
       const html = root.innerHTML?.toLowerCase() || '';
       const hasSendClass = html.includes('send_message') ||
@@ -138,28 +170,82 @@ export class QuickLocator {
       const isUser = hasSendClass || hasBubble || (hasUserImageBlock && hasJustifyEnd);
 
       if (isUser) {
-        // 合并连续用户消息：文件上传 + 文字被豆包拆成两条 data-message-id，
-        // 这里只保留第一条作为定位目标，避免出现两个定位标签
-        if (!prevWasUser) userMessages.push(root);
+        if (!prevWasUser) {
+          const messageId = el.dataset.messageId;
+          if (messageId) {
+            const row = el.closest<HTMLElement>('.v_list_row');
+            const rowOffset = this.getVirtualRowOffset(row);
+            const text = this.extractMessageText(root) || '[媒体消息]';
+            this.messageCache.set(messageId, {
+              messageId,
+              element: root,
+              scrollTop: rowOffset ?? Math.max(0, container.scrollTop + root.getBoundingClientRect().top - container.getBoundingClientRect().top),
+              text,
+            });
+          }
+        }
         prevWasUser = true;
       } else {
         prevWasUser = false;
       }
     });
+  }
 
-    this.markers = userMessages.map((el, index) => {
-      const text = this.extractMessageText(el);
-      const finalText = text || `问题 ${index + 1}`;
+  private getVirtualRowOffset(row: HTMLElement | null): number | null {
+    if (!row) return null;
+    const value = row.style.getPropertyValue('--vlist-row-transform-y');
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : row.offsetTop;
+  }
+
+  private rebuildMarkers(): void {
+    const cached = Array.from(this.messageCache.values()).sort((a, b) => a.scrollTop - b.scrollTop);
+    this.markers = cached.map((entry, index) => {
       return {
         id: `marker_${index}`,
-        element: el,
-        text: finalText,
+        ...entry,
         index,
         starred: this.starredMarkers.has(index),
       };
     });
+  }
 
-    this.updateLocatorDots();
+  private async indexEntireConversation(container: HTMLElement): Promise<void> {
+    if (this.isIndexing) return;
+    this.isIndexing = true;
+    const originalScrollTop = container.scrollTop;
+
+    try {
+      this.messageCache.clear();
+      let target = 0;
+      let iterations = 0;
+      let lastMax = -1;
+
+      while (iterations < 250) {
+        container.scrollTo({ top: target, behavior: 'auto' });
+        await this.waitForVirtualList();
+        this.collectVisibleMessages(container);
+
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+        if (target >= maxScroll && maxScroll === lastMax) break;
+        lastMax = maxScroll;
+        const step = Math.max(320, container.clientHeight * 0.75);
+        target = Math.min(maxScroll, target + step);
+        iterations++;
+      }
+    } finally {
+      container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+      await this.waitForVirtualList();
+      this.collectVisibleMessages(container);
+      this.rebuildMarkers();
+      this.isIndexing = false;
+    }
+  }
+
+  private waitForVirtualList(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 40)));
+    });
   }
 
   private extractMessageText(element: HTMLElement): string {
@@ -213,6 +299,7 @@ export class QuickLocator {
     const track = this.locatorBar.querySelector('.dbx-locator-track');
     if (!track) return;
 
+    const previousScrollTop = track.scrollTop;
     track.innerHTML = '';
 
     this.markers.forEach((marker, index) => {
@@ -233,11 +320,12 @@ export class QuickLocator {
       });
       
       dot.addEventListener('click', () => {
-        this.scrollToMessage(marker);
+        void this.scrollToMessage(marker);
       });
 
       track.appendChild(dot);
     });
+    track.scrollTop = previousScrollTop;
   }
 
   private tooltipEl: HTMLElement | null = null;
@@ -343,17 +431,34 @@ export class QuickLocator {
     }, 150);
   }
 
-  private scrollToMessage(marker: MessageMarker): void {
-    if (!marker.element) return;
+  private async scrollToMessage(marker: MessageMarker): Promise<void> {
+    const container = this.scrollContainer;
+    if (!container) return;
 
-    marker.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    
-    marker.element.classList.add('dbx-message-highlight');
+    let element = marker.element?.isConnected ? marker.element : this.findMessageElement(marker.messageId);
+    if (!element) {
+      container.scrollTo({ top: marker.scrollTop, behavior: 'auto' });
+      for (let attempt = 0; attempt < 12 && !element; attempt++) {
+        await this.waitForVirtualList();
+        element = this.findMessageElement(marker.messageId);
+      }
+    }
+    if (!element) return;
+
+    marker.element = element;
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.classList.add('dbx-message-highlight');
     setTimeout(() => {
-      marker.element.classList.remove('dbx-message-highlight');
+      element?.classList.remove('dbx-message-highlight');
     }, 2000);
     
     this.scrollLocatorToMarker(marker.index);
+  }
+
+  private findMessageElement(messageId: string): HTMLElement | null {
+    const node = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
+      .find((el) => el.dataset.messageId === messageId);
+    return node?.closest<HTMLElement>('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') || node || null;
   }
   
   private scrollLocatorToMarker(index: number): void {
@@ -382,7 +487,9 @@ export class QuickLocator {
     const container = this.scrollContainer;
     if (!container) return;
 
+    this.observer?.disconnect();
     this.observer = new MutationObserver((mutations) => {
+      if (this.isIndexing) return;
       let shouldRescan = false;
       for (const mutation of mutations) {
         if (mutation.addedNodes.length > 0) {
@@ -400,8 +507,7 @@ export class QuickLocator {
   }
 
   private debounceScan = this.debounce(async () => {
-    await this.scanMessages();
-    this.updateLocatorDots();
+    await this.scanMessages(false);
   }, 1000);
 
   private debounce(fn: () => void | Promise<void>, delay: number): () => void {
@@ -422,6 +528,7 @@ export class QuickLocator {
       this.locatorBar = null;
     }
     this.markers = [];
+    this.messageCache.clear();
     this.initialized = false;
   }
 }
