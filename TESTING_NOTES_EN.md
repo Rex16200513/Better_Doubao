@@ -22,12 +22,17 @@
 5. The locator list will automatically scroll to center the selected dot
 
 ### Folder Management
-1. Find the Folder section in the left sidebar
+1. Expand the Legacy Folders section in the left sidebar and confirm existing folders remain available
 2. Click the "+" button to create a new folder
 3. Choose a preset color or custom color in the color picker
 4. Drag conversations into the folder
 5. Use the folder menu to rename it, change its color, or delete it
 6. Switch conversations or workspaces and confirm the Folder section remains available
+
+### Sidebar Shortcuts
+1. Confirm common actions appear as a row of icons while native Projects remains separate
+2. Hover or focus each icon and confirm its name appears
+3. Click each icon and confirm the corresponding native Doubao action still works
 
 ### Corpus Board Features
 1. Select conversation text and use the floating button to add it to the Corpus Board

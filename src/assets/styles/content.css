@@ -8,6 +8,97 @@
   --dbx-folder-border: #e5e7eb;
 }
 
+#dbx-sidebar-launcher {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px 2px;
+  min-width: 0;
+}
+
+#flow_chat_sidebar .dbx-native-nav-hidden {
+  display: none !important;
+}
+
+.dbx-launcher-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 26px;
+  height: 32px;
+  padding: 3px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--dbx-text-primary, #333);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dbx-launcher-button:hover,
+.dbx-launcher-button:focus-visible {
+  background: var(--s-color-bg-trans-primary, rgba(0, 0, 0, 0.06));
+  outline: 2px solid transparent;
+}
+
+.dbx-launcher-button svg {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex: none;
+}
+
+.dbx-launcher-button::after {
+  content: attr(data-label);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  width: max-content;
+  max-width: 190px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #24262b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.dbx-launcher-button:first-child::after {
+  left: 0;
+  transform: translateY(-3px);
+}
+
+.dbx-launcher-button:last-child::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-3px);
+}
+
+.dbx-launcher-button:hover::after,
+.dbx-launcher-button:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.dbx-launcher-button:first-child:hover::after,
+.dbx-launcher-button:first-child:focus-visible::after,
+.dbx-launcher-button:last-child:hover::after,
+.dbx-launcher-button:last-child:focus-visible::after {
+  transform: translateY(0);
+}
+
 .dbx-folder-section {
   padding: 8px 12px;
   margin-bottom: 4px;

@@ -14,6 +14,8 @@ A powerful browser extension to enhance your Doubao chat experience
 
 ## 功能概述
 
+新版侧边栏会将常用入口收纳为一排图标，鼠标悬停或键盘聚焦时显示名称；豆包原生「项目」保持独立。旧版插件文件夹以「旧文件夹（过渡）」保留在项目区后，原有数据不会自动删除或迁移。
+
 ### 1. 快速定位 (Quick Locator)
 
 快速导航到对话中的任意消息。
@@ -45,7 +47,7 @@ A powerful browser extension to enhance your Doubao chat experience
 - 数据持久化存储
 
 **使用方式：**
-- 在左侧边栏的「文件夹」区域点击「+」
+- 展开左侧边栏的「旧文件夹（过渡）」区域并点击「+」
 - 创建新文件夹并选择颜色
 - 拖拽对话到目标文件夹
 

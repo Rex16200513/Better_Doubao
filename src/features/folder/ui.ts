@@ -66,7 +66,7 @@ export function createFolderSectionHTML(): string {
           <svg class="dbx-folder-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span class="dbx-folder-title">文件夹</span>
+          <span class="dbx-folder-title">旧文件夹（过渡）</span>
         </div>
         <div class="dbx-folder-header-actions">
           <button class="dbx-folder-toggle-btn" title="收起/展开">

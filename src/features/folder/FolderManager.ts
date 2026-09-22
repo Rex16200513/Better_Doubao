@@ -28,6 +28,9 @@ export class FolderManager {
     await storageService.init();
     this.data = await storageService.getData();
     this.sectionCollapsed = await storageService.getSectionCollapsed();
+    if (localStorage.getItem('dbx_legacy_folder_expanded') === null) {
+      this.sectionCollapsed = true;
+    }
     console.log('[FolderManager] Loaded data, folders:', this.data.folders.length);
     this.data.folders.forEach(f => f.isExpanded = false);
     await this.waitForSidebar();
@@ -97,7 +100,11 @@ export class FolderManager {
         // 排除我们自己 folder section 内部的 span
         if ((span as HTMLElement).closest('#dbx-folder-section')) continue;
 
-        // 新版 DOM 中"更多"项外层是 <div data-expand="false">
+        // 将文件夹放在 React 管理的整个「更多」菜单外面，避免菜单展开时被重排到末尾。
+        const menuContainer = span.closest('[aria-haspopup="dialog"]') as HTMLElement | null;
+        if (menuContainer) return menuContainer;
+
+        // 旧版 DOM 中"更多"项外层是 <div data-expand="false">
         const itemContainer = span.closest('div[data-expand="false"]') as HTMLElement | null;
         if (itemContainer) return itemContainer;
 
@@ -118,15 +125,35 @@ export class FolderManager {
     tempDiv.innerHTML = createFolderSectionHTML();
     const folderSection = tempDiv.firstElementChild as HTMLElement;
 
-    // 查找"更多"按钮并贴在它下方
+    // 优先放在原生项目下方；没有项目区的旧页面再放到「更多」下方。
+    this.placeFolderSection(folderSection);
+
+    this.containerElement = folderSection;
+    this.setupFolderEvents();
+  }
+
+  private placeFolderSection(folderSection: HTMLElement): void {
+    if (!this.sidebarContainer) return;
+    const projectSection = Array.from(this.sidebarContainer.querySelectorAll<HTMLElement>('[data-history-container] section'))
+      .find((section) => Array.from(section.querySelectorAll<HTMLElement>('span'))
+        .some((span) => span.textContent?.trim() === '项目'));
+    if (projectSection?.parentNode) {
+      if (folderSection.parentNode !== projectSection.parentNode || folderSection.previousElementSibling !== projectSection) {
+        projectSection.parentNode.insertBefore(folderSection, projectSection.nextSibling);
+      }
+      return;
+    }
+
     const moreContainer = this.findMoreButtonContainer();
     if (moreContainer?.parentNode) {
-      moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
+      if (folderSection.parentNode !== moreContainer.parentNode || folderSection.previousElementSibling !== moreContainer) {
+        moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
+      }
     } else {
       // 查找历史对话区域（新前端使用 data-history-container，旧前端用 class*="history"）
       const historySection = this.sidebarContainer.querySelector('[data-history-container], [class*="history"]');
       if (historySection && historySection.parentNode) {
-        historySection.parentNode.insertBefore(folderSection, historySection.nextSibling);
+        historySection.parentNode.insertBefore(folderSection, historySection);
       } else {
         // 查找用户信息区域（底部），在它之前插入
         const userSection = this.sidebarContainer.querySelector('[class*="-mx-12"]');
@@ -138,9 +165,6 @@ export class FolderManager {
         }
       }
     }
-
-    this.containerElement = folderSection;
-    this.setupFolderEvents();
   }
 
   private setupFolderEvents(): void {
@@ -180,12 +204,13 @@ export class FolderManager {
         this.sidebarContainer = sidebar as HTMLElement;
 
         if (this.initialized) {
-          const existingSection = document.querySelector('#dbx-folder-section');
+          const existingSection = sidebar.querySelector('#dbx-folder-section');
           if (!existingSection) {
             this.findSidebarContainer();
             this.render();
           } else {
             this.containerElement = existingSection as HTMLElement;
+            this.placeFolderSection(this.containerElement);
             this.setupFolderEvents();
           }
           this.addConversationIndicators();
@@ -572,6 +597,7 @@ export class FolderManager {
 
   private toggleSectionCollapsed(): void {
     this.sectionCollapsed = !this.sectionCollapsed;
+    localStorage.setItem('dbx_legacy_folder_expanded', String(!this.sectionCollapsed));
     this.updateSectionCollapseUI();
     storageService.setSectionCollapsed(this.sectionCollapsed);
   }

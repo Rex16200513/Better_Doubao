@@ -86,8 +86,9 @@ export class CorpusBoard {
       <span class="dbx-corpus-count">${this.corpusItems.length}</span>
     `;
 
-    this.applyTriggerPosition();
     this.triggerBtn.style.cssText = this.getTriggerStyles();
+    // cssText 会覆盖先前设置的 left/top；必须最后应用坐标。
+    this.applyTriggerPosition();
     this.triggerBtn.style.display = 'flex';
 
     console.log('[CorpusBoard] Trigger button created, in DOM:', document.body?.contains(this.triggerBtn));

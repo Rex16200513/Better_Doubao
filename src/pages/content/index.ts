@@ -1,4 +1,5 @@
 import { folderManager } from '../../features/folder/FolderManager';
+import { sidebarLauncher } from '../../features/sidebar/SidebarLauncher';
 import { quickLocator } from '../../features/quicklocator/QuickLocator';
 import { corpusBoard } from '../../features/corpusboard/CorpusBoard';
 import { exportManager } from '../../features/export/ExportManager';
@@ -11,6 +12,7 @@ async function main() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       folderManager.init();
+      sidebarLauncher.init();
       quickLocator.init();
       corpusBoard.init();
       exportManager.init();
@@ -18,6 +20,7 @@ async function main() {
     });
   } else {
     folderManager.init();
+    sidebarLauncher.init();
     quickLocator.init();
     corpusBoard.init();
     exportManager.init();
