@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Better Doubao",
   "description": "A powerful browser extension to enhance your Doubao chat experience.",
-  "version": "1.0.2",
+  "version": "1.5.0",
   "icons": {
     "16": "icons/icon16.png",
     "19": "icons/icon19.png",

@@ -195,6 +195,13 @@ better-doubao/
 
 ## 安装使用
 
+### 下载编译好的 v1.5 安装包（无需 Node.js）
+
+- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v1.5/Better_Doubao_Chrome_v1.5.zip)
+- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v1.5/Better_Doubao_Edge_v1.5.zip)
+
+下载对应浏览器的 ZIP 并解压到一个固定文件夹。Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`；开启「开发者模式」，点击「加载已解压的扩展程序」，选择解压后包含 `manifest.json` 的文件夹。安装后请保留该文件夹，不要移动或删除。ZIP 是可直接加载的编译结果，不需要自行构建；它不是双击安装的 CRX 文件。
+
 ### 从源码安装
 
 1. **安装依赖并构建**：
