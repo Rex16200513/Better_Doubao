@@ -18,7 +18,7 @@ A powerful browser extension to enhance your Doubao chat experience
 
 新版将常用入口收纳为一排图标，减少侧边栏的信息密度，让对话与项目更醒目、视觉体验更清爽。鼠标悬停或键盘聚焦图标即可看到名称，点击后仍使用豆包原生功能。「项目」保持独立显示；文件夹功能将逐步与豆包官方「项目」功能合并。过渡期间，插件旧文件夹仍可在项目区后的「旧文件夹（过渡）」中展开使用，原有数据不会被删除或自动迁移。
 
-![侧边栏视觉优化前后对比：入口收纳为横排图标，减少信息密度](docs/images/sidebar-compact.png)
+![侧边栏视觉优化前后对比：入口收纳为横排图标，减少信息密度](docs/images/sidebar-visual-comparison.png)
 
 ### 1. 快速定位 (Quick Locator)
 
