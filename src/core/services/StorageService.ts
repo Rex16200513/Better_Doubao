@@ -49,94 +49,50 @@ function validateFolderData(data: unknown): data is FolderData {
     (d.textHighlights === undefined || Array.isArray(d.textHighlights));
 }
 
-function createBackup(data: FolderData, accountId: string): void {
-  try {
-    localStorage.setItem(`${BACKUP_KEY}_${accountId}`, JSON.stringify({
-      data,
-      timestamp: Date.now(),
-      accountId,
-    }));
-  } catch (e) {
-    console.warn('[Storage] Backup failed:', e);
-  }
-}
-
-function restoreFromBackup(accountId: string): FolderData | null {
-  try {
-    const stored = localStorage.getItem(`${BACKUP_KEY}_${accountId}`);
-    if (stored) {
-      const backup = JSON.parse(stored);
-      if (backup.data && validateFolderData(backup.data)) {
-        return backup.data as FolderData;
-      }
-    }
-  } catch (e) {
-    console.warn('[Storage] Restore from backup failed:', e);
-  }
-  return null;
-}
-
 export class StorageService {
   private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [], sectionCollapsed: false };
   private saveTimer: number | null = null;
   private currentAccountId: string = '';
+  private initialization: Promise<void> | null = null;
 
   private getStorageKey(): string {
     return `${STORAGE_KEY}_${this.currentAccountId}`;
   }
 
-  async init(): Promise<void> {
+  init(): Promise<void> {
+    // Both the content entrypoint and FolderManager initialize this singleton.
+    if (!this.initialization) this.initialization = this.load();
+    return this.initialization;
+  }
+
+  private async load(): Promise<void> {
     this.currentAccountId = getCurrentAccountId();
-    console.log('[Storage] Current account:', this.currentAccountId);
-    
-    const savedAccountId = localStorage.getItem(ACCOUNT_KEY);
-    
-    if (savedAccountId && savedAccountId !== this.currentAccountId) {
-      console.log('[Storage] Account changed from', savedAccountId, 'to', this.currentAccountId);
-      this.data = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [] };
-      localStorage.setItem(ACCOUNT_KEY, this.currentAccountId);
-      await this.persist();
-      console.log('[Storage] Cleared data for new account');
-    } else {
-      localStorage.setItem(ACCOUNT_KEY, this.currentAccountId);
-      
-      try {
-        const stored = await browser.storage.local.get(this.getStorageKey());
-        if (stored[this.getStorageKey()] && validateFolderData(stored[this.getStorageKey()])) {
-          const savedData = stored[this.getStorageKey()] as FolderData;
-          this.data = {
-            ...savedData,
-            textHighlights: savedData.textHighlights ?? [],
-          };
-          console.log('[Storage] Loaded from chrome.storage for account:', this.currentAccountId);
-        } else {
-          const backup = restoreFromBackup(this.currentAccountId);
-          if (backup) {
-            this.data = {
-              ...backup,
-              textHighlights: backup.textHighlights ?? [],
-            };
-            await this.persist();
-            console.log('[Storage] Restored from localStorage backup');
-          }
-        }
-      } catch (error) {
-        console.error('[Storage] Init error:', error);
-        const backup = restoreFromBackup(this.currentAccountId);
-        if (backup) {
-          this.data = {
-            ...backup,
-            textHighlights: backup.textHighlights ?? [],
-          };
-        }
+    const key = this.getStorageKey();
+    const backupKey = `${BACKUP_KEY}_${this.currentAccountId}`;
+    const stored = await browser.storage.local.get([key, backupKey]);
+    const saved = stored[key] ?? stored[backupKey];
+    if (validateFolderData(saved)) {
+      this.data = { ...saved, textHighlights: saved.textHighlights ?? [] };
+    }
+    // Legacy page backups are untrusted: never import page-controlled objects.
+    // Primary extension records remain intact; remove exposed duplicate copies.
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const legacyKey = localStorage.key(i);
+        if (legacyKey?.startsWith(`${BACKUP_KEY}_`)) localStorage.removeItem(legacyKey);
       }
+      localStorage.removeItem(ACCOUNT_KEY);
+    } catch (error) {
+      console.warn('[Storage] Legacy backup cleanup failed:', error);
     }
   }
 
   private async persist(): Promise<void> {
-    createBackup(this.data, this.currentAccountId);
     try {
-      await browser.storage.local.set({ [this.getStorageKey()]: this.data });
+      await browser.storage.local.set({
+        [this.getStorageKey()]: this.data,
+        [`${BACKUP_KEY}_${this.currentAccountId}`]: this.data,
+      });
     } catch (error) {
       console.error('[Storage] Save failed:', error);
     }

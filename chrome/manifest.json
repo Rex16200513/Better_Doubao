@@ -43,11 +43,5 @@
       "js": ["src/pages/content/index.ts"],
       "css": ["src/assets/styles/content.css"]
     }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["src/assets/styles/content.css"],
-      "matches": ["<all_urls>"]
-    }
   ]
 }

@@ -825,7 +825,7 @@ export class FolderManager {
     popup.innerHTML = `
       <div class="dbx-popup-content">
         <div class="dbx-popup-title">重命名文件夹</div>
-        <input type="text" class="dbx-popup-input" placeholder="输入新名称" maxlength="20" value="${folder.name}">
+        <input type="text" class="dbx-popup-input" placeholder="输入新名称" maxlength="20">
         <div class="dbx-popup-actions">
           <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
           <button class="dbx-popup-btn dbx-popup-btn-confirm">确定</button>
@@ -850,6 +850,7 @@ export class FolderManager {
     }
 
     const input = popup.querySelector('.dbx-popup-input') as HTMLInputElement;
+    input.value = folder.name;
     input?.focus();
     input?.select();
 
@@ -959,7 +960,7 @@ export class FolderManager {
     });
   }
 
-  private showDeleteConfirm(folder: Folder, folderId: string, button?: HTMLElement): void {
+  private showDeleteConfirm(folder: Folder, folderId: string, _button?: HTMLElement): void {
     this.hidePopup();
     
     const popup = document.createElement('div');
@@ -967,7 +968,7 @@ export class FolderManager {
     popup.innerHTML = `
       <div class="dbx-popup-content">
         <div class="dbx-popup-title">删除文件夹</div>
-        <div class="dbx-popup-message">确定要删除"${folder.name}"吗？</div>
+        <div class="dbx-popup-message">确定要删除"${escapeHTML(folder.name)}"吗？</div>
         <div class="dbx-popup-actions">
           <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
           <button class="dbx-popup-btn dbx-popup-btn-danger">删除</button>
@@ -976,32 +977,8 @@ export class FolderManager {
     `;
 
     document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    if (button) {
-      const rect = button.getBoundingClientRect();
-      popup.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
-        background: transparent;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-start;
-      `;
-    } else {
-      popup.style.cssText = `
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        background: transparent;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      `;
-    }
-
+    // Center the modal in the viewport rather than below an off-screen row.
+    popup.style.zIndex = '10002';
     popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
     popup.querySelector('.dbx-popup-btn-danger')?.addEventListener('click', async () => {
       await storageService.deleteFolder(folderId);
