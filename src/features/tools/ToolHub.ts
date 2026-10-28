@@ -1,10 +1,19 @@
 import { storageService } from '../../core/services/StorageService';
+import { corpusBoard } from '../corpusboard/CorpusBoard';
+import browser from 'webextension-polyfill';
+
+const icons = [
+  '<path d="M8 3h8l4 4v14H4V3h4m6 0v6h6M8 13h8M8 17h6"/>',
+  '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+  '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/>',
+  '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+];
 
 const button = (label: string, action: () => void): HTMLButtonElement => {
   const el = document.createElement('button');
   el.textContent = label;
   el.type = 'button';
-  el.addEventListener('click', action);
+  el.addEventListener('click', event => { event.stopPropagation(); action(); });
   return el;
 };
 
@@ -12,18 +21,26 @@ export class ToolHub {
   private panel: HTMLElement | null = null;
   init(): void {
     const trigger = document.getElementById('dbx-corpus-trigger');
-    if (!trigger || document.getElementById('dbx-tools-toggle')) return;
-    const toggle = button('＋', () => this.toggle(toggle));
-    toggle.id = 'dbx-tools-toggle';
-    toggle.title = '搜索、重点与备份';
-    toggle.setAttribute('aria-label', toggle.title);
-    toggle.setAttribute('aria-expanded', 'false');
-    trigger.appendChild(toggle);
-    toggle.addEventListener('mousedown', e => e.stopPropagation());
-    toggle.addEventListener('click', e => e.stopPropagation());
+    if (!trigger || trigger.dataset.toolsBound) return;
+    trigger.dataset.toolsBound = 'true';
+    trigger.title = '随手工具'; trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
+    trigger.setAttribute('aria-label', '随手工具'); trigger.setAttribute('aria-expanded', 'false');
+    document.addEventListener('dbx-toggle-tools', () => this.toggle(trigger));
+    trigger.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggle(trigger); } });
+    document.addEventListener('pointerdown', e => {
+      if (!(e.target as Element).closest('#dbx-tools-menu, #dbx-corpus-trigger')) {
+        document.getElementById('dbx-tools-menu')?.remove(); trigger.setAttribute('aria-expanded', 'false');
+      }
+    });
+    window.addEventListener('resize', () => this.position());
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') {
+      document.getElementById('dbx-tools-menu')?.remove(); this.panel?.remove(); this.panel = null;
+      corpusBoard.closePanel(); trigger.setAttribute('aria-expanded', 'false'); trigger.focus();
+    } });
+    void browser.storage.local.get('dbxToolsGuideSeen').then(saved => { if (!saved.dbxToolsGuideSeen) this.guide(); });
   }
 
-  private toggle(toggle: HTMLButtonElement): void {
+  private toggle(toggle: HTMLElement): void {
     const old = document.getElementById('dbx-tools-menu');
     if (old) { old.remove(); toggle.setAttribute('aria-expanded', 'false'); return; }
     const menu = document.createElement('div');
@@ -32,12 +49,14 @@ export class ToolHub {
     menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
     menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 64, rect.top - 60))}px`;
     for (const [label, title, action] of [
+      ['▤', '语料板', () => { this.panel?.remove(); corpusBoard.openPanel(); this.styleCorpus(); }],
       ['⌕', '对话搜索', () => this.search()],
       ['☆', '高亮与收藏', () => void this.saved()],
       ['⇩', '数据备份与恢复', () => this.backup()],
     ] as const) {
       const item = button(label, () => { menu.remove(); toggle.setAttribute('aria-expanded', 'false'); action(); });
-      item.title = title; item.setAttribute('aria-label', title); menu.appendChild(item);
+      item.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[menu.children.length]}</svg>`;
+      item.title = title; item.dataset.tooltip = title; item.setAttribute('aria-label', title); menu.appendChild(item);
     }
     menu.addEventListener('keydown', e => { if (e.key === 'Escape') { menu.remove(); toggle.focus(); } });
     document.body.appendChild(menu); toggle.setAttribute('aria-expanded', 'true');
@@ -45,13 +64,45 @@ export class ToolHub {
   }
 
   private open(title: string): HTMLElement {
+    corpusBoard.closePanel();
     this.panel?.remove();
     const panel = document.createElement('section'); panel.id = 'dbx-tools-panel';
     panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title);
     const heading = document.createElement('h3'); heading.textContent = title;
-    panel.append(heading, button('关闭', () => { panel.remove(); this.panel = null; }));
+    const header = document.createElement('header'); header.className = 'dbx-tool-header';
+    const close = button('×', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
+    close.title = '关闭'; close.setAttribute('aria-label', '关闭');
+    header.append(heading, close); panel.append(header);
     panel.addEventListener('keydown', e => { if (e.key === 'Escape') panel.remove(); });
-    document.body.appendChild(panel); this.panel = panel; return panel;
+    document.body.appendChild(panel); this.panel = panel; this.position(); return panel;
+  }
+
+  private position(): void {
+    const anchor = document.getElementById('dbx-corpus-trigger')?.getBoundingClientRect();
+    for (const panel of [this.panel, document.querySelector<HTMLElement>('.dbx-corpus-panel')]) {
+      if (!panel || !anchor) continue;
+      const width = Math.min(360, window.innerWidth - 24);
+      panel.style.width = `${width}px`;
+      panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left - width - 12))}px`;
+      const height = Math.min(540, window.innerHeight - 24);
+      panel.style.maxHeight = `${height}px`;
+      panel.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, anchor.top))}px`;
+      panel.style.right = 'auto';
+    }
+  }
+
+  private styleCorpus(): void {
+    const panel = document.querySelector<HTMLElement>('.dbx-corpus-panel');
+    if (!panel) return;
+    panel.classList.add('dbx-unified-panel');
+    const close = button('×', () => corpusBoard.closePanel()); close.setAttribute('aria-label', '关闭语料板'); close.title = '关闭';
+    panel.querySelector('.dbx-corpus-header')?.appendChild(close); this.position();
+  }
+
+  private guide(): void {
+    const panel = this.open('欢迎使用随手工具');
+    const p = document.createElement('p'); p.textContent = '点击悬浮按钮，展开语料板、对话搜索、重点目录和备份。所有面板都在按钮附近打开，可点击 × 或按 Esc 关闭。搜索仅覆盖已加载内容。';
+    panel.append(p, button('开始使用', () => { void browser.storage.local.set({ dbxToolsGuideSeen: true }); panel.remove(); }));
   }
 
   private messages(): HTMLElement[] {
@@ -68,18 +119,48 @@ export class ToolHub {
     const panel = this.open('对话搜索');
     const input = document.createElement('input'); input.placeholder = '搜索当前已加载的消息'; input.setAttribute('aria-label', input.placeholder);
     const results = document.createElement('div'); const status = document.createElement('p');
-    let hits: HTMLElement[] = []; let index = -1;
-    const move = (step: number) => { if (hits.length) { index = (index + step + hits.length) % hits.length; this.jump(hits[index]); status.textContent = `${index + 1} / ${hits.length} 条匹配消息`; } };
+    let hits: { node: HTMLElement; text: string; range: Range }[] = []; let index = -1;
+    const activate = (i: number) => {
+      index = i; const hit = hits[i];
+      if (!hit?.node.isConnected) { status.textContent = '原文已卸载，请重新搜索'; return; }
+      const rangeRect = hit.range.getBoundingClientRect();
+      hit.range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (!rangeRect.height) this.jump(hit.node);
+      const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(hit.range);
+      status.textContent = `${i + 1} / ${hits.length} 处匹配`;
+    };
+    const move = (step: number) => { if (hits.length) activate(index < 0 ? (step > 0 ? 0 : hits.length - 1) : (index + step + hits.length) % hits.length); };
     const refresh = () => {
       results.replaceChildren(); index = -1;
       const query = input.value.trim().toLocaleLowerCase();
-      hits = query ? this.messages().filter(n => n.textContent?.toLocaleLowerCase().includes(query)) : [];
-      status.textContent = `${hits.length} 条匹配消息 · 仅搜索已加载内容`;
-      for (const hit of hits) results.appendChild(button((hit.textContent || '').trim().slice(0, 180), () => this.jump(hit)));
+      hits = [];
+      if (query) for (const node of this.messages()) {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        const parts: { node: Text; start: number }[] = []; let text = ''; let next: Node | null;
+        while ((next = walker.nextNode())) {
+          if (next.parentElement?.closest('button,script,style,[aria-hidden="true"]')) continue;
+          parts.push({ node: next as Text, start: text.length }); text += next.textContent;
+        }
+        const lower = text.toLocaleLowerCase(); let offset = 0;
+        while ((offset = lower.indexOf(query, offset)) !== -1) {
+          const begin = [...parts].reverse().find(p => p.start <= offset);
+          const end = [...parts].reverse().find(p => p.start < offset + query.length);
+          if (!begin || !end) break;
+          const range = document.createRange(); range.setStart(begin.node, offset - begin.start); range.setEnd(end.node, offset + query.length - end.start);
+          const before = text.slice(Math.max(0, offset - 60), offset).split(/[。！？.!?\n]/).pop() || '';
+          const after = text.slice(offset + query.length, offset + query.length + 80).split(/[。！？.!?\n]/)[0];
+          hits.push({ node, range, text: `${before}${text.slice(offset, offset + query.length)}${after}`.trim() });
+          offset += query.length;
+        }
+      }
+      status.textContent = `${hits.length} 处匹配 · 仅搜索已加载内容`;
+      hits.forEach((hit, i) => results.appendChild(button(hit.text, () => activate(i))));
     };
     input.addEventListener('input', refresh);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') move(e.shiftKey ? -1 : 1); });
-    panel.append(input, button('重新搜索', refresh), button('上一条', () => move(-1)), button('下一条', () => move(1)), status, results);
+    const actions = document.createElement('nav'); actions.className = 'dbx-tool-actions';
+    actions.append(button('刷新结果', refresh), button('上一处', () => move(-1)), button('下一处', () => move(1)));
+    results.className = 'dbx-tool-results'; panel.append(input, actions, status, results);
     refresh(); input.focus();
   }
 

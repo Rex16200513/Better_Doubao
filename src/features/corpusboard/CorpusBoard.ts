@@ -95,7 +95,7 @@ export class CorpusBoard {
 
     this.triggerBtn.addEventListener('click', () => {
       if (!this.isDragging) {
-        this.togglePanel();
+        document.dispatchEvent(new CustomEvent('dbx-toggle-tools'));
       }
     });
 
@@ -272,15 +272,16 @@ export class CorpusBoard {
     this.triggerBtn.addEventListener('mousedown', onMouseDown);
   }
 
-  private togglePanel(): void {
-    this.isExpanded = !this.isExpanded;
-    
-    if (this.isExpanded) {
-      this.createPanel();
-      this.updatePanelContent();
-    } else {
-      this.hidePanel();
-    }
+  openPanel(): void {
+    if (this.panel && !this.panel.isConnected) this.panel = null;
+    this.isExpanded = true;
+    this.createPanel();
+    this.updatePanelContent();
+  }
+
+  closePanel(): void {
+    this.isExpanded = false;
+    this.hidePanel();
   }
 
   private createPanel(): void {
