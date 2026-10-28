@@ -378,6 +378,11 @@ export class CorpusBoard {
       </div>
     `;
 
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button'; closeButton.textContent = '×';
+    closeButton.title = '关闭'; closeButton.setAttribute('aria-label', '关闭语料板');
+    closeButton.addEventListener('click', event => { event.stopPropagation(); this.closePanel(); });
+    this.panel.querySelector('.dbx-corpus-header')?.appendChild(closeButton);
     this.updateTriggerCount();
 
     this.panel.querySelector('.dbx-corpus-clear-btn')?.addEventListener('click', () => {

@@ -1140,3 +1140,7 @@
 #dbx-tools-panel .dbx-tool-results button { width:100%; margin:0 0 8px; padding:10px 12px; font:13px/1.7 system-ui; text-align:left; }
 #dbx-tools-panel input[type=file] { width:100%; margin:10px 0; padding:10px; background:#f8f9fb; border:1px dashed #dfe1e8; font:12px/1.5 system-ui; }
 #dbx-tools-panel input::file-selector-button { border:0; background:#eeecff; color:#5850d8; border-radius:6px; padding:6px 8px; margin-right:8px; }
+.dbx-tool-header, .dbx-unified-panel .dbx-corpus-header { cursor:grab; touch-action:none; user-select:none; }
+.dbx-tool-header:active, .dbx-unified-panel .dbx-corpus-header:active { cursor:grabbing; }
+.dbx-highlight-color-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; border:1px solid #0001; }
+.dbx-text-highlight.dbx-highlight-located { outline:2px solid #635bdb; outline-offset:3px; }

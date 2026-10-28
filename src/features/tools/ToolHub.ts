@@ -70,6 +70,7 @@ export class ToolHub {
     panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title);
     const heading = document.createElement('h3'); heading.textContent = title;
     const header = document.createElement('header'); header.className = 'dbx-tool-header';
+    this.draggable(panel);
     const close = button('×', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
     close.title = '关闭'; close.setAttribute('aria-label', '关闭');
     header.append(heading, close); panel.append(header);
@@ -83,6 +84,11 @@ export class ToolHub {
       if (!panel || !anchor) continue;
       const width = Math.min(360, window.innerWidth - 24);
       panel.style.width = `${width}px`;
+      if (panel.dataset.dragged === 'true') {
+        panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, panel.offsetLeft))}px`;
+        panel.style.top = `${Math.max(12, Math.min(window.innerHeight - panel.offsetHeight - 12, panel.offsetTop))}px`;
+        continue;
+      }
       panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left - width - 12))}px`;
       const height = Math.min(540, window.innerHeight - 24);
       panel.style.maxHeight = `${height}px`;
@@ -95,8 +101,26 @@ export class ToolHub {
     const panel = document.querySelector<HTMLElement>('.dbx-corpus-panel');
     if (!panel) return;
     panel.classList.add('dbx-unified-panel');
-    const close = button('×', () => corpusBoard.closePanel()); close.setAttribute('aria-label', '关闭语料板'); close.title = '关闭';
-    panel.querySelector('.dbx-corpus-header')?.appendChild(close); this.position();
+    this.draggable(panel);
+    this.position();
+  }
+
+  private draggable(panel: HTMLElement): void {
+    panel.addEventListener('pointerdown', event => {
+      const target = event.target as Element;
+      if (event.button !== 0 || !target.closest('.dbx-tool-header, .dbx-corpus-header') || target.closest('button, input')) return;
+      event.preventDefault();
+      const rect = panel.getBoundingClientRect();
+      const dx = event.clientX - rect.left; const dy = event.clientY - rect.top;
+      panel.setPointerCapture(event.pointerId);
+      const move = (e: PointerEvent) => {
+        panel.dataset.dragged = 'true'; panel.style.right = 'auto';
+        panel.style.left = `${Math.max(8, Math.min(window.innerWidth - panel.offsetWidth - 8, e.clientX - dx))}px`;
+        panel.style.top = `${Math.max(8, Math.min(window.innerHeight - panel.offsetHeight - 8, e.clientY - dy))}px`;
+      };
+      const end = () => { panel.removeEventListener('pointermove', move); panel.removeEventListener('pointerup', end); panel.removeEventListener('pointercancel', end); };
+      panel.addEventListener('pointermove', move); panel.addEventListener('pointerup', end); panel.addEventListener('pointercancel', end);
+    });
   }
 
   private guide(): void {
@@ -175,9 +199,18 @@ export class ToolHub {
         if (!`${item.text} ${item.conversationId}`.toLocaleLowerCase().includes(q)) continue;
         const row = button(`高亮 · ${item.text}`, () => {
           if (item.conversationId !== current) { window.location.href = `/chat/${encodeURIComponent(item.conversationId)}`; return; }
-          const target = this.messages().find(n => item.messageId ? n.dataset.messageId === item.messageId : n.textContent?.includes(item.text));
-          if (target) this.jump(target); else window.alert('原文尚未加载，摘录仍保存在此目录中。');
-        }); row.style.borderLeft = '4px solid #eab308'; list.appendChild(row);
+          const marks = Array.from(document.querySelectorAll<HTMLElement>('.dbx-text-highlight')).filter(mark => mark.dataset.dbxHighlightId === item.id);
+          const target = marks[0];
+          if (target) {
+            target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+            for (const mark of marks) mark.classList.add('dbx-highlight-located');
+            window.setTimeout(() => marks.forEach(mark => mark.classList.remove('dbx-highlight-located')), 1800);
+          } else window.alert('该高亮尚未加载，请先滚动加载原文；摘录仍保存在目录中。');
+        });
+        const color = /^#[\da-fA-F]{3}([\da-fA-F]{3})?$/.test(item.color) ? item.color : '#eab308';
+        row.style.borderLeft = `4px solid ${color}`;
+        const dot = document.createElement('span'); dot.className = 'dbx-highlight-color-dot'; dot.style.backgroundColor = color; dot.setAttribute('aria-label', `高亮颜色 ${color}`); row.prepend(dot);
+        list.appendChild(row);
       }
       for (const [conversation, indexes] of Object.entries(data.starredMessages)) {
         for (const i of indexes) {
