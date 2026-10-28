@@ -1111,3 +1111,11 @@
 .dbx-highlight-menu-toggle.is-open svg {
   transform: rotate(180deg);
 }
+#dbx-tools-toggle { position:absolute; right:-10px; bottom:-10px; width:26px; height:26px; border:1px solid #ddd; border-radius:50%; background:white; color:#555; cursor:pointer; }
+#dbx-tools-menu { position:fixed; display:flex; gap:10px; z-index:10010; padding:8px; border-radius:28px; background:white; box-shadow:0 4px 24px #0002; }
+#dbx-tools-menu button { width:40px; height:40px; border:1px solid #eee; border-radius:50%; background:#fff; color:#333; cursor:pointer; font-size:22px; }
+#dbx-tools-panel { position:fixed; right:16px; top:90px; width:min(360px,calc(100vw - 32px)); max-height:75vh; overflow:auto; z-index:10011; padding:20px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:16px; background:#fff; color:#333; box-shadow:0 8px 32px #0002; font:14px/1.6 system-ui,sans-serif; }
+#dbx-tools-panel h3 { margin:0 0 12px; }
+#dbx-tools-panel button { padding:8px 12px; margin:4px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; color:#333; cursor:pointer; text-align:left; }
+#dbx-tools-panel input { max-width:100%; box-sizing:border-box; padding:9px; border:1px solid #ddd; border-radius:8px; }
+#dbx-tools-panel div > button { display:block; width:calc(100% - 8px); overflow-wrap:anywhere; }

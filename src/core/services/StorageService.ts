@@ -50,6 +50,45 @@ function validateFolderData(data: unknown): data is FolderData {
 }
 
 export class StorageService {
+  validateBackup(value: unknown): FolderData {
+    const fail = (): never => { throw new Error('备份格式或数据字段无效'); };
+    if (!value || typeof value !== 'object') return fail();
+    const envelope = value as Record<string, unknown>;
+    if (envelope.format !== 'better-doubao-backup' || envelope.version !== 1) return fail();
+    const data = envelope.data as FolderData;
+    if (!validateFolderData(data)) return fail();
+    const safeString = (v: unknown): v is string => typeof v === 'string' && v.length <= 1000000;
+    const id = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,200}$/.test(v) && !['__proto__', 'constructor', 'prototype'].includes(v);
+    const number = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+    const color = (v: unknown): boolean => typeof v === 'string' && /^(#[\da-fA-F]{3}|#[\da-fA-F]{6}|red|orange|yellow|green|blue|purple|pink|gray)$/.test(v);
+    if (!data.folderContents || !data.starredMessages) return fail();
+    for (const f of data.folders) {
+      if (!f || !id(f.id) || !safeString(f.name) || f.name.length > 200 || !color(f.color) || typeof f.isExpanded !== 'boolean' || !number(f.createdAt) || !number(f.updatedAt)) return fail();
+    }
+    for (const [key, entries] of Object.entries(data.folderContents)) {
+      if (!id(key) || !Array.isArray(entries)) return fail();
+      for (const c of entries) if (!c || !id(c.conversationId) || !safeString(c.title) || !safeString(c.url) || !number(c.addedAt)) return fail();
+    }
+    for (const [key, entries] of Object.entries(data.starredMessages)) if (!id(key) || !Array.isArray(entries) || !entries.every(n => Number.isSafeInteger(n) && n >= 0)) return fail();
+    for (const c of data.corpusBoard) if (!c || !id(c.id) || !id(c.conversationId) || !safeString(c.text) || !safeString(c.conversationTitle) || !number(c.addedAt)) return fail();
+    for (const h of data.textHighlights ?? []) if (!h || !id(h.id) || !id(h.conversationId) || !safeString(h.text) || !safeString(h.prefix) || !safeString(h.suffix) || !color(h.color) || !number(h.startOffset) || !number(h.endOffset) || !number(h.messageIndex) || !number(h.createdAt)) return fail();
+    return JSON.parse(JSON.stringify(data)) as FolderData;
+  }
+
+  async restoreBackup(value: unknown): Promise<void> {
+    const next = this.validateBackup(value);
+    await this.save();
+    await browser.storage.local.set({ [`dvBeforeRestore_${this.currentAccountId}`]: this.data, [this.getStorageKey()]: next, [`${BACKUP_KEY}_${this.currentAccountId}`]: next });
+    this.data = next;
+  }
+
+  async undoRestore(): Promise<void> {
+    const key = `dvBeforeRestore_${this.currentAccountId}`;
+    const stored = await browser.storage.local.get(key);
+    const previous = stored[key];
+    if (!validateFolderData(previous)) throw new Error('暂无恢复前副本');
+    await this.restoreBackup({ format: 'better-doubao-backup', version: 1, data: previous });
+  }
   private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [], textHighlights: [], sectionCollapsed: false };
   private saveTimer: number | null = null;
   private currentAccountId: string = '';
