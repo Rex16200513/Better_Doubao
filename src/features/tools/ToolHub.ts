@@ -133,12 +133,6 @@ export class ToolHub {
     return Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]')).filter(el => !el.parentElement?.closest('[data-message-id]'));
   }
 
-  private jump(node: HTMLElement): void {
-    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    node.classList.add('dbx-message-highlight');
-    window.setTimeout(() => node.classList.remove('dbx-message-highlight'), 2000);
-  }
-
   private search(): void {
     const panel = this.open('对话搜索');
     const input = document.createElement('input'); input.placeholder = '搜索当前已加载的消息'; input.setAttribute('aria-label', input.placeholder);
@@ -147,9 +141,19 @@ export class ToolHub {
     const activate = (i: number) => {
       index = i; const hit = hits[i];
       if (!hit?.node.isConnected) { status.textContent = '原文已卸载，请重新搜索'; return; }
-      const rangeRect = hit.range.getBoundingClientRect();
-      hit.range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      if (!rangeRect.height) this.jump(hit.node);
+      if (!hit.range.getClientRects().length) { status.textContent = '命中文字当前不可见，请重新搜索'; return; }
+      // Scroll using the text range rectangle, never the paragraph rectangle.
+      let parent = hit.range.startContainer.parentElement;
+      while (parent && parent !== document.body && parent !== document.documentElement) {
+        const style = getComputedStyle(parent);
+        if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight) {
+          const rect = hit.range.getBoundingClientRect(); const box = parent.getBoundingClientRect();
+          parent.scrollTop += rect.top + rect.height / 2 - box.top - parent.clientHeight / 2;
+        }
+        parent = parent.parentElement;
+      }
+      const rect = hit.range.getBoundingClientRect();
+      if (rect.top < 0 || rect.bottom > window.innerHeight) window.scrollBy({ top: rect.top + rect.height / 2 - window.innerHeight / 2, behavior: 'instant' });
       const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(hit.range);
       status.textContent = `${i + 1} / ${hits.length} 处匹配`;
     };
@@ -171,9 +175,9 @@ export class ToolHub {
           const end = [...parts].reverse().find(p => p.start < offset + query.length);
           if (!begin || !end) break;
           const range = document.createRange(); range.setStart(begin.node, offset - begin.start); range.setEnd(end.node, offset + query.length - end.start);
-          const before = text.slice(Math.max(0, offset - 60), offset).split(/[。！？.!?\n]/).pop() || '';
-          const after = text.slice(offset + query.length, offset + query.length + 80).split(/[。！？.!?\n]/)[0];
-          hits.push({ node, range, text: `${before}${text.slice(offset, offset + query.length)}${after}`.trim() });
+          const before = text.slice(Math.max(0, offset - 24), offset).split(/[。！？.!?\n]/).pop() || '';
+          const after = text.slice(offset + query.length, offset + query.length + 36).split(/[。！？.!?\n]/)[0];
+          if (range.getClientRects().length) hits.push({ node, range, text: `${offset > before.length ? '…' : ''}${before}${text.slice(offset, offset + query.length)}${after}…`.trim() });
           offset += query.length;
         }
       }
