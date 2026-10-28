@@ -1111,3 +1111,38 @@
 .dbx-highlight-menu-toggle.is-open svg {
   transform: rotate(180deg);
 }
+#dbx-tools-toggle { position:absolute; right:-10px; bottom:-10px; width:26px; height:26px; border:1px solid #ddd; border-radius:50%; background:white; color:#555; cursor:pointer; }
+#dbx-tools-menu { position:fixed; display:flex; gap:10px; z-index:10010; padding:8px; border-radius:28px; background:white; box-shadow:0 4px 24px #0002; }
+#dbx-tools-menu button { width:40px; height:40px; border:1px solid #eee; border-radius:50%; background:#fff; color:#333; cursor:pointer; font-size:22px; }
+#dbx-tools-panel { position:fixed; right:16px; top:90px; width:min(360px,calc(100vw - 32px)); max-height:75vh; overflow:auto; z-index:10011; padding:20px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:16px; background:#fff; color:#333; box-shadow:0 8px 32px #0002; font:14px/1.6 system-ui,sans-serif; }
+#dbx-tools-panel h3 { margin:0 0 12px; }
+#dbx-tools-panel button { padding:8px 12px; margin:4px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; color:#333; cursor:pointer; text-align:left; }
+#dbx-tools-panel input { max-width:100%; box-sizing:border-box; padding:9px; border:1px solid #ddd; border-radius:8px; }
+#dbx-tools-panel div > button { display:block; width:calc(100% - 8px); overflow-wrap:anywhere; }
+
+/* Shared lightweight tool surfaces; explicit sizes resist host page styles. */
+#dbx-tools-menu { padding:6px; gap:4px; border:1px solid #e8e9ed; border-radius:18px; box-shadow:0 6px 24px #18213216; }
+#dbx-tools-menu button { position:relative; display:flex; align-items:center; justify-content:center; box-sizing:border-box; width:40px; height:40px; padding:10px; margin:0; border:0; border-radius:12px; font:14px/1 system-ui; background:transparent; }
+#dbx-tools-menu button svg { flex:none; width:20px!important; height:20px!important; }
+#dbx-tools-menu button:hover, #dbx-tools-menu button:focus-visible { background:#f1f2ff; color:#5850d8; outline:2px solid #dcd9ff; }
+#dbx-tools-menu button::after { content:attr(data-tooltip); position:absolute; bottom:calc(100% + 10px); left:50%; transform:translateX(-50%); padding:5px 9px; border-radius:7px; font:12px/1.5 system-ui; color:white; background:#30333c; white-space:nowrap; opacity:0; pointer-events:none; }
+#dbx-tools-menu button:hover::after, #dbx-tools-menu button:focus-visible::after { opacity:1; }
+#dbx-tools-panel, .dbx-corpus-panel.dbx-unified-panel { box-sizing:border-box; padding:16px; max-height:calc(100vh - 24px); border:1px solid #e8e9ed; border-radius:16px; box-shadow:0 8px 30px #18213218; background:#fff; color:#303440; font:13px/1.6 system-ui,sans-serif; }
+#dbx-tools-panel .dbx-tool-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #f0f0f3; }
+#dbx-tools-panel .dbx-tool-header h3 { margin:0; font:600 15px/1.5 system-ui; }
+#dbx-tools-panel .dbx-tool-header button, .dbx-unified-panel .dbx-corpus-header button:last-child { display:inline-flex; justify-content:center; align-items:center; width:28px; height:28px; padding:0; margin:0; border:0; border-radius:8px; background:transparent; color:#7b8190; font:22px/1 system-ui; cursor:pointer; }
+#dbx-tools-panel button { min-height:32px; padding:6px 10px; margin:4px 4px 4px 0; font:500 12px/1.5 system-ui; border-radius:8px; border-color:#e8e9ed; background:#fff; }
+#dbx-tools-panel button:hover { background:#f4f3ff; border-color:#dad7ff; color:#5850d8; }
+#dbx-tools-panel input:not([type=file]) { width:100%; padding:9px 11px; font:13px/1.5 system-ui; border:1px solid #e4e5eb; outline:none; }
+#dbx-tools-panel input:focus { border-color:#8d86ed; box-shadow:0 0 0 3px #6859e010; }
+#dbx-tools-panel p { font:12px/1.7 system-ui; color:#858997; margin:10px 0; }
+#dbx-tools-panel .dbx-tool-actions { display:flex; gap:4px; margin-top:8px; }
+#dbx-tools-panel .dbx-tool-results button { width:100%; margin:0 0 8px; padding:10px 12px; font:13px/1.7 system-ui; text-align:left; }
+#dbx-tools-panel input[type=file] { width:100%; margin:10px 0; padding:10px; background:#f8f9fb; border:1px dashed #dfe1e8; font:12px/1.5 system-ui; }
+#dbx-tools-panel input::file-selector-button { border:0; background:#eeecff; color:#5850d8; border-radius:6px; padding:6px 8px; margin-right:8px; }
+.dbx-tool-header, .dbx-unified-panel .dbx-corpus-header { cursor:grab; touch-action:none; user-select:none; }
+.dbx-tool-header:active, .dbx-unified-panel .dbx-corpus-header:active { cursor:grabbing; }
+.dbx-highlight-color-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; border:1px solid #0001; }
+.dbx-text-highlight.dbx-highlight-located { outline:2px solid #635bdb; outline-offset:3px; }
+#dbx-tools-panel .dbx-tool-header { position:sticky; top:-16px; z-index:2; margin:-16px -16px 16px; padding:14px 16px; background:#fff; border-bottom:1px solid #ececf2; min-height:30px; }
+.dbx-unified-panel .dbx-corpus-header { position:sticky; top:0; z-index:2; flex-shrink:0; background:#fff; }

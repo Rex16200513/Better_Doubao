@@ -5,6 +5,7 @@ import { corpusBoard } from '../../features/corpusboard/CorpusBoard';
 import { exportManager } from '../../features/export/ExportManager';
 import { latexDownloader } from '../../features/latex/LatexDownloader';
 import { storageService } from '../../core/services/StorageService';
+import { toolHub } from '../../features/tools/ToolHub';
 
 async function main() {
   await storageService.init();
@@ -15,6 +16,7 @@ async function main() {
       sidebarLauncher.init();
       quickLocator.init();
       corpusBoard.init();
+      toolHub.init();
       exportManager.init();
       latexDownloader.init();
     });
@@ -23,6 +25,7 @@ async function main() {
     sidebarLauncher.init();
     quickLocator.init();
     corpusBoard.init();
+    toolHub.init();
     exportManager.init();
     latexDownloader.init();
   }

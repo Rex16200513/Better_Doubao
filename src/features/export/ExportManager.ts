@@ -53,11 +53,16 @@ export class ExportManager {
         console.log('[ExportManager] Topbar found, adding export button');
         this.addExportButton(topbar as HTMLElement);
       } else {
-        setTimeout(checkTopbar, 500);
+        // Keep export accessible even when the host changes its header markup.
+        this.addExportButton(document.body);
       }
     };
 
     checkTopbar();
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById('dbx-export-btn')) checkTopbar();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   private addExportButton(topbar: HTMLElement): void {
@@ -66,6 +71,8 @@ export class ExportManager {
 
     this.exportButton = document.createElement('button');
     this.exportButton.id = 'dbx-export-btn';
+    this.exportButton.title = '导出当前已加载的对话';
+    this.exportButton.setAttribute('aria-label', '导出对话');
     this.exportButton.innerHTML = `
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -106,6 +113,11 @@ export class ExportManager {
       this.toggleDropdown();
     });
 
+    if (topbar === document.body) {
+      this.exportButton.style.cssText += 'position:fixed;right:20px;top:80px;z-index:10001;background:white;border:1px solid #ddd;';
+      document.body.appendChild(this.exportButton);
+      return;
+    }
     const leftContainer = topbar.querySelector('[class*="flex-row"]');
     const rightContainer = topbar.querySelector('div[class*="justify-end"]');
 
@@ -215,6 +227,7 @@ export class ExportManager {
 
   private async getConversationMessages(): Promise<Message[]> {
     const messages: Message[] = [];
+    if (!window.confirm('将导出页面当前已加载的消息。长对话可能采用虚拟列表，导出结果不保证包含全部历史记录。是否继续？')) return messages;
 
     const chatContainer = document.querySelector('[data-message-id]')?.closest('[class*="v_list_scroller"], main, [class*="page-main"], [class*="chat-container"]') || document.querySelector('main');
     if (!chatContainer) {
@@ -422,6 +435,7 @@ export class ExportManager {
     console.log('[ExportManager] Exporting to PDF...');
     
     const messages = await this.getConversationMessages();
+    if (!messages.length) return;
     const title = this.getConversationTitle();
     
     const userMessages = messages.filter(m => m.role === 'user');
@@ -638,6 +652,7 @@ export class ExportManager {
     console.log('[ExportManager] Exporting to TXT...');
     
     const messages = await this.getConversationMessages();
+    if (!messages.length) return;
     const title = this.getConversationTitle();
     const date = new Date().toLocaleDateString('zh-CN');
     const userCount = messages.filter(m => m.role === 'user').length;
@@ -679,6 +694,7 @@ export class ExportManager {
     console.log('[ExportManager] Exporting to Markdown...');
     
     const messages = await this.getConversationMessages();
+    if (!messages.length) return;
     const title = this.getConversationTitle();
     const date = new Date().toLocaleDateString('zh-CN');
     const userCount = messages.filter(m => m.role === 'user').length;

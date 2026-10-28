@@ -95,7 +95,7 @@ export class CorpusBoard {
 
     this.triggerBtn.addEventListener('click', () => {
       if (!this.isDragging) {
-        this.togglePanel();
+        document.dispatchEvent(new CustomEvent('dbx-toggle-tools'));
       }
     });
 
@@ -272,15 +272,16 @@ export class CorpusBoard {
     this.triggerBtn.addEventListener('mousedown', onMouseDown);
   }
 
-  private togglePanel(): void {
-    this.isExpanded = !this.isExpanded;
-    
-    if (this.isExpanded) {
-      this.createPanel();
-      this.updatePanelContent();
-    } else {
-      this.hidePanel();
-    }
+  openPanel(): void {
+    if (this.panel && !this.panel.isConnected) this.panel = null;
+    this.isExpanded = true;
+    this.createPanel();
+    this.updatePanelContent();
+  }
+
+  closePanel(): void {
+    this.isExpanded = false;
+    this.hidePanel();
   }
 
   private createPanel(): void {
@@ -377,6 +378,11 @@ export class CorpusBoard {
       </div>
     `;
 
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button'; closeButton.textContent = '×';
+    closeButton.title = '关闭'; closeButton.setAttribute('aria-label', '关闭语料板');
+    closeButton.addEventListener('click', event => { event.stopPropagation(); this.closePanel(); });
+    this.panel.querySelector('.dbx-corpus-header')?.appendChild(closeButton);
     this.updateTriggerCount();
 
     this.panel.querySelector('.dbx-corpus-clear-btn')?.addEventListener('click', () => {
