@@ -18,6 +18,16 @@ fs.mkdirSync(iconsDir, { recursive: true });
 
 export default defineConfig({
   plugins: [
+    {
+      name: 'emit-content-stylesheet',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'src/assets/styles/content.css',
+          source: fs.readFileSync(resolve(projectRoot, 'src/assets/styles/content.css')),
+        });
+      },
+    },
     crx({
       manifest,
     }),

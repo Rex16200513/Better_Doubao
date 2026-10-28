@@ -9,7 +9,7 @@
     "dev": "npm run dev:chrome",
     "dev:chrome": "vite build --config chrome/vite.config.ts --watch",
     "dev:edge": "vite build --config edge/vite.config.ts --watch",
-    "build": "npm run build:chrome && npm run build:edge",
+    "build": "npm run build:chrome && npm run build:edge && node tests/build-artifacts.mjs",
     "build:chrome": "vite build --config chrome/vite.config.ts",
     "build:edge": "vite build --config edge/vite.config.ts",
     "typecheck": "tsc --noEmit"
