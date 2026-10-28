@@ -29,7 +29,7 @@ A powerful browser extension to enhance your Doubao chat experience
 
 搜索仅覆盖页面已加载的内容，不代表完整历史检索。JSON 备份不包含豆包完整聊天记录、图片或附件，也不能恢复已删除的豆包对话；导入上限为 10 MB，文件可能包含私人摘录，请妥善保管。
 
-本仓库源码版本已更新为 **2.0.0**；商店版本及 Releases 安装包以实际发布为准。
+**2.0.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.0)。商店版本以实际审核发布为准。
 
 ---
 
@@ -226,12 +226,12 @@ better-doubao/
 
 ## 安装使用
 
-### 下载已发布的 v1.5 安装包（无需 Node.js）
+### 下载编译好的 v2.0 安装包（无需 Node.js）
 
-以下链接为已发布的旧版安装包，不包含 2.0 新功能；体验 2.0 请按下方步骤从源码构建。
+按浏览器选择对应安装包，均包含 2.0 新功能。
 
-- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v1.5/Better_Doubao_Chrome_v1.5.zip)
-- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v1.5/Better_Doubao_Edge_v1.5.zip)
+- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.0/Better_Doubao_Chrome_v2.0.zip)
+- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.0/Better_Doubao_Edge_v2.0.zip)
 
 下载对应浏览器的 ZIP 并解压到一个固定文件夹。Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`；开启「开发者模式」，点击「加载已解压的扩展程序」，选择解压后包含 `manifest.json` 的文件夹。安装后请保留该文件夹，不要移动或删除。ZIP 是可直接加载的编译结果，不需要自行构建；它不是双击安装的 CRX 文件。
 
