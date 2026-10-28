@@ -109,17 +109,15 @@ export class StorageService {
     const key = this.getStorageKey();
     const backupKey = `${BACKUP_KEY}_${this.currentAccountId}`;
     const stored = await browser.storage.local.get([key, backupKey]);
-    const saved = stored[key] ?? stored[backupKey];
+    const saved = validateFolderData(stored[key]) ? stored[key] : stored[backupKey];
     if (validateFolderData(saved)) {
       this.data = { ...saved, textHighlights: saved.textHighlights ?? [] };
     }
     // Legacy page backups are untrusted: never import page-controlled objects.
-    // Primary extension records remain intact; remove exposed duplicate copies.
+    // Only remove this account's duplicate when an extension copy is valid.
+    // Other accounts and legacy-only recovery data must remain recoverable.
     try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const legacyKey = localStorage.key(i);
-        if (legacyKey?.startsWith(`${BACKUP_KEY}_`)) localStorage.removeItem(legacyKey);
-      }
+      if (validateFolderData(saved)) localStorage.removeItem(backupKey);
       localStorage.removeItem(ACCOUNT_KEY);
     } catch (error) {
       console.warn('[Storage] Legacy backup cleanup failed:', error);

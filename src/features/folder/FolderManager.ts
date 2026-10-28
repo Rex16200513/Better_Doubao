@@ -978,6 +978,7 @@ export class FolderManager {
 
     document.body.appendChild(popup);
     // Center the modal in the viewport rather than below an off-screen row.
+    this.popupElement = popup;
     popup.style.zIndex = '10002';
     popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
     popup.querySelector('.dbx-popup-btn-danger')?.addEventListener('click', async () => {
