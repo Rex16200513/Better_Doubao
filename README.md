@@ -2,7 +2,9 @@
 
 # Better Doubao
 
-**增强豆包网页版体验的开源浏览器扩展 · 可视化布局与主题定制 · 分类文件夹与极简圆点 · 悬浮快捷胶囊 · 原生点赞定位标星 · 多色高亮 · 语料板 · 多格式导出**
+**为豆包网页版打造的开源效率与美学增强扩展**
+
+可视化布局与 6 套配色主题 · 悬浮快捷指令胶囊 · 分类文件夹与极简圆点 · 原生点赞定位标星 · 多色高亮 · 语料板 · 多格式导出
 
 [![CI](https://github.com/Rex16200513/Better_Doubao/actions/workflows/ci.yml/badge.svg)](https://github.com/Rex16200513/Better_Doubao/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Rex16200513/Better_Doubao?label=Release&color=4f46e5)](https://github.com/Rex16200513/Better_Doubao/releases/latest)
@@ -11,330 +13,202 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[下载安装包](#安装使用) · [Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN) · [2.2.0 更新说明](#220-版本更新) · [问题反馈](https://github.com/Rex16200513/Better_Doubao/issues/new/choose)
+[核心亮点](#v220-核心亮点) · [功能演示](#完整功能一览) · [安装使用](#安装使用) · [更新日志](#更新日志) · [问题反馈](https://github.com/Rex16200513/Better_Doubao/issues/new/choose)
 
 </div>
 
-> 🔥 灵感来源于 [gemini-voyage](https://github.com/Nagi-ovo/gemini-voyager)，感谢作者的开源贡献！
-
-## 📢 现已在微软商店成功上线！
-
-**Better Doubao** 已正式在 Microsoft Edge 插件商店上线！您可以直接在商店中搜索并安装插件。
-
-👉 [立即访问 Microsoft Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN)
+> 💡 灵感来源于 [gemini-voyager](https://github.com/Nagi-ovo/gemini-voyager)，感谢原作者的开源启发。
+> 📢 已上线 **Microsoft Edge 插件商店**：[立即前往安装](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN)（最新 `v2.2.0` 可直接从 [GitHub Releases](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.2.0) 抢先体验）。
 
 ---
 
-## 功能概述
+## v2.2.0 核心亮点
 
-## 2.2.0 版本更新
+Better Doubao `v2.2.0` 围绕 **「所见即所得定制、原生态无缝融合、极简视觉重塑」** 全面升级：
 
-2.2.0 围绕 **「所见即所得的界面定制、原生态无缝融合、极简视觉重塑」** 带来一次全面升级：
+![Better Doubao v2.2.0 全景预览：翡翠森系主题、悬浮快捷指令胶囊、原生点赞定位标星与毛玻璃工具栏](docs/images/v2.2-workspace-theme-capsules.png)
 
-| 模块 | 核心升级亮点 |
+| 模块 | 升级亮点 |
 | --- | --- |
-| 🎨 **可视化布局与配色工作室** | 点击 Better Doubao 工具栏 **⚙** 打开豆包原型图弹窗，直接在示意图上点选开关侧边栏收纳、分类文件夹、顶栏导出/下载推广、底栏技能按钮、定位点点赞标星；内置 **6 套全局配色主题**（默认纯净 / 靛蓝极客 / 翡翠森系 / 暖纸护眼 / 暮光微紫 / 深邃暗夜），直连豆包原生 CSS 设计令牌，画布、欢迎语动画遮罩、圆角输入框与浮层全界面无死角变色。 |
-| 💊 **悬浮快捷指令胶囊栏** | 在输入框正上方严格左对齐悬浮展示个性化指令胶囊，一键将常用 Prompt 填入输入框；最多横向平铺 5 个，超出部分自动收纳进 **`+N 更多 ▾`** 向上弹出菜单，不遮挡原生「更多技能」抽屉。 |
-| 🗂️ **分类文件夹 & 极简色彩圆点** | 自动隐藏「最近」列表中杂乱的原生拟物对话图标，替换为 **8px 极简分类圆点**；点击任意对话前圆点即可弹出快捷浮层一键归类/改色/新建文件夹，并保留侧边栏彩色「分类文件夹」拖拽整理能力（完全兼容历史分类与备份数据）。 |
-| 👍 **原生点赞联动快速定位点** | 顺应豆包已推出官方左侧快速定位，将旧版独立定位轨归档至 `archive/QuickLocator.legacy.ts`；现在只需点击消息底部的豆包原生 **「赞 👍」**，即可自动在左侧原生定位点对应刻度条上高亮琥珀金标记并同步写入收藏目录（兼容多轮懒加载对话）。 |
-| ✨ **侧边栏「更多」双列抽屉** | 顶部快捷图标栏新增「工作台」收纳并将「更多 / 收起」固定在最右侧槽位；展开「更多」时不再顶乱图标顺序，改为在下方平滑展开双列小抽屉承接「AI 创作 / 资料库 / API 服务」等入口。 |
-| 📄 **统一毛玻璃面板 & PDF 导出修复** | 语料板、对话搜索、高亮与收藏、数据备份四个浮层统一为 `316px` 毛玻璃卡片并统一 `Better Doubao` 品牌文案；彻底修复 PDF 导出出现异常长空白与 Markdown 表格样式丢失的问题。 |
-
-**2.2.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.2.0)。商店版本以实际审核发布为准。
+| 🎨 **可视化布局与配色工作室** | 点击工具栏 **⚙** 打开豆包原型图弹窗，直接在示意图上点选开关各区域元素；内置 **6 套全局配色主题**，直连豆包原生 CSS 设计令牌，画布、欢迎语遮罩、圆角输入框与浮层全界面无死角同步变色。 |
+| 💊 **悬浮快捷指令胶囊栏** | 自定义常用 Prompt 胶囊严格左对齐悬浮在输入框正上方，一键填入；最多横向展示 5 个，超出自动收纳至 **`+N 更多 ▾`** 向上弹出菜单。 |
+| 🗂️ **分类文件夹 & 极简色彩圆点** | 隐藏「最近」列表中杂乱的原生对话图标，替换为 **8px 极简分类圆点**；点击圆点一键归类/改色/新建分类，同时支持侧边栏彩色文件夹拖拽整理。 |
+| ✨ **侧边栏「更多」双列抽屉** | 顶部固定主图标栏收纳常用入口，「更多 / 收起」固定在最右侧，展开时下方平滑弹出双列小抽屉承接「AI 创作 / 资料库 / API 服务」，不顶乱排版。 |
+| 👍 **原生点赞联动定位点标星** | 点击消息底部的豆包原生 **「赞 👍」**，自动高亮左侧原生快速定位点刻度并同步记录至「高亮与收藏」目录（兼容多轮懒加载历史）。 |
+| 📄 **毛玻璃统一面板 & PDF 导出修复** | 统一所有悬浮工具面板为 `316px` 毛玻璃卡片；修复 PDF 导出长空白与 Markdown 表格样式丢失问题。 |
 
 ---
 
-## 2.1.0 版本更新
+## 完整功能一览
 
-2.1.0 聚焦**深色模式、可定制开关、目录管理增强与安全稳定性加固**：
+### 1. 可视化布局与 6 套全局配色主题（⚙）
 
-- **深色模式适配**：全套浮层、侧边栏、定位条与设置页统一采用 CSS 主题变量，自动响应系统与豆包页面深色主题。
-- **扩展设置页功能开关**：在扩展设置页支持按需启停 7 项功能（含长对话自动全量索引开关），并支持一键恢复默认。
-- **高亮与收藏目录升级**：新增 6 色高亮快捷筛选、列表内直接删除高亮 / 取消收藏（实时同步页面 DOM），收藏条目支持展示消息摘要。
-- **快速定位器升级**：滚动阅读时实时高亮当前位置定位点；手动滚动可随时中止长对话自动扫描，不再抢夺滚动条。
-- **非阻塞交互与安全修复**：全面替换原生 `alert` / `confirm` 为轻量 Toast 与确认弹窗；修复 PDF 导出安全清洗、相对图片 URL、Markdown 表格与图片重复、LaTeX 异步属性跳过、语料板清空隔离及账号存储键稳定性，并补齐单元测试与自动化 CI/Release 流水线。
+点击右侧悬浮工具栏的 **⚙ 界面与按钮定制**，即可打开交互式豆包原型图弹窗：
 
-**2.1.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.1.0)。商店版本以实际审核发布为准。
+- **原型图直点开关**：在示意图上直观控制「顶部图标收纳」「分类文件夹 & 色彩圆点」「侧边栏底部推广」「顶栏导出 / 下载电脑版」「点赞标星」「输入框精简底栏」及每个底栏原生技能按钮的显隐。
+- **6 套全局配色主题**：内置 **默认纯净 / 靛蓝极客 / 翡翠森系 / 暖纸护眼 / 暮光微紫 / 深邃暗夜**，选中时原型图即时预览，保存后直连豆包底层 CSS 变量全界面生效。
+- **悬浮快捷胶囊管理**：在原型图内直接增删常用指令胶囊，输入框上方自动左对齐展示并智能收纳多余按钮。
 
-## 2.0 版本更新
-
-2.0 围绕「快速找到内容、回看重点、保留插件笔记」升级了悬浮工具，同时保留原有导出与定位入口。
-
-![Better Doubao 2.0：统一工具入口、对话搜索、高亮定位与数据备份恢复](docs/images/7.png)
-
-- **统一工具入口**：点击悬浮按钮展开语料板、对话搜索、高亮与收藏、数据备份四个等尺寸图标；悬停显示功能名，首次使用提供引导。
-- **搜索到具体文字**：显示命中位置附近的简短摘要，点击选中关键词并滚动到对应位置，支持上一处／下一处及 Enter／Shift+Enter。
-- **按颜色回看重点**：集中筛选高亮与收藏，高亮条目显示原标记颜色；点击定位到对应高亮文字，原文未加载时会提示。
-- **可拖动的轻量面板**：统一标题、关闭按钮与样式，拖动标题栏调整位置；长列表滚动时标题栏固定，支持 Esc 关闭。
-- **备份与恢复插件数据**：下载 JSON 文件，保存当前账号的文件夹、对话归类、语料、高亮和收藏。导入前校验并预览数量、确认覆盖，同时保留恢复前副本供回退。适用于换电脑、换浏览器或重装插件。
-- **稳定性与数据保护**：增加导出备用入口，修复删除弹窗关闭，避免账号标记变化清空数据；新备份存入扩展私有存储，并增加构建资源完整性检查。
-
-搜索仅覆盖页面已加载的内容，不代表完整历史检索。JSON 备份不包含豆包完整聊天记录、图片或附件，也不能恢复已删除的豆包对话；导入上限为 10 MB，文件可能包含私人摘录，请妥善保管。
-
-**2.0.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.0)。商店版本以实际审核发布为准。
+![可视化布局与配色定制工作室：在原型图上直接点选区块开关并切换 6 套全局主题](docs/images/v2.2-layout-studio.png)
 
 ---
 
-### 更清爽的侧边栏
+### 2. 侧边栏图标收纳抽屉 & 分类文件夹 / 极简圆点
 
-新版将「新工作任务 / 新对话 / 工作台 / 定时任务 / 插件·技能·伙伴」收纳为固定横排图标，并将「更多 / 收起」固定在最右侧；展开「更多」时平滑展开紧凑双列小抽屉承接「AI 创作 / 资料库 / API 服务」，不破坏侧边栏排版。悬停或键盘聚焦图标即可在顶层浮窗查看完整名称，点击仍直达豆包原生功能。
+告别信息过载的侧边栏与杂乱的原生对话图标：
 
-![侧边栏视觉优化前后对比：入口收纳为横排图标，减少信息密度](docs/images/sidebar-visual-comparison.png)
+- **顶部主图标栏 + 双列「更多」抽屉**：将「新工作任务 / 新对话 / 工作台 / 定时任务 / 插件·技能·伙伴」收纳为紧凑横排图标，悬停显示顶层提示；点击最右侧「更多」平滑展开双列小抽屉，收起后瞬间还原。
+- **8px 极简分类圆点**：自动替换「最近」列表中每条对话左侧的原生拟物图标；未分类呈淡灰空心圆环，已分类呈现对应文件夹主题色圆点。
+- **点击圆点一键归类 + 拖拽整理**：轻点任意对话前的圆点即可弹出「设置会话分类」浮层，一键勾选加入/移出或新建彩色文件夹，也支持直接拖拽归类（100% 兼容历史文件夹与 JSON 备份数据）。
 
-### 1. 原生快速定位增强 (Native Locator Enhancer)
-
-顺应豆包官方推出的左侧快速定位点，Better Doubao 2.2.0 起不再重复绘制独立定位轨（旧版独立定位器代码已归档至 `archive/QuickLocator.legacy.ts`），改为轻量增强原生定位点：
-
-**功能特点：**
-- 监听豆包消息底部的原生 **「赞 👍」** 按钮点击（自动区分「赞」与「踩」）
-- 自动在左侧豆包原生定位点的对应刻度条上高亮琥珀金标记
-- 同步记录消息摘要至 Better Doubao「高亮与收藏」目录，跨对话可回看与管理
-- 基于原生当前高亮刻度锚点自动校准，多轮按需加载的长对话也能准确落点
-
-![快速定位](docs/images/3.png)
+![清爽侧边栏与极简色彩分类：暖纸护眼主题、双列更多抽屉、分类文件夹与点击圆点快捷归类](docs/images/v2.2-sidebar-folders-dots.png)
 
 ---
 
-### 2. 分类文件夹与极简色彩圆点 (Folder Manager)
+### 3. 原生点赞联动快速定位点
 
-用现代极简色彩体系整理对话列表，告别杂乱的原生对话图标：
+顺应豆包官方推出的左侧快速定位轨，Better Doubao `v2.2.0` 不再重复绘制侧边定位条（旧版独立定位器代码已归档至 `archive/QuickLocator.legacy.ts`），改为轻量增强原生定位点：
 
-**功能特点：**
-- 自动替换「最近」列表中每条对话前的原生拟物图标为 **8px 极简分类圆点**（未分类为淡灰空心圆环，已分类显示对应文件夹主题色圆点）
-- **点击圆点一键归类**：无需拖拽即可弹出快捷浮层，勾选加入/移出分类或即时新建分类
-- 侧边栏「分类文件夹」支持 8 色标签、重命名、改色、折叠与拖拽整理
-- 100% 兼容旧版本地文件夹与 JSON 备份数据
-
-![文件夹管理](docs/images/1.png)
+- 点击 AI 回复底部的豆包原生 **「赞 👍」**（自动排除「踩」与其他按钮），立即在左侧原生定位点的对应刻度条上高亮琥珀金标记；
+- 自动提取提问摘要并写入 Better Doubao「高亮与收藏」目录，支持跨对话检索与一键取消；
+- 基于豆包当前黑色激活刻度作为锚点校准索引，长对话懒加载历史时同样准确落点。
 
 ---
 
-### 3. 语料板 (Corpus Board)
+### 4. 统一工具栏：语料板 · 对话搜索 · 六色高亮 · 数据备份
 
-跨对话收集和复用文本片段。
+点击页面右下角可拖动的悬浮触发按钮，展开 5 个统一图标（**语料板 / 对话搜索 / 高亮与收藏 / 界面布局与配色定制 / 数据备份与恢复**），全部采用统一 `316px` 毛玻璃可拖动面板并支持 `Esc` 关闭：
 
-**功能特点：**
-- 页面右侧拖拽工具按钮
-- 选中文本后显示添加按钮
-- 语料持久化存储
-- 一键将语料插入输入框（用 `[]` 包围）
+- **语料板**：划词收藏高频片段，跨对话随时勾选并一键插入输入框。
+- **对话搜索**：在当前已加载对话中实时检索关键词，展示上下文摘要，支持 `Enter` / `Shift+Enter` 上下跳转并选中命中词。
+- **六色文字高亮与收藏目录**：划词一键荧光高亮（黄 / 绿 / 青 / 粉 / 红 / 灰），支持按颜色筛选、列表内直删与跨对话定位。
+- **本地 JSON 备份与恢复**：一键导出当前账号的全部文件夹、归类、语料、高亮与收藏（上限 10 MB）；导入前自动校验与数量预览，并在私有存储保留恢复前副本以便回退。
 
-**使用方式：**
-- 拖拽工具按钮到合适位置
-- 选中文本点击「添加到语料板」
-- 点击语料板中的项目插入输入框
+![Better Doubao 统一工具栏：语料板、对话搜索、高亮收藏目录与数据备份恢复](docs/images/7.png)
 
-![语料板](docs/images/2.png)
+![六色划词高亮与悬浮调色板](docs/images/6.png)
 
 ---
 
-### 4. 导出功能 (Export)
+### 5. 多格式对话导出 & LaTeX 公式下载
 
-将对话内容导出为多种格式。
+- **多格式清爽导出**：在顶部导航栏提供 **PDF / TXT / Markdown** 导出入口，自动按对话标题命名，清洗多余空白容器并完整保留表格、代码块与图片（自动过滤无效 base64 占位图）。
+- **LaTeX 数学公式工具**：自动识别页面内联公式、块级公式与 LaTeX 代码块，悬停一键复制源码或下载 `.tex` 文件。
 
-**功能特点：**
-- 支持 PDF、TXT、Markdown 三种格式
-- 正确区分用户/AI 消息
-- 支持图片导出（过滤 base64 占位图）
-- Markdown 格式完整保留代码块、表格、加粗等样式
-- 使用对话标题命名导出文件
-- 与豆包原生界面风格一致
+![多格式对话导出：支持 PDF、TXT 与 Markdown](docs/images/4.png)
 
-**使用方式：**
-- 点击顶部导航栏导出按钮
-- 选择导出格式
-- 自动下载或打开打印预览
-
-![导出功能](docs/images/4.png)
-
----
-
-### 5. LaTeX 公式下载 (LaTeX Downloader)
-
-快速下载或复制页面中的 LaTeX 数学公式。
-
-**功能特点：**
-- 自动识别页面中的 LaTeX 公式
-- 支持内联公式和块级公式
-- 支持 LaTeX 代码块
-- 一键下载为 .tex 文件
-- 一键复制到剪贴板
-
-**使用方式：**
-- 鼠标悬停在公式上，显示下载和复制按钮
-- 点击下载按钮下载完整的 .tex 文档
-- 点击复制按钮直接复制 LaTeX 代码
-
-![LaTeX 公式下载](docs/images/5.png)
-
----
-
-### 6. 文字高亮标记 (Text Highlight)
-
-在长对话中标记重点内容，方便后续回看和快速定位关键信息。
-
-**功能特点：**
-- 选中文本后一键高亮，默认使用荧光黄标记
-- 支持黄、绿、青、粉、红、灰六种高亮颜色
-- 支持修改已高亮文字的颜色
-- 支持取消选中文字的高亮，不影响同一段中的其他标记
-- 高亮记录本地持久化保存，不涉及后端
-- 切换对话、刷新页面或重新打开浏览器后，高亮仍然保留
-- 颜色选择菜单会根据窗口边缘自动调整位置，避免被遮挡
-
-**使用方式：**
-- 选中对话中的文字，弹出操作按钮
-- 点击荧光笔图标，使用默认黄色高亮
-- 点击右侧箭头展开颜色菜单，选择想要的标记颜色
-- 选中已高亮内容后，点击空心圆斜线图标取消高亮
-
-![文字高亮标记](docs/images/6.png)
-
----
-
-### Better Doubao 工具栏使用说明
-
-点击页面右侧悬浮触发按钮，展开五个统一图标：**语料板、对话搜索、高亮与收藏、界面布局与配色定制（⚙）、数据备份与恢复**。所有面板统一为 `316px` 毛玻璃卡片（原型图定制为居中大弹窗），悬停或键盘聚焦显示功能名，支持拖动与 Esc 关闭。
-
-- **界面布局与配色定制（⚙）**：在豆包原型图上直接点击开关各区域显示状态，管理对话框上方悬浮快捷胶囊，并在 6 套全局主题间切换。
-- **对话搜索**：按命中位置显示相关句子摘要，支持上一处、下一处、Enter / Shift+Enter 跳转并选中关键词；只搜索已加载内容，不保证覆盖虚拟列表中尚未加载的历史消息。
-- **高亮与收藏**：集中查看保存的六色高亮摘录与点赞收藏位置，按颜色或关键词筛选，支持列表内直接删除。
-- **数据备份与恢复**：下载当前账号的 JSON 数据；选择备份文件后预览数量并确认覆盖。恢复前会在扩展私有存储保存一份副本。文件上限 10 MB，备份包含聊天摘录，请自行妥善保管。
-
-豆包页面改版可能影响功能；如遇定位失败，请先加载原文并刷新搜索结果。
-
-## 技术架构
-
-### 项目结构
-
-```text
-better-doubao/
-├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml              # GitHub Actions CI（类型检查 / 测试 / 双端构建）
-│   │   └── release.yml         # 自动打包并发布 Chrome / Edge Release ZIP
-│   ├── ISSUE_TEMPLATE/         # Issue 表单模板
-│   └── PULL_REQUEST_TEMPLATE.md
-├── archive/
-│   └── QuickLocator.legacy.ts  # 归档的旧版独立定位器代码
-├── src/                        # 共享源代码
-│   ├── core/                   # 核心模块
-│   │   ├── services/
-│   │   │   ├── StorageService.ts
-│   │   │   ├── SettingsService.ts
-│   │   │   └── PageLifecycle.ts
-│   │   ├── types/
-│   │   │   ├── folder.ts
-│   │   │   └── settings.ts
-│   │   ├── utils/
-│   │   │   ├── dom.ts
-│   │   │   └── ui.ts
-│   │   └── index.ts
-│   ├── features/               # 功能模块
-│   │   ├── workspace/          # 可视化布局与配色工作室、快捷胶囊栏、底栏精简
-│   │   ├── tools/              # Better Doubao 统一工具栏（搜索 / 目录 / 备份）
-│   │   ├── sidebar/            # 侧边栏快捷入口收纳与「更多」双列抽屉
-│   │   ├── folder/             # 分类文件夹与极简色彩圆点
-│   │   ├── quicklocator/       # 原生点赞联动原生定位点标星
-│   │   ├── corpusboard/        # 语料板与六色文字高亮引擎
-│   │   ├── export/             # 多格式导出（PDF / TXT / Markdown）
-│   │   └── latex/              # LaTeX 公式下载与复制
-│   ├── pages/
-│   │   ├── content/            # 内容脚本入口
-│   │   ├── background/         # Background Service Worker
-│   │   ├── popup/              # 扩展弹出页面
-│   │   └── options/            # 扩展设置页面（功能开关）
-│   └── assets/
-│       └── styles/
-│           └── content.css
-├── tests/                      # 自动化测试与构建产物校验
-│   ├── build-artifacts.mjs
-│   ├── review-regressions.mjs
-│   └── unit.mjs
-├── chrome/                     # Chrome Manifest V3 配置与构建输出
-├── edge/                       # Edge Manifest V3 配置与构建输出
-└── package.json
-```
-
-### 技术栈
-
-- **语言**: TypeScript (Strict Mode)
-- **构建工具**: Vite + `@crxjs/vite-plugin`
-- **浏览器 API**: Chrome / Edge Extension Manifest V3
-- **存储**: `chrome.storage.local`（纯本地扩展私有存储，不上传数据）
-- **样式**: 原生 CSS + CSS Variables（支持浅色 / 深色模式）
-- **自动化检查**: GitHub Actions CI（Node 20 / 22 矩阵：`typecheck` + `test` + `build`）
+![LaTeX 数学公式一键复制与 .tex 下载](docs/images/5.png)
 
 ---
 
 ## 安装使用
 
-### 下载编译好的 v2.2.0 安装包（无需 Node.js）
+### 方式一：Microsoft Edge 插件商店（推荐）
 
-按浏览器选择对应安装包，均包含 2.2.0 全部新功能与修复。
+直接前往 [Microsoft Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN) 搜索 **Better Doubao** 一键安装（商店审核更新可能略晚于 GitHub Releases）。
 
-- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Chrome_v2.2.0.zip)
-- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Edge_v2.2.0.zip)
+### 方式二：下载编译好的 v2.2.0 安装包（无需 Node.js）
 
-下载对应浏览器的 ZIP 并解压到一个固定文件夹。Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`；开启「开发者模式」，点击「加载已解压的扩展程序」，选择解压后包含 `manifest.json` 的文件夹。安装后请保留该文件夹，不要移动或删除。ZIP 是可直接加载的编译结果，不需要自行构建；它不是双击安装的 CRX 文件。
+- **Chrome 用户**：[下载 Better_Doubao_Chrome_v2.2.0.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Chrome_v2.2.0.zip)
+- **Edge 用户**：[下载 Better_Doubao_Edge_v2.2.0.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Edge_v2.2.0.zip)
+- **校验文件**：[SHA256SUMS_v2.2.0.txt](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/SHA256SUMS_v2.2.0.txt)
 
-### 从源码安装
+> **安装步骤**：将 ZIP 解压到固定目录 → 打开 `chrome://extensions/` 或 `edge://extensions/` → 开启右上角「开发者模式」→ 点击「加载已解压的扩展程序」→ 选择解压后包含 `manifest.json` 的文件夹（安装后请保留该目录）。
 
-1. **安装依赖并构建**：
+### 方式三：从源码构建
 
 ```bash
-# 安装依赖
 npm install
-
-# 构建 Chrome 版本（保留 chrome 文件夹时使用）
-npm run build:chrome
-
-# 构建 Edge 版本（保留 edge 文件夹时使用）
-npm run build:edge
+npm run build        # 同时构建 Chrome (chrome/dist) 与 Edge (edge/dist) 并校验产物完整性
 ```
 
-2. **加载扩展**：
-
-**Chrome 用户**：
-1. 打开 `chrome://extensions/`
-2. 开启「开发者模式」
-3. 点击「加载已解压的扩展程序」
-4. 选择 `chrome/dist` 目录
-
-**Edge 用户**：
-1. 打开 `edge://extensions/`
-2. 开启「开发者模式」
-3. 点击「加载已解压的扩展程序」
-4. 选择 `edge/dist` 目录
-
----
-
-## 开发命令
+开发调试命令：
 
 ```bash
-# 开发模式（监听文件变化）
-npm run dev
-
-# 分别监听 Chrome / Edge 构建
-npm run dev:chrome
-npm run dev:edge
-
-# 类型检查
-npm run typecheck
-
-# 运行回归测试与单元测试
-npm test
-
-# 同时构建 Chrome 和 Edge 并校验构建产物完整性
-npm run build
+npm run dev:chrome   # 监听 Chrome 端实时构建
+npm run dev:edge     # 监听 Edge 端实时构建
+npm run typecheck    # TypeScript 严格模式类型检查
+npm test             # 运行回归测试与单元测试
 ```
 
 ---
 
-## 贡献与反馈
+## 技术架构
 
-欢迎提交 [Issue](https://github.com/Rex16200513/Better_Doubao/issues/new/choose) 反馈问题或提出功能建议，也欢迎 Fork 仓库后提交 Pull Request（提交前请确保 `npm run typecheck && npm test && npm run build` 全部通过）。
+- **技术栈**：TypeScript (Strict Mode) · Vite + `@crxjs/vite-plugin` · Chrome / Edge Manifest V3 · 原生 CSS Variables
+- **隐私安全**：所有设置、文件夹、语料、高亮与收藏仅保存在浏览器扩展本地私有存储（`chrome.storage.local`），按账号隔离，**零后端、不上传任何数据**。
+- **质量保障**：GitHub Actions CI（Node 20 / 22 矩阵：`typecheck` + `test` + `build`）与 Tag 自动打包发布流水线。
 
-## 许可证
+<details>
+<summary>查看完整项目目录结构</summary>
+
+```text
+better-doubao/
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml              # CI：类型检查 / 单测 / 双端构建校验
+│   │   └── release.yml         # 自动打包并发布 Chrome / Edge ZIP 与校验和
+│   ├── ISSUE_TEMPLATE/
+│   └── PULL_REQUEST_TEMPLATE.md
+├── archive/
+│   └── QuickLocator.legacy.ts  # 归档的旧版独立定位器
+├── src/
+│   ├── core/
+│   │   ├── services/           # StorageService / SettingsService / PageLifecycle
+│   │   ├── types/              # folder.ts / settings.ts
+│   │   └── utils/              # dom.ts / ui.ts（Toast / 确认弹窗）
+│   ├── features/
+│   │   ├── workspace/          # LayoutStudioModal（原型图定制）/ WorkspaceCustomizer（主题与胶囊）
+│   │   ├── sidebar/            # SidebarLauncher（顶部图标栏与双列「更多」抽屉）
+│   │   ├── folder/             # FolderManager（分类文件夹与 8px 色彩圆点）
+│   │   ├── quicklocator/       # NativeLocatorEnhancer（原生点赞同步定位点标星）
+│   │   ├── tools/              # ToolHub（统一工具栏：搜索 / 高亮目录 / 备份）
+│   │   ├── corpusboard/        # CorpusBoard / TextHighlighter（语料板与六色高亮）
+│   │   ├── export/             # ExportManager（PDF / TXT / Markdown 导出）
+│   │   └── latex/              # LatexDownloader（LaTeX 公式复制与下载）
+│   ├── pages/
+│   │   ├── content/            # 内容脚本入口
+│   │   ├── background/         # Manifest V3 Service Worker
+│   │   ├── popup/              # 扩展弹窗页
+│   │   └── options/            # 扩展功能开关设置页
+│   └── assets/styles/
+│       └── content.css
+├── tests/                      # 回归测试、单元测试与构建产物校验
+├── chrome/                     # Chrome Manifest V3 配置与构建输出
+└── edge/                       # Edge Manifest V3 配置与构建输出
+```
+
+</details>
+
+---
+
+## 更新日志
+
+### v2.2.0（最新）
+- 新增可视化原型图 **界面布局与配色定制工作室（⚙）** 与 **6 套全局配色主题**（直连豆包原生 CSS 设计令牌）。
+- 新增输入框上方 **悬浮快捷指令胶囊栏**（闭环左对齐，超 5 个自动收纳至 `+N 更多 ▾`）。
+- 升级 **分类文件夹与 8px 极简色彩圆点**，替换原生对话图标，支持点击圆点一键归类与新建分类。
+- 升级 **侧边栏「更多」双列抽屉**，展开不破坏顶部图标排列。
+- 重构快速定位增强为 **原生点赞联动左侧定位点标星**，归档旧版独立定位器；统一毛玻璃工具面板并修复 PDF 导出空白与表格样式问题。
+- 下载链接：[Release v2.2.0](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.2.0)
+
+<details>
+<summary>查看历史版本（v2.1.0 / v2.0.0）</summary>
+
+#### v2.1.0
+- 深色模式变量适配、扩展设置页功能开关、高亮 6 色筛选与列表内直删、非阻塞 Toast/确认弹窗、PDF 导出安全清洗与自动化 CI/Release 流水线。
+- 下载链接：[Release v2.1.0](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.1.0)
+
+#### v2.0.0
+- 推出统一悬浮工具栏（语料板、对话搜索、高亮与收藏目录、JSON 备份与恢复）、可拖动轻量面板与侧边栏入口收纳。
+- 下载链接：[Release v2.0](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.0)
+
+</details>
+
+---
+
+## 贡献与许可证
+
+欢迎提交 [Issue](https://github.com/Rex16200513/Better_Doubao/issues/new/choose) 反馈问题或建议，也欢迎 Fork 后提交 Pull Request（提交前请确保 `npm run typecheck && npm test && npm run build` 全部通过）。
 
 本项目基于 [MIT License](LICENSE) 开源。
