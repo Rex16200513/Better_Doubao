@@ -1,5 +1,6 @@
 import { downloadFile, escapeHTML, isSafeHttpUrl, resolveUrl, sanitizeFilename } from '../../core/utils/dom';
 import { showConfirmDialog, showToast } from '../../core/utils/ui';
+import { pageLifecycle } from '../../core/services/PageLifecycle';
 
 interface Message {
   id: string;
@@ -13,7 +14,7 @@ export class ExportManager {
   private initialized = false;
   private exportButton: HTMLElement | null = null;
   private dropdownMenu: HTMLElement | null = null;
-  private topbarObserver: MutationObserver | null = null;
+  private unsubscribeDom: (() => void) | null = null;
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
   init(): void {
@@ -62,11 +63,10 @@ export class ExportManager {
     };
 
     checkTopbar();
-    if (!this.topbarObserver) {
-      this.topbarObserver = new MutationObserver(() => {
+    if (!this.unsubscribeDom) {
+      this.unsubscribeDom = pageLifecycle.onDomChange(() => {
         if (!document.getElementById('dbx-export-btn')) checkTopbar();
-      });
-      this.topbarObserver.observe(document.body, { childList: true, subtree: true });
+      }, 150);
     }
   }
 
@@ -320,7 +320,6 @@ export class ExportManager {
       }
     });
 
-    console.log('[ExportManager] Found messages:', messages.length, 'user:', messages.filter(m => m.role === 'user').length, 'assistant:', messages.filter(m => m.role === 'assistant').length, 'with images:', messages.filter(m => m.hasImages).length);
     return messages;
   }
 
@@ -725,8 +724,8 @@ export class ExportManager {
   }
 
   destroy(): void {
-    this.topbarObserver?.disconnect();
-    this.topbarObserver = null;
+    this.unsubscribeDom?.();
+    this.unsubscribeDom = null;
     if (this.outsideClickHandler) {
       document.removeEventListener('click', this.outsideClickHandler);
       this.outsideClickHandler = null;

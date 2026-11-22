@@ -203,7 +203,12 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   const textNode = text => ({ nodeType: 3, textContent: text });
 
   let nextRoot = null;
-  const { ExportManager } = loadTs('src/features/export/ExportManager.ts', () => domUtils, {
+  const { ExportManager } = loadTs('src/features/export/ExportManager.ts', name => {
+    if (name.includes('utils/dom')) return domUtils;
+    if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
+    if (name.includes('PageLifecycle')) return { pageLifecycle: { onDomChange: () => () => {} } };
+    return {};
+  }, {
     Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
     window: { location: { origin: 'https://www.doubao.com' } },
     document: {
@@ -274,6 +279,7 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   const { ToolHub } = loadTs('src/features/tools/ToolHub.ts', name => {
     if (name.includes('StorageService')) return { storageService: {} };
     if (name.includes('CorpusBoard')) return { corpusBoard: { closePanel() {} } };
+    if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
     return { default: { storage: { local: { get: async () => ({ dbxToolsGuideSeen: true }) } } } };
   }, {
     document: {
@@ -302,4 +308,180 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(focusCalls, 1, 'Esc restores focus when closing tools menu');
 }
 
-console.log('PASS: dom utils, storage isolation & migration, latex delayed attr, export sanitization & tables, toolhub Esc focus');
+// 6. SettingsService: defaults, partial updates, non-boolean sanitization, reset
+{
+  const store = {};
+  const browser = {
+    storage: {
+      local: {
+        get: async key => ({ [key]: store[key] }),
+        set: async items => { Object.assign(store, items); },
+      },
+    },
+  };
+  const settingsTypes = loadTs('src/core/types/settings.ts');
+  const { SettingsService, mergeSettings } = loadTs('src/core/services/SettingsService.ts', name => {
+    if (name.includes('types/settings')) return settingsTypes;
+    return { default: browser };
+  });
+
+  const merged = mergeSettings({ enableExport: false, autoIndexLongChat: 'bad-type' });
+  assert.equal(merged.enableExport, false);
+  assert.equal(merged.autoIndexLongChat, true, 'non-boolean falls back to default');
+  assert.equal(merged.enableQuickLocator, true);
+
+  const svc = new SettingsService();
+  await svc.load();
+  await svc.updateSettings({ enableLatexDownloader: false });
+  assert.equal(svc.getSettings().enableLatexDownloader, false);
+  assert.equal(store.dbxSettings.enableLatexDownloader, false);
+  await svc.resetSettings();
+  assert.equal(svc.getSettings().enableLatexDownloader, true);
+}
+
+// 7. StorageService: starredMeta persistence, removal & backup validation
+{
+  const store = {};
+  const browser = {
+    storage: {
+      local: {
+        get: async keys => (Array.isArray(keys) ? {} : { [keys]: store[keys] }),
+        set: async items => { Object.assign(store, items); },
+      },
+    },
+  };
+  const { StorageService } = loadTs('src/core/services/StorageService.ts', () => ({ default: browser }), {
+    localStorage: { getItem: () => null, removeItem: () => {} },
+    sessionStorage: { getItem: () => null },
+    document: { cookie: '' },
+    window: { setTimeout: fn => { fn(); return 1; } },
+    clearTimeout: () => {},
+  });
+  const svc = new StorageService();
+  await svc.init();
+  await svc.addStarredMessage('chat_1', 2, { messageId: 'msg_2', text: 'Important question' });
+  const data = await svc.getData();
+  assert.equal(data.starredMeta?.chat_1?.[2]?.text, 'Important question');
+
+  const validated = svc.validateBackup({ format: 'better-doubao-backup', version: 1, data });
+  assert.equal(validated.starredMeta?.chat_1?.[2]?.messageId, 'msg_2');
+
+  assert.throws(() => svc.validateBackup({
+    format: 'better-doubao-backup',
+    version: 1,
+    data: { ...data, starredMeta: { chat_1: { 0: { text: 123 } } } },
+  }));
+
+  await svc.removeStarredMessage('chat_1', 2);
+  assert.equal((await svc.getData()).starredMeta?.chat_1?.[2], undefined);
+}
+
+// 8. TextHighlighter: createRangeFromTextOffsets handles text-node boundaries cleanly
+{
+  const nodes = [
+    { data: 'Hello ' },
+    { data: '' },
+    { data: 'World' },
+  ];
+  let createdRange = null;
+  const { TextHighlighter } = loadTs('src/features/corpusboard/TextHighlighter.ts', name => {
+    if (name.includes('StorageService')) return { storageService: {} };
+    if (name.includes('utils/dom')) return domUtils;
+    return {};
+  }, {
+    NodeFilter: { SHOW_TEXT: 4 },
+    document: {
+      createTreeWalker() {
+        let i = -1;
+        return {
+          get currentNode() { return nodes[i]; },
+          nextNode() { i++; return i < nodes.length; },
+        };
+      },
+      createRange() {
+        createdRange = {
+          setStart(node, offset) { this.startContainer = node; this.startOffset = offset; },
+          setEnd(node, offset) { this.endContainer = node; this.endOffset = offset; },
+        };
+        return createdRange;
+      },
+    },
+  });
+
+  const highlighter = new TextHighlighter();
+  // Offset 6 is exact boundary between "Hello " (len 6), "" (len 0), and "World" (starts at 6)
+  const range = highlighter.createRangeFromTextOffsets({}, 6, 11);
+  assert.equal(range.startContainer, nodes[2], 'start lands at beginning of next non-empty text node');
+  assert.equal(range.startOffset, 0);
+  assert.equal(range.endContainer, nodes[2]);
+  assert.equal(range.endOffset, 5);
+}
+
+// 9. PageLifecycle: SPA URL notifications & clean unsubscribe
+{
+  let currentHref = 'https://www.doubao.com/chat/a';
+  const winListeners = {};
+  const { PageLifecycle } = loadTs('src/core/services/PageLifecycle.ts', () => ({}), {
+    window: {
+      location: { get href() { return currentHref; } },
+      addEventListener(evt, fn) { winListeners[evt] = fn; },
+      removeEventListener(evt) { delete winListeners[evt]; },
+      setInterval: () => 42,
+      setTimeout,
+    },
+    clearInterval: () => {},
+    clearTimeout,
+    document: { body: null },
+  });
+
+  const lifecycle = new PageLifecycle();
+  const seen = [];
+  const off = lifecycle.onUrlChange(url => seen.push(url));
+  currentHref = 'https://www.doubao.com/chat/b';
+  winListeners.popstate();
+  winListeners.popstate(); // duplicate URL should not re-fire
+  assert.deepEqual(seen, ['https://www.doubao.com/chat/b']);
+  off();
+  assert.equal(winListeners.popstate, undefined, 'listeners cleaned up after last unsubscribe');
+}
+
+// 10. UI utils: showConfirmDialog Esc cancellation & confirm resolution
+{
+  const keyHandlers = new Set();
+  const makeNode = () => {
+    const handlers = {};
+    return {
+      className: '',
+      textContent: '',
+      style: {},
+      children: [],
+      setAttribute() {},
+      append(...items) { this.children.push(...items); },
+      appendChild(item) { this.children.push(item); },
+      addEventListener(ev, fn) { handlers[ev] = fn; },
+      click() { handlers.click?.({ target: this }); },
+      focus() {},
+      remove() { this.removed = true; },
+      _handlers: handlers,
+    };
+  };
+  const appended = [];
+  const { showConfirmDialog } = loadTs('src/core/utils/ui.ts', () => ({}), {
+    document: {
+      createElement: makeNode,
+      body: { appendChild(el) { appended.push(el); } },
+      addEventListener(_ev, fn) { keyHandlers.add(fn); },
+      removeEventListener(_ev, fn) { keyHandlers.delete(fn); },
+    },
+    window: { setTimeout },
+  });
+
+  const escPromise = showConfirmDialog({ title: 'Test', message: 'Proceed?' });
+  for (const fn of Array.from(keyHandlers)) {
+    fn({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+  }
+  assert.equal(await escPromise, false, 'Escape resolves confirm dialog as false');
+  assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
+}
+
+console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub');

@@ -31,18 +31,13 @@ export class FolderManager {
     if (localStorage.getItem('dbx_legacy_folder_expanded') === null) {
       this.sectionCollapsed = true;
     }
-    console.log('[FolderManager] Loaded data, folders:', this.data.folders.length);
     this.data.folders.forEach(f => f.isExpanded = false);
     await this.waitForSidebar();
-    console.log('[FolderManager] Sidebar ready, creating folder section');
     this.findSidebarContainer();
     this.setupObservers();
     
     if (this.containerElement) {
-      console.log('[FolderManager] Container exists, rendering');
       this.render();
-    } else {
-      console.log('[FolderManager] Container not found!');
     }
     
     this.addConversationIndicators();

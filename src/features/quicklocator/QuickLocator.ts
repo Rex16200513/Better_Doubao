@@ -1,5 +1,6 @@
 import { storageService } from '../../core/services/StorageService';
 import { settingsService } from '../../core/services/SettingsService';
+import { pageLifecycle } from '../../core/services/PageLifecycle';
 
 export interface MessageMarker {
   id: string;
@@ -16,8 +17,7 @@ export class QuickLocator {
   private locatorBar: HTMLElement | null = null;
   private initialized = false;
   private observer: MutationObserver | null = null;
-  private urlObserver: MutationObserver | null = null;
-  private urlPollTimer: number | null = null;
+  private unsubscribeUrl: (() => void) | null = null;
   private activeScrollContainer: HTMLElement | null = null;
   private scrollSyncHandler: (() => void) | null = null;
   private scrollRafId: number | null = null;
@@ -54,23 +54,10 @@ export class QuickLocator {
   }
 
   private setupUrlChangeListener(): void {
-    let lastUrl = window.location.href;
-    this.urlObserver?.disconnect();
-    this.urlObserver = new MutationObserver(() => {
-      if (window.location.href !== lastUrl) {
-        lastUrl = window.location.href;
-        void this.onConversationChange();
-      }
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
+      void this.onConversationChange();
     });
-    this.urlObserver.observe(document.body, { childList: true, subtree: true });
-    
-    if (this.urlPollTimer) clearInterval(this.urlPollTimer);
-    this.urlPollTimer = window.setInterval(() => {
-      if (window.location.href !== lastUrl) {
-        lastUrl = window.location.href;
-        void this.onConversationChange();
-      }
-    }, 1000);
   }
 
   private async onConversationChange(): Promise<void> {
@@ -605,14 +592,8 @@ export class QuickLocator {
       this.observer.disconnect();
       this.observer = null;
     }
-    if (this.urlObserver) {
-      this.urlObserver.disconnect();
-      this.urlObserver = null;
-    }
-    if (this.urlPollTimer) {
-      clearInterval(this.urlPollTimer);
-      this.urlPollTimer = null;
-    }
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = null;
     if (this.tooltipEl) {
       this.tooltipEl.remove();
       this.tooltipEl = null;

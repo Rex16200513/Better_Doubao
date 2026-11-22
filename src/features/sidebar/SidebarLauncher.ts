@@ -1,20 +1,23 @@
+import { pageLifecycle } from '../../core/services/PageLifecycle';
+
 const NAV_ITEMS = [
   '新工作任务', '新对话', 'AI 创作', '定时任务', '插件 · 技能 · 伙伴', '插件 · 技能 · 连接器 · 伙伴', 'API 服务'
 ];
 
 export class SidebarLauncher {
-  private observer: MutationObserver | null = null;
-  private timer: number | null = null;
+  private unsubscribeDom: (() => void) | null = null;
   private renderedControls: HTMLElement[] = [];
 
   init(): void {
-    if (this.observer) return;
-    this.observer = new MutationObserver(() => {
-      if (this.timer) window.clearTimeout(this.timer);
-      this.timer = window.setTimeout(() => this.render(), 100);
-    });
-    this.observer.observe(document.body, { childList: true, subtree: true });
+    if (this.unsubscribeDom) return;
+    this.unsubscribeDom = pageLifecycle.onDomChange(() => this.render(), 100);
     this.render();
+  }
+
+  destroy(): void {
+    this.unsubscribeDom?.();
+    this.unsubscribeDom = null;
+    this.renderedControls = [];
   }
 
   private render(): void {
