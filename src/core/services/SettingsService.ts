@@ -15,7 +15,6 @@ type SettingsListener = (settings: ExtensionSettings) => void;
 const BOOLEAN_KEYS = [
   'enableSidebarLauncher',
   'enableFolders',
-  'enableNativeLocatorEnhancer',
   'enableCorpusAndHighlight',
   'enableExport',
   'enableLatexDownloader',
