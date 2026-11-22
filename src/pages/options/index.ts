@@ -5,7 +5,6 @@ const SETTING_KEYS: Array<keyof ExtensionSettings> = [
   'enableSidebarLauncher',
   'enableQuickLocator',
   'autoIndexLongChat',
-  'enableFolderManager',
   'enableCorpusAndHighlight',
   'enableExport',
   'enableLatexDownloader',

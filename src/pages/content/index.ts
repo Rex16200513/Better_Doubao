@@ -1,4 +1,3 @@
-import { folderManager } from '../../features/folder/FolderManager';
 import { sidebarLauncher } from '../../features/sidebar/SidebarLauncher';
 import { quickLocator } from '../../features/quicklocator/QuickLocator';
 import { corpusBoard } from '../../features/corpusboard/CorpusBoard';
@@ -10,7 +9,6 @@ import { toolHub } from '../../features/tools/ToolHub';
 
 function initFeatures() {
   const settings = settingsService.getSettings();
-  if (settings.enableFolderManager) folderManager.init();
   if (settings.enableSidebarLauncher) sidebarLauncher.init();
   if (settings.enableQuickLocator) quickLocator.init();
   if (settings.enableCorpusAndHighlight) {
