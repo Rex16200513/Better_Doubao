@@ -116,16 +116,24 @@
 
       <div class="row">
         <div>
-          <div class="row-title">侧边栏快捷图标栏</div>
-          <div class="row-desc">将左侧边栏常用原生入口收纳为横排图标，减少信息密度。</div>
+          <div class="row-title">侧边栏快捷图标栏与「更多」抽屉</div>
+          <div class="row-desc">将左侧边栏常用入口收纳为横排图标，并在展开「更多」时以双列抽屉承接，不破坏侧边栏布局。</div>
         </div>
         <label class="toggle"><input id="enableSidebarLauncher" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">豆包原生快速定位增强</div>
-          <div class="row-desc">在豆包官方快速定位卡片上叠加关键词筛选、单条收藏星标与「仅看收藏」过滤，不重复绘制定位条。</div>
+          <div class="row-title">分类文件夹与极简色彩圆点</div>
+          <div class="row-desc">用 8px 极简分类圆点替换「最近」列表原生对话图标，支持点击圆点一键归类与彩色文件夹管理。</div>
+        </div>
+        <label class="toggle"><input id="enableFolders" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">原生点赞联动定位点标星</div>
+          <div class="row-desc">点击豆包消息底部的原生「赞 👍」时，自动同步高亮左侧原生快速定位点刻度并收入收藏目录。</div>
         </div>
         <label class="toggle"><input id="enableNativeLocatorEnhancer" type="checkbox" checked><span class="slider"></span></label>
       </div>
@@ -133,7 +141,7 @@
       <div class="row">
         <div>
           <div class="row-title">Better Doubao 工具栏、语料板与高亮</div>
-          <div class="row-desc">启用悬浮工具栏（语料板、对话搜索、高亮与收藏目录、JSON 备份恢复）及划词工具条。</div>
+          <div class="row-desc">启用悬浮工具栏（语料板、对话搜索、高亮与收藏、可视化布局与配色定制、JSON 备份恢复）及划词高亮。</div>
         </div>
         <label class="toggle"><input id="enableCorpusAndHighlight" type="checkbox" checked><span class="slider"></span></label>
       </div>
@@ -141,23 +149,31 @@
       <div class="row">
         <div>
           <div class="row-title">多格式对话导出</div>
-          <div class="row-desc">在顶部导航栏提供 PDF / TXT / Markdown 导出入口。</div>
+          <div class="row-desc">在顶部导航栏提供 PDF / TXT / Markdown 清爽导出入口。</div>
         </div>
         <label class="toggle"><input id="enableExport" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">隐藏「下载电脑版」与底部推广</div>
-          <div class="row-desc">移除顶栏下载客户端按钮与侧边栏底部推广区域，让对话界面更纯粹。</div>
+          <div class="row-title">隐藏顶栏「下载电脑版」按钮</div>
+          <div class="row-desc">隐藏顶部导航栏的桌面客户端下载推广按钮。</div>
         </div>
         <label class="toggle"><input id="hideDownloadPromo" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
+          <div class="row-title">隐藏侧边栏底部「关于豆包」推广区</div>
+          <div class="row-desc">隐藏侧边栏左下角的「关于豆包」与客户端推广栏。</div>
+        </div>
+        <label class="toggle"><input id="hideSidebarFooter" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
           <div class="row-title">精简输入框底栏技能按钮</div>
-          <div class="row-desc">默认只保留常用技能按钮，可在豆包页「Better Doubao 工具栏 → 界面与按钮定制」实时勾选或添加自定义快捷按钮。</div>
+          <div class="row-desc">可在豆包页「Better Doubao 工具栏 → ⚙ 界面布局与配色定制」原型图弹窗中直观勾选、添加悬浮快捷胶囊与切换 6 套主题配色。</div>
         </div>
         <label class="toggle"><input id="compactInputToolbar" type="checkbox" checked><span class="slider"></span></label>
       </div>

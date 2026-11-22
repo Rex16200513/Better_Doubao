@@ -257,27 +257,6 @@ body[data-theme="dark"],
   margin-bottom: 12px;
 }
 
-.dbx-color-picker {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: none;
-  cursor: pointer;
-}
-
-.dbx-color-picker::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.dbx-color-picker::-webkit-color-swatch {
-  border: none;
-}
-
-.dbx-popup-colors-lg .dbx-color-option {
-  width: 28px;
-  height: 28px;
-}
-
 .dbx-color-option {
   width: 22px;
   height: 22px;
@@ -292,27 +271,8 @@ body[data-theme="dark"],
 }
 
 .dbx-color-option.selected {
-  border-color: #000 !important;
+  border-color: var(--dbx-text-primary) !important;
   transform: scale(1.1);
-}
-
-.dbx-color-custom {
-  background-image: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
-  background-color: transparent;
-  position: relative;
-}
-
-.dbx-color-custom.has-custom-color {
-  background-image: none;
-  background-color: var(--custom-color, #3b82f6) !important;
-}
-
-.dbx-color-custom input[type="color"] {
-  position: absolute;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
 }
 
 .dbx-popup-actions {
@@ -341,12 +301,12 @@ body[data-theme="dark"],
 }
 
 .dbx-popup-btn-confirm {
-  background: var(--dbx-folder-primary);
+  background: var(--dbx-accent);
   color: white;
 }
 
 .dbx-popup-btn-confirm:hover {
-  background: #4338ca;
+  opacity: 0.92;
 }
 
 .dbx-popup-btn-danger {
@@ -363,39 +323,6 @@ body[data-theme="dark"],
   color: var(--dbx-folder-text-secondary);
   margin-bottom: 16px;
   text-align: center;
-}
-
-.dbx-folder-context-menu {
-  background: var(--dbx-folder-bg-base);
-  border: 1px solid var(--dbx-folder-border);
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  padding: 4px;
-  min-width: 130px;
-}
-
-.dbx-folder-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--dbx-folder-text-primary);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.dbx-folder-menu-item:hover {
-  background-color: var(--dbx-folder-bg-hover);
-}
-
-.dbx-folder-menu-item.danger {
-  color: #ef4444;
-}
-
-.dbx-folder-menu-item.danger:hover {
-  background-color: rgba(239, 68, 68, 0.1);
 }
 
 /* Native quick-locator tick highlight synced with Doubao native "赞" clicks */
@@ -1174,34 +1101,6 @@ html[data-dbx-theme="midnight"] [data-message-id] code {
 @keyframes dbx-panel-in {
   from { opacity: 0; transform: translateY(4px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes dbx-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.dbx-locator-refresh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--dbx-text-muted);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  flex-shrink: 0;
-}
-.dbx-locator-refresh:hover {
-  background: var(--dbx-surface-hover);
-  color: var(--dbx-accent);
-}
-.dbx-locator-refresh.is-spinning svg {
-  animation: dbx-spin 0.9s linear infinite;
 }
 
 #dbx-tools-menu {

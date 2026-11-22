@@ -9,8 +9,6 @@ const PRIMARY_NAV_ITEMS = [
   '插件 · 技能 · 连接器 · 伙伴',
 ];
 
-const MORE_TOGGLE_LABELS = new Set(['更多', '收起']);
-
 const SECONDARY_NAV_ITEMS = [
   'AI 创作',
   '资料库',
@@ -238,5 +236,4 @@ export class SidebarLauncher {
   }
 }
 
-export { MORE_TOGGLE_LABELS };
 export const sidebarLauncher = new SidebarLauncher();

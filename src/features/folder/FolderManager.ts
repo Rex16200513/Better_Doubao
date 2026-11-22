@@ -502,6 +502,17 @@ export class FolderManager {
     this.positionPopover(pop, anchor);
   }
 
+  private refreshSidebarDecorations(): void {
+    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+    if (sidebar) this.decorateConversationList(sidebar);
+  }
+
+  private async refreshFoldersAndDecorations(): Promise<void> {
+    this.data = await storageService.getData();
+    this.renderFolders();
+    this.refreshSidebarDecorations();
+  }
+
   private openFolderMenu(folder: Folder, anchor: HTMLElement): void {
     this.closePopover();
 
@@ -531,10 +542,7 @@ export class FolderManager {
       });
       if (!ok) return;
       await storageService.deleteFolder(folder.id);
-      this.data = await storageService.getData();
-      this.renderFolders();
-      const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
-      if (sidebar) this.decorateConversationList(sidebar);
+      await this.refreshFoldersAndDecorations();
       showToast(`已删除分类「${folder.name}」`, 'info');
     })());
 
@@ -620,11 +628,8 @@ export class FolderManager {
         showToast(autoAssign ? `已创建「${name}」并归类当前对话` : `已创建分类「${name}」`, 'success');
       }
 
-      this.data = await storageService.getData();
       this.closeDialog();
-      this.renderFolders();
-      const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
-      if (sidebar) this.decorateConversationList(sidebar);
+      await this.refreshFoldersAndDecorations();
     };
 
     card.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.closeDialog());
@@ -646,18 +651,12 @@ export class FolderManager {
 
   private async assignToFolder(folderId: string, conv: ConversationReference): Promise<void> {
     await storageService.addConversationToFolder(folderId, conv);
-    this.data = await storageService.getData();
-    this.renderFolders();
-    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
-    if (sidebar) this.decorateConversationList(sidebar);
+    await this.refreshFoldersAndDecorations();
   }
 
   private async removeFromFolder(folderId: string, conversationId: string): Promise<void> {
     await storageService.removeConversationFromFolder(folderId, conversationId);
-    this.data = await storageService.getData();
-    this.renderFolders();
-    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
-    if (sidebar) this.decorateConversationList(sidebar);
+    await this.refreshFoldersAndDecorations();
   }
 
   private async handleDropIntoFolder(targetFolderId: string, e: DragEvent): Promise<void> {
@@ -690,8 +689,7 @@ export class FolderManager {
       await storageService.updateFolder(folder.id, { isExpanded: true });
     }
     this.renderFolders();
-    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
-    if (sidebar) this.decorateConversationList(sidebar);
+    this.refreshSidebarDecorations();
     showToast(`已归类到「${folder?.name || '文件夹'}」`, 'success');
   }
 
