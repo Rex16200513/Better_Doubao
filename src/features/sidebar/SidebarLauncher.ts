@@ -1,19 +1,35 @@
 import { pageLifecycle } from '../../core/services/PageLifecycle';
 
-const NAV_ITEMS = [
+const PRIMARY_NAV_ITEMS = [
   '新工作任务',
   '新对话',
-  '更多',
-  'AI 创作',
+  '工作台',
   '定时任务',
   '插件 · 技能 · 伙伴',
   '插件 · 技能 · 连接器 · 伙伴',
-  'API 服务',
 ];
+
+const MORE_TOGGLE_LABELS = new Set(['更多', '收起']);
+
+const SECONDARY_NAV_ITEMS = [
+  'AI 创作',
+  '资料库',
+  'API 服务',
+  '云盘',
+  '智能体',
+  '创作中心',
+  '连接器',
+];
+
+interface NavTarget {
+  label: string;
+  control: HTMLElement;
+  wrapper: HTMLElement;
+}
 
 export class SidebarLauncher {
   private unsubscribeDom: (() => void) | null = null;
-  private renderedControls: HTMLElement[] = [];
+  private renderedSignature = '';
   private tooltipEl: HTMLElement | null = null;
 
   init(): void {
@@ -25,10 +41,14 @@ export class SidebarLauncher {
   destroy(): void {
     this.unsubscribeDom?.();
     this.unsubscribeDom = null;
-    this.renderedControls = [];
+    this.renderedSignature = '';
     this.hideTooltip();
     this.tooltipEl?.remove();
     this.tooltipEl = null;
+    document.getElementById('dbx-sidebar-launcher-shell')?.remove();
+    document.querySelectorAll('.dbx-native-nav-hidden').forEach(el => {
+      el.classList.remove('dbx-native-nav-hidden');
+    });
   }
 
   private showTooltip(button: HTMLElement, label: string): void {
@@ -57,60 +77,166 @@ export class SidebarLauncher {
     this.tooltipEl?.classList.remove('is-visible');
   }
 
+  private resolveNavTarget(labels: HTMLElement[], targetLabel: string): NavTarget | null {
+    const span = labels.find(
+      (item) =>
+        item.textContent?.trim() === targetLabel &&
+        !item.closest('#dbx-sidebar-launcher-shell, #dbx-sidebar-launcher')
+    );
+    if (!span) return null;
+    const control =
+      span.closest<HTMLElement>('.nav-link-IkIer0') ||
+      span.closest<HTMLElement>('a, button, [role="button"]') ||
+      span.parentElement;
+    if (!control) return null;
+    const candidateWrapper =
+      control.closest<HTMLElement>('[position]') ||
+      control.closest<HTMLElement>('[aria-haspopup="dialog"]') ||
+      (control.parentElement && control.parentElement.childElementCount === 1 ? control.parentElement : control);
+    const wrapper =
+      candidateWrapper && candidateWrapper.querySelectorAll('a, button, [role="button"]').length <= 1
+        ? candidateWrapper
+        : control;
+    return wrapper ? { label: targetLabel, control, wrapper } : null;
+  }
+
   private render(): void {
     const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
     if (!sidebar) return;
 
-    const labels = Array.from(sidebar.querySelectorAll<HTMLElement>('span.font-medium'));
-    const targets = NAV_ITEMS.map((label) => {
-      const span = labels
-        .find((item) => item.textContent?.trim() === label && !item.closest('#dbx-sidebar-launcher'));
-      const control = span?.closest<HTMLElement>('.nav-link-IkIer0') || span?.closest<HTMLElement>('a, button, [role="button"]');
-      const wrapper = control?.closest<HTMLElement>('[position]') ||
-        control?.closest<HTMLElement>('[aria-haspopup="dialog"]') || control?.parentElement;
-      return control && wrapper ? { label, control, wrapper } : null;
-    }).filter((item): item is { label: string; control: HTMLElement; wrapper: HTMLElement } => !!item);
+    const labels = Array.from(sidebar.querySelectorAll<HTMLElement>('span.font-medium, span, div'))
+      .filter((el) => el.childElementCount === 0 && !el.closest('#dbx-sidebar-launcher-shell, #dbx-sidebar-launcher'));
 
-    if (!targets.length) return;
-    const first = targets[0].wrapper;
-    let bar = sidebar.querySelector<HTMLElement>('#dbx-sidebar-launcher');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'dbx-sidebar-launcher';
+    const primaryTargets = PRIMARY_NAV_ITEMS
+      .map((label) => this.resolveNavTarget(labels, label))
+      .filter((item): item is NavTarget => !!item);
+
+    const moreToggle =
+      this.resolveNavTarget(labels, '更多') ||
+      this.resolveNavTarget(labels, '收起');
+
+    const isExpanded = moreToggle?.label === '收起';
+
+    const secondaryTargets = SECONDARY_NAV_ITEMS
+      .map((label) => this.resolveNavTarget(labels, label))
+      .filter((item): item is NavTarget => !!item);
+
+    if (!primaryTargets.length && !moreToggle) return;
+
+    const anchorWrapper = (primaryTargets[0] || moreToggle)!.wrapper;
+    const anchorParent = anchorWrapper.parentElement;
+    if (!anchorParent) return;
+
+    // Clean up legacy id if present from earlier version
+    const legacyBar = sidebar.querySelector<HTMLElement>('#dbx-sidebar-launcher');
+    if (legacyBar && !legacyBar.closest('#dbx-sidebar-launcher-shell')) {
+      legacyBar.remove();
     }
-    bar.classList.toggle('is-compact', targets.length <= 4);
 
-    if (bar.parentElement !== first.parentElement || bar.nextElementSibling !== first) {
-      first.parentElement?.insertBefore(bar, first);
+    let shell = sidebar.querySelector<HTMLElement>('#dbx-sidebar-launcher-shell');
+    if (!shell) {
+      shell = document.createElement('div');
+      shell.id = 'dbx-sidebar-launcher-shell';
     }
 
-    const controlsChanged = bar.childElementCount !== targets.length ||
-      targets.some(({ control }, index) => this.renderedControls[index] !== control);
-    if (controlsChanged) {
-      this.hideTooltip();
-      bar.replaceChildren();
-      for (const { label, control } of targets) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'dbx-launcher-button';
-        button.setAttribute('aria-label', label);
+    if (shell.parentElement !== anchorParent || shell.nextElementSibling !== anchorWrapper) {
+      anchorParent.insertBefore(shell, anchorWrapper);
+    }
+
+    // Hide all managed native nav rows so expanding "更多" never breaks sidebar flow.
+    const allManaged = [
+      ...primaryTargets,
+      ...(moreToggle ? [moreToggle] : []),
+      ...secondaryTargets,
+    ];
+    for (const item of allManaged) {
+      if (item.wrapper !== shell && item.wrapper !== anchorParent) {
+        item.wrapper.classList.add('dbx-native-nav-hidden');
+      } else {
+        item.control.classList.add('dbx-native-nav-hidden');
+      }
+    }
+
+    const signature = [
+      primaryTargets.map((t) => t.label).join(','),
+      moreToggle ? moreToggle.label : '',
+      isExpanded ? secondaryTargets.map((t) => t.label).join(',') : '',
+    ].join('|');
+
+    if (signature === this.renderedSignature && shell.childElementCount > 0) {
+      return;
+    }
+    this.renderedSignature = signature;
+    this.hideTooltip();
+    shell.replaceChildren();
+
+    // 1. Fixed primary icon strip (icons never shift position when toggling "更多")
+    const bar = document.createElement('div');
+    bar.id = 'dbx-sidebar-launcher';
+    bar.classList.toggle('is-compact', primaryTargets.length + (moreToggle ? 1 : 0) <= 4);
+
+    for (const { label, control } of primaryTargets) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'dbx-launcher-button';
+      button.setAttribute('aria-label', label);
+      const icon = control.querySelector('svg')?.cloneNode(true);
+      if (icon) button.appendChild(icon);
+      button.addEventListener('mouseenter', () => this.showTooltip(button, label));
+      button.addEventListener('mouseleave', () => this.hideTooltip());
+      button.addEventListener('focus', () => this.showTooltip(button, label));
+      button.addEventListener('blur', () => this.hideTooltip());
+      button.addEventListener('click', () => {
+        this.hideTooltip();
+        control.click();
+      });
+      bar.appendChild(button);
+    }
+
+    if (moreToggle) {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = `dbx-launcher-button dbx-launcher-more-btn${isExpanded ? ' is-expanded' : ''}`;
+      const tooltipText = isExpanded ? '收起更多' : '更多';
+      toggleBtn.setAttribute('aria-label', tooltipText);
+      toggleBtn.setAttribute('aria-expanded', String(isExpanded));
+      const icon = moreToggle.control.querySelector('svg')?.cloneNode(true);
+      if (icon) toggleBtn.appendChild(icon);
+      toggleBtn.addEventListener('mouseenter', () => this.showTooltip(toggleBtn, tooltipText));
+      toggleBtn.addEventListener('mouseleave', () => this.hideTooltip());
+      toggleBtn.addEventListener('focus', () => this.showTooltip(toggleBtn, tooltipText));
+      toggleBtn.addEventListener('blur', () => this.hideTooltip());
+      toggleBtn.addEventListener('click', () => {
+        this.hideTooltip();
+        moreToggle.control.click();
+      });
+      bar.appendChild(toggleBtn);
+    }
+
+    shell.appendChild(bar);
+
+    // 2. Clean 2-column compact drawer for secondary items when expanded
+    if (isExpanded && secondaryTargets.length > 0) {
+      const drawer = document.createElement('div');
+      drawer.id = 'dbx-sidebar-launcher-drawer';
+      for (const { label, control } of secondaryTargets) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'dbx-launcher-drawer-item';
         const icon = control.querySelector('svg')?.cloneNode(true);
-        if (icon) button.appendChild(icon);
-        button.addEventListener('mouseenter', () => this.showTooltip(button, label));
-        button.addEventListener('mouseleave', () => this.hideTooltip());
-        button.addEventListener('focus', () => this.showTooltip(button, label));
-        button.addEventListener('blur', () => this.hideTooltip());
-        button.addEventListener('click', () => {
-          this.hideTooltip();
+        if (icon) chip.appendChild(icon);
+        const text = document.createElement('span');
+        text.textContent = label;
+        chip.appendChild(text);
+        chip.addEventListener('click', () => {
           control.click();
         });
-        bar.appendChild(button);
+        drawer.appendChild(chip);
       }
-      this.renderedControls = targets.map(({ control }) => control);
+      shell.appendChild(drawer);
     }
-
-    for (const { wrapper } of targets) wrapper.classList.add('dbx-native-nav-hidden');
   }
 }
 
+export { MORE_TOGGLE_LABELS };
 export const sidebarLauncher = new SidebarLauncher();

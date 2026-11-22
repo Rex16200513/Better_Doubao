@@ -37,6 +37,17 @@ function isNearWhiteOpaque(bg: string): boolean {
   return a >= 0.75 && r >= 238 && g >= 238 && b >= 238;
 }
 
+function hasWhiteGradient(bgImage: string): boolean {
+  if (!bgImage || bgImage === 'none') return false;
+  const lower = bgImage.toLowerCase();
+  return lower.includes('gradient') && (
+    lower.includes('255, 255, 255') ||
+    lower.includes('255,255,255') ||
+    lower.includes('#fff') ||
+    lower.includes('white')
+  );
+}
+
 export class WorkspaceCustomizer {
   private unsubscribeDom: (() => void) | null = null;
   private unsubscribeSettings: (() => void) | null = null;
@@ -131,9 +142,9 @@ export class WorkspaceCustomizer {
   }
 
   /**
-   * Tag Doubao's structural white containers (topbar, main chat canvas, sidebar,
-   * active sidebar item, composer card) so theme CSS tints the whole workspace evenly
-   * regardless of obfuscated host class names.
+   * Tag Doubao's structural white containers (topbar, main chat canvas, white gradient masks,
+   * sidebar, active sidebar item, and the exact rounded composer card) so theme CSS harmonizes
+   * the whole workspace evenly without leftover white rectangles.
    */
   private tagThemeSurfaces(): void {
     const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
@@ -141,15 +152,15 @@ export class WorkspaceCustomizer {
 
     if (sidebar) {
       sidebar.dataset.dbxSurface = 'sidebar';
+      const sidebarWidth = sidebar.getBoundingClientRect().width;
       const sidebarChildren = sidebar.querySelectorAll<HTMLElement>('div, nav, aside, footer, section');
       for (const el of sidebarChildren) {
         if (el.closest('[id^="dbx-"]')) continue;
         const rect = el.getBoundingClientRect();
-        if (rect.width < 120 || rect.height < 28) continue;
+        if (rect.width < 100 || rect.height < 26) continue;
         const bg = window.getComputedStyle(el).backgroundColor;
         if (!isNearWhiteOpaque(bg)) continue;
-        // Small single-row white pill in sidebar = active conversation item
-        if (rect.height <= 56 && rect.width < sidebar.getBoundingClientRect().width - 4) {
+        if (rect.height <= 56 && rect.width < sidebarWidth - 4) {
           el.dataset.dbxSurface = 'sidebar-active';
         } else {
           el.dataset.dbxSurface = 'sidebar';
@@ -159,21 +170,45 @@ export class WorkspaceCustomizer {
 
     if (composer) {
       composer.dataset.dbxSurface = 'composer';
+      // Also clear any inner pure-white wrapper inside the composer card so the card tint shows cleanly.
+      const innerWhite = composer.querySelectorAll<HTMLElement>('div, section, form');
+      for (const inner of innerWhite) {
+        if (inner.closest('button, [role="button"], [id^="dbx-"]')) continue;
+        const r = inner.getBoundingClientRect();
+        if (r.width < 160 || r.height < 28) continue;
+        const style = window.getComputedStyle(inner);
+        if (isNearWhiteOpaque(style.backgroundColor)) {
+          inner.dataset.dbxSurface = 'composer-inner';
+        }
+      }
     }
 
     const containers = document.querySelectorAll<HTMLElement>('main, header, section, div');
     for (const el of containers) {
       if (el.dataset.dbxSurface) continue;
-      if (el.closest('#flow_chat_sidebar, [id^="dbx-"], .dbx-unified-panel, [data-message-id], pre, code, table')) continue;
+      if (el.closest('#flow_chat_sidebar, [id^="dbx-"], .dbx-unified-panel, [data-message-id], pre, code, table, button, [role="button"], [role="tablist"], [role="dialog"]')) {
+        continue;
+      }
       if (composer && (el === composer || composer.contains(el))) continue;
 
       const rect = el.getBoundingClientRect();
-      if (rect.width < 280 || rect.height < 36) continue;
+      if (rect.width < 64 || rect.height < 24) continue;
 
-      const bg = window.getComputedStyle(el).backgroundColor;
-      if (!isNearWhiteOpaque(bg)) continue;
+      const style = window.getComputedStyle(el);
+      const radius = parseFloat(style.borderTopLeftRadius || '0');
+      const hasShadow = style.boxShadow && style.boxShadow !== 'none';
 
-      if (rect.top <= 16 && rect.height <= 84 && rect.width >= 320) {
+      // Preserve intentional pill toggles / floating popover cards (e.g. "对话 | 工作" segmented control).
+      if (radius >= 16 && (hasShadow || rect.height <= 64) && rect.width < 420) continue;
+
+      if (hasWhiteGradient(style.backgroundImage)) {
+        el.dataset.dbxSurface = 'fade-mask';
+        continue;
+      }
+
+      if (!isNearWhiteOpaque(style.backgroundColor)) continue;
+
+      if (rect.top <= 16 && rect.height <= 84 && rect.width >= 260) {
         el.dataset.dbxSurface = 'topbar';
       } else {
         el.dataset.dbxSurface = 'canvas';
@@ -209,8 +244,8 @@ export class WorkspaceCustomizer {
   }
 
   /**
-   * Locate the full rounded composer card that wraps both the text editor AND the bottom
-   * skill bar (对话 / 项目 / PPT 生成 / 图像生成 / ...).
+   * Locate the exact visible rounded composer card wrapping both the text editor AND
+   * the bottom toolbar (works in both Chat mode and Work mode).
    */
   private findComposerRoot(): HTMLElement | null {
     const input = document.querySelector<HTMLElement>(
@@ -220,28 +255,38 @@ export class WorkspaceCustomizer {
 
     let cur: HTMLElement | null = input.parentElement;
     let fallback: HTMLElement | null = input.parentElement;
-    let bestCard: HTMLElement | null = null;
+    let roundedCard: HTMLElement | null = null;
+    let skillContainer: HTMLElement | null = null;
 
     for (let depth = 0; depth < 9 && cur && cur !== document.body; depth++) {
       const rect = cur.getBoundingClientRect();
       if (rect.width >= 380 && rect.height >= 72 && rect.height <= 340) {
         fallback = cur;
         const text = cur.textContent || '';
-        const hasSkillMarkers =
-          (text.includes('对话') || text.includes('PPT 生成') || text.includes('图像生成') || text.includes('更多技能'));
-        if (hasSkillMarkers) {
-          if (!bestCard) bestCard = cur;
+        const hasToolbar =
+          text.includes('对话') ||
+          text.includes('PPT 生成') ||
+          text.includes('图像生成') ||
+          text.includes('更多技能') ||
+          text.includes('云电脑') ||
+          text.includes('插件') ||
+          text.includes('技能') ||
+          text.includes('项目');
+
+        if (hasToolbar) {
+          if (!skillContainer) skillContainer = cur;
           const style = window.getComputedStyle(cur);
           const radius = parseFloat(style.borderTopLeftRadius || '0');
           const border = parseFloat(style.borderTopWidth || '0');
-          if (radius >= 12 && (border > 0 || isNearWhiteOpaque(style.backgroundColor))) {
-            return cur;
+          if (radius >= 14 && (border > 0 || isNearWhiteOpaque(style.backgroundColor) || style.boxShadow !== 'none')) {
+            roundedCard = cur;
+            break;
           }
         }
       }
       cur = cur.parentElement;
     }
-    return bestCard || fallback;
+    return roundedCard || skillContainer || fallback;
   }
 
   private applyComposerSkillVisibility(compact: boolean, pinnedSkills: string[]): void {
@@ -288,19 +333,23 @@ export class WorkspaceCustomizer {
   }
 
   /**
-   * Align the floating capsule bar flush with the composer card's exact left edge & width.
+   * Closed-loop alignment: reset marginLeft to 0, measure bar's natural left edge,
+   * and shift by the exact delta to composer's left edge (0px drift under any layout).
    */
   private syncQuickBarAlignment(bar: HTMLElement, composer: HTMLElement): void {
-    const parent = bar.parentElement;
-    if (!parent) return;
     const composerRect = composer.getBoundingClientRect();
-    const parentRect = parent.getBoundingClientRect();
     if (composerRect.width < 120) return;
 
-    const leftOffset = Math.max(0, Math.round(composerRect.left - parentRect.left));
+    bar.style.alignSelf = 'flex-start';
     bar.style.width = `${Math.round(composerRect.width)}px`;
-    bar.style.marginLeft = `${leftOffset}px`;
+    bar.style.marginLeft = '0px';
     bar.style.marginRight = 'auto';
+
+    const baseLeft = bar.getBoundingClientRect().left;
+    const neededOffset = Math.round(composerRect.left - baseLeft);
+    if (Math.abs(neededOffset) > 1) {
+      bar.style.marginLeft = `${neededOffset}px`;
+    }
   }
 
   private renderCustomQuickButtons(buttons: CustomQuickButton[]): void {

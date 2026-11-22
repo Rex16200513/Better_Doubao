@@ -452,7 +452,11 @@ export class NativeLocatorEnhancer {
 
     ticks.forEach((tick, index) => {
       const liked = this.starredSet.has(index);
-      tick.classList.toggle('dbx-native-tick-liked', liked);
+      const visual = this.getVisualTickElement(tick);
+      if (visual !== tick) {
+        tick.classList.remove('dbx-native-tick-liked');
+      }
+      visual.classList.toggle('dbx-native-tick-liked', liked);
     });
   }
 }
