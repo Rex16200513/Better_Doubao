@@ -504,9 +504,9 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-// 11. NativeLocatorEnhancer: native like button recognition (distinguishes 赞 vs 踩)
+// 11. NativeLocatorEnhancer: native like button recognition & visual top-to-bottom sorting
 {
-  const { hasNativeLocatorTimestamp, isNativeLikeButton } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
+  const { hasNativeLocatorTimestamp, isNativeLikeButton, sortElementsTopToBottom } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
     if (name.includes('StorageService')) return { storageService: { getStarredMessages: async () => [] } };
     if (name.includes('PageLifecycle')) return { pageLifecycle: { onUrlChange: () => () => {}, onDomChange: () => () => {} } };
     if (name.includes('utils/dom')) return domUtils;
@@ -515,6 +515,18 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   });
   assert.equal(hasNativeLocatorTimestamp('3月12日 15:21'), true);
   assert.equal(hasNativeLocatorTimestamp('普通文本无时间戳'), false);
+
+  // Column-reverse DOM order (bottom message first in DOM) must sort visually top-to-bottom
+  const reversedMsgs = [
+    { id: 'newest', getBoundingClientRect: () => ({ top: 900 }) },
+    { id: 'middle', getBoundingClientRect: () => ({ top: 450 }) },
+    { id: 'oldest', getBoundingClientRect: () => ({ top: 100 }) },
+  ];
+  assert.deepEqual(
+    [...sortElementsTopToBottom(reversedMsgs)].map(m => m.id),
+    ['oldest', 'middle', 'newest'],
+    'reversed DOM messages sorted visually top-to-bottom'
+  );
 
   const makeBtn = (attrs, text = '') => ({
     getAttribute: k => attrs[k] ?? null,

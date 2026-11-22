@@ -75,7 +75,6 @@ function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; in
   let bar: HTMLElement | null = btn.parentElement;
 
   for (let depth = 0; depth < 4 && bar; depth++) {
-    // 1. Prefer real button/[role="button"] descendants inside the action bar (handles tooltip wrappers & sub-groups).
     if (typeof bar.querySelectorAll === 'function') {
       const iconBtns = Array.from(bar.querySelectorAll<HTMLElement>('button, [role="button"]'))
         .filter(el => !!el.querySelector('svg') && !(el.textContent?.trim()));
@@ -87,7 +86,6 @@ function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; in
       }
     }
 
-    // 2. Fallback for non-<button> icon wrappers: only count single-icon direct children.
     const rawChildren = Array.from(bar.children || []) as HTMLElement[];
     const iconSlots = rawChildren.filter((child) => {
       const svgs = typeof child.querySelectorAll === 'function'
@@ -129,20 +127,15 @@ export function isNativeLikeButton(btn: HTMLElement): boolean {
     return true;
   }
 
-  // Structural fallback: in Doubao's assistant action bar
-  // [copy, read/audio, like, dislike, share, regenerate, more],
-  // each icon is often wrapped in its own tooltip container.
   const barInfo = findActionBarAndSlotIndex(btn);
   if (!barInfo) return false;
 
   const { slots, index } = barInfo;
-  // If the next slot explicitly identifies as dislike/踩, current slot is like/赞.
   const nextSlot = slots[index + 1];
   if (nextSlot && hasDislikeSignal(collectButtonMeta(nextSlot) + ' ' + collectButtonMeta(nextSlot.querySelector('button, [role="button"]')))) {
     return true;
   }
 
-  // Standard 5+ icon bar layout: [0: copy, 1: audio, 2: like, 3: dislike, 4: share, ...]
   if (index === 2 && slots.length >= 5) {
     const hasSvg = !!btn.querySelector('svg');
     const textEmpty = !(btn.textContent?.trim());
@@ -150,6 +143,18 @@ export function isNativeLikeButton(btn: HTMLElement): boolean {
   }
 
   return false;
+}
+
+/**
+ * Sort elements visually from top to bottom so containers using flex-direction: column-reverse
+ * (like Doubao's virtualized chat scroller) still align 1:1 with the top-to-bottom native tick rail.
+ */
+export function sortElementsTopToBottom<T extends { getBoundingClientRect?: () => { top: number } }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const topA = typeof a.getBoundingClientRect === 'function' ? a.getBoundingClientRect().top : 0;
+    const topB = typeof b.getBoundingClientRect === 'function' ? b.getBoundingClientRect().top : 0;
+    return topA - topB;
+  });
 }
 
 function parseRgbDarkness(color: string): number {
@@ -167,23 +172,33 @@ export class NativeLocatorEnhancer {
   private unsubscribeDom: (() => void) | null = null;
   private unsubscribeUrl: (() => void) | null = null;
   private clickHandler: ((event: MouseEvent) => void) | null = null;
-  private conversationId = 'unknown';
+  private starredChangedHandler: (() => void) | null = null;
+  private loadedConversationId = '';
   private starredSet = new Set<number>();
+  private lastClickSig = '';
+  private lastClickAt = 0;
 
   init(): void {
     if (this.clickHandler) return;
-    this.conversationId = getConversationId();
-    void this.loadStarred().then(() => this.syncNativeTickHighlights());
+    void this.ensureConversationLoaded(true).then(() => this.syncNativeTickHighlights());
+
+    this.starredChangedHandler = () => {
+      void this.ensureConversationLoaded(true).then(() => this.syncNativeTickHighlights());
+    };
+    document.addEventListener('dbx-starred-changed', this.starredChangedHandler);
 
     this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
-      const nextId = getConversationId();
-      if (nextId !== this.conversationId) {
-        this.conversationId = nextId;
-        void this.loadStarred().then(() => this.syncNativeTickHighlights());
-      }
+      this.clearTickHighlights();
+      void this.ensureConversationLoaded().then(() => this.syncNativeTickHighlights());
     });
 
     this.unsubscribeDom = pageLifecycle.onDomChange(() => {
+      const currentId = getConversationId();
+      if (currentId !== this.loadedConversationId) {
+        this.clearTickHighlights();
+        void this.ensureConversationLoaded().then(() => this.syncNativeTickHighlights());
+        return;
+      }
       this.syncNativeTickHighlights();
     }, 180);
 
@@ -199,6 +214,13 @@ export class NativeLocatorEnhancer {
       const msgEl = this.resolveContainingMessage(btn);
       if (!msgEl) return;
 
+      // Guard against duplicate synthetic clicks within 250ms on the same message.
+      const sig = msgEl.dataset.messageId || String(Math.round(msgEl.getBoundingClientRect().top));
+      const now = Date.now();
+      if (sig === this.lastClickSig && now - this.lastClickAt < 250) return;
+      this.lastClickSig = sig;
+      this.lastClickAt = now;
+
       void this.handleNativeLikeClick(msgEl);
     };
     document.addEventListener('click', this.clickHandler, true);
@@ -213,16 +235,45 @@ export class NativeLocatorEnhancer {
       document.removeEventListener('click', this.clickHandler, true);
       this.clickHandler = null;
     }
+    if (this.starredChangedHandler) {
+      document.removeEventListener('dbx-starred-changed', this.starredChangedHandler);
+      this.starredChangedHandler = null;
+    }
+    this.clearTickHighlights();
+  }
+
+  private clearTickHighlights(): void {
     document.querySelectorAll('.dbx-native-tick-liked').forEach(el => {
       el.classList.remove('dbx-native-tick-liked');
     });
+  }
+
+  private async ensureConversationLoaded(forceReload = false): Promise<string> {
+    const currentId = getConversationId();
+    if (!forceReload && currentId === this.loadedConversationId) {
+      return currentId;
+    }
+    this.loadedConversationId = currentId;
+    if (!currentId || currentId === 'unknown') {
+      this.starredSet = new Set();
+      return currentId;
+    }
+    try {
+      const starred = await storageService.getStarredMessages(currentId);
+      // Only apply if user hasn't navigated away again while awaiting storage.
+      if (getConversationId() === currentId) {
+        this.starredSet = new Set(starred);
+      }
+    } catch {
+      this.starredSet = new Set();
+    }
+    return currentId;
   }
 
   private resolveClickedActionControl(target: Element): HTMLElement | null {
     const directBtn = target.closest<HTMLElement>('button, [role="button"]');
     if (directBtn) return directBtn;
 
-    // Some Doubao action icons are plain <div>/<span> wrappers around an <svg> without role="button".
     const svg = target.closest('svg');
     if (!svg) return null;
     let cur: HTMLElement | null = svg.parentElement;
@@ -250,22 +301,10 @@ export class NativeLocatorEnhancer {
     return null;
   }
 
-  private async loadStarred(): Promise<void> {
-    if (!this.conversationId || this.conversationId === 'unknown') {
-      this.starredSet = new Set();
-      return;
-    }
-    try {
-      const starred = await storageService.getStarredMessages(this.conversationId);
-      this.starredSet = new Set(starred);
-    } catch {
-      this.starredSet = new Set();
-    }
-  }
-
   private getTopLevelMessages(): HTMLElement[] {
-    return Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
+    const raw = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
       .filter(el => !el.parentElement?.closest('[data-message-id]'));
+    return sortElementsTopToBottom(raw);
   }
 
   private isUserMessage(el: HTMLElement): boolean {
@@ -310,28 +349,42 @@ export class NativeLocatorEnhancer {
     return inner || tick;
   }
 
+  /**
+   * Detect Doubao's current active (black) tick without being fooled by our own amber highlight class.
+   */
   private getActiveTickIndex(ticks: HTMLElement[]): number {
+    const visuals = ticks.map(t => this.getVisualTickElement(t));
+    const hadLiked = visuals.map(v => v.classList.contains('dbx-native-tick-liked'));
+
+    // Temporarily strip our orange override synchronously to read Doubao's real native tick color.
+    visuals.forEach((v, i) => {
+      if (hadLiked[i]) v.classList.remove('dbx-native-tick-liked');
+    });
+
     let bestIdx = -1;
     let bestScore = -1;
     let minScore = Infinity;
 
-    ticks.forEach((tick, idx) => {
-      const visual = this.getVisualTickElement(tick);
-      const style = window.getComputedStyle(visual);
-      const darkness = Math.max(0, parseRgbDarkness(style.backgroundColor));
-      const width = visual.getBoundingClientRect().width;
-      // Active tick in Doubao is significantly darker (black vs light grey) and often slightly wider.
-      const score = darkness + width * 4;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = idx;
-      }
-      if (score < minScore) {
-        minScore = score;
-      }
-    });
+    try {
+      visuals.forEach((visual, idx) => {
+        const style = window.getComputedStyle(visual);
+        const darkness = Math.max(0, parseRgbDarkness(style.backgroundColor));
+        const width = visual.getBoundingClientRect().width;
+        const score = darkness + width * 4;
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = idx;
+        }
+        if (score < minScore) {
+          minScore = score;
+        }
+      });
+    } finally {
+      visuals.forEach((v, i) => {
+        if (hadLiked[i]) v.classList.add('dbx-native-tick-liked');
+      });
+    }
 
-    // Ensure there is a meaningful visual distinction between the active tick and inactive ticks.
     if (bestIdx >= 0 && bestScore - minScore >= 40) {
       return bestIdx;
     }
@@ -339,17 +392,19 @@ export class NativeLocatorEnhancer {
   }
 
   private getViewportActiveDomTurnIndex(turns: Array<{ userEl: HTMLElement | null; members: HTMLElement[] }>): number {
-    const targetY = window.innerHeight * 0.38;
+    const targetY = window.innerHeight * 0.4;
     let bestIdx = 0;
     let bestDist = Infinity;
 
     turns.forEach((turn, idx) => {
-      const anchor = turn.members[turn.members.length - 1] || turn.userEl;
-      if (!anchor) return;
-      const rect = anchor.getBoundingClientRect();
-      const dist = rect.top <= targetY && rect.bottom >= targetY
+      const first = turn.members[0];
+      const last = turn.members[turn.members.length - 1];
+      if (!first || !last) return;
+      const top = first.getBoundingClientRect().top;
+      const bottom = last.getBoundingClientRect().bottom;
+      const dist = top <= targetY && bottom >= targetY
         ? 0
-        : Math.min(Math.abs(rect.top - targetY), Math.abs(rect.bottom - targetY));
+        : Math.min(Math.abs(top - targetY), Math.abs(bottom - targetY));
       if (dist < bestDist) {
         bestDist = dist;
         bestIdx = idx;
@@ -367,10 +422,11 @@ export class NativeLocatorEnhancer {
     const ticks = this.findNativeTickItems();
     let tickIndex = clickedDomTurnIdx;
 
-    if (ticks.length > 0 && ticks.length !== turns.length) {
-      // Align DOM turn index to Doubao's full-history native tick rail using the active tick anchor.
+    if (ticks.length > 0) {
       const activeTickIdx = this.getActiveTickIndex(ticks);
-      if (activeTickIdx >= 0) {
+      if (ticks.length === turns.length) {
+        tickIndex = clickedDomTurnIdx;
+      } else if (activeTickIdx >= 0) {
         const activeDomTurnIdx = this.getViewportActiveDomTurnIndex(turns);
         tickIndex = Math.max(0, Math.min(ticks.length - 1, activeTickIdx + (clickedDomTurnIdx - activeDomTurnIdx)));
       } else {
@@ -388,8 +444,8 @@ export class NativeLocatorEnhancer {
   }
 
   private async handleNativeLikeClick(msgEl: HTMLElement): Promise<void> {
-    this.conversationId = getConversationId();
-    if (!this.conversationId || this.conversationId === 'unknown') return;
+    const currentId = await this.ensureConversationLoaded();
+    if (!currentId || currentId === 'unknown') return;
 
     const info = this.resolveTurnInfo(msgEl);
     if (!info) return;
@@ -397,15 +453,15 @@ export class NativeLocatorEnhancer {
     const nextStarred = !this.starredSet.has(info.turnIndex);
     if (nextStarred) {
       this.starredSet.add(info.turnIndex);
-      await storageService.addStarredMessage(this.conversationId, info.turnIndex, {
+      await storageService.addStarredMessage(currentId, info.turnIndex, {
         messageId: info.messageId,
         text: info.excerpt,
       });
-      showToast('已同步标记到原生定位点与收藏目录', 'success');
+      showToast(`已标记第 ${info.turnIndex + 1} 轮对话到原生定位点`, 'success');
     } else {
       this.starredSet.delete(info.turnIndex);
-      await storageService.removeStarredMessage(this.conversationId, info.turnIndex);
-      showToast('已取消该条定位点标记', 'info');
+      await storageService.removeStarredMessage(currentId, info.turnIndex);
+      showToast(`已取消第 ${info.turnIndex + 1} 轮定位点标记`, 'info');
     }
 
     this.syncNativeTickHighlights();
@@ -413,8 +469,7 @@ export class NativeLocatorEnhancer {
   }
 
   /**
-   * Find Doubao's native quick-locator tick rail (a narrow vertical stack of slender
-   * horizontal tick bars outside the sidebar and message bubbles).
+   * Find Doubao's native quick-locator tick rail in visual top-to-bottom order.
    */
   findNativeTickItems(): HTMLElement[] {
     const sidebarRight = document.querySelector<HTMLElement>('#flow_chat_sidebar')?.getBoundingClientRect().right ?? 0;
@@ -430,7 +485,6 @@ export class NativeLocatorEnhancer {
 
       const rect = container.getBoundingClientRect();
       if (rect.width < 6 || rect.width > 56 || rect.height < 16) continue;
-      // Native tick rail sits near the left edge of the chat area (right of sidebar, left half of screen).
       if (rect.left < Math.max(0, sidebarRight - 8) || rect.left > window.innerWidth * 0.55) continue;
 
       const children = Array.from(container.children) as HTMLElement[];
@@ -443,10 +497,13 @@ export class NativeLocatorEnhancer {
         best = children;
       }
     }
-    return best;
+    return sortElementsTopToBottom(best);
   }
 
   syncNativeTickHighlights(): void {
+    const currentId = getConversationId();
+    if (currentId !== this.loadedConversationId) return;
+
     const ticks = this.findNativeTickItems();
     if (!ticks.length) return;
 

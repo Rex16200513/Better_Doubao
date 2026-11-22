@@ -375,9 +375,7 @@ export class ToolHub {
             const removeBtn = button('×', () => void (async () => {
               await storageService.removeStarredMessage(conversation, i);
               if (conversation === current) {
-                const nativeCard = document.querySelector<HTMLElement>(`[data-dbx-native-card="${i}"]`);
-                nativeCard?.classList.remove('dbx-native-card-starred');
-                nativeCard?.querySelector('.dbx-native-card-star')?.classList.remove('is-starred');
+                document.dispatchEvent(new CustomEvent('dbx-starred-changed'));
               }
               showToast('已取消收藏', 'success');
               await render();
