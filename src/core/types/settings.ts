@@ -8,6 +8,7 @@ export interface CustomQuickButton {
 
 export interface ExtensionSettings {
   enableSidebarLauncher: boolean;
+  enableFolders: boolean;
   enableNativeLocatorEnhancer: boolean;
   enableCorpusAndHighlight: boolean;
   enableExport: boolean;
@@ -39,6 +40,7 @@ export const DEFAULT_PINNED_SKILLS: string[] = ['对话', '更多技能'];
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   enableSidebarLauncher: true,
+  enableFolders: true,
   enableNativeLocatorEnhancer: true,
   enableCorpusAndHighlight: true,
   enableExport: true,

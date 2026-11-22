@@ -1,4 +1,5 @@
 import { sidebarLauncher } from '../../features/sidebar/SidebarLauncher';
+import { folderManager } from '../../features/folder/FolderManager';
 import { nativeLocatorEnhancer } from '../../features/quicklocator/NativeLocatorEnhancer';
 import { workspaceCustomizer } from '../../features/workspace/WorkspaceCustomizer';
 import { corpusBoard } from '../../features/corpusboard/CorpusBoard';
@@ -12,6 +13,7 @@ function initFeatures() {
   const settings = settingsService.getSettings();
   workspaceCustomizer.init();
   if (settings.enableSidebarLauncher) sidebarLauncher.init();
+  if (settings.enableFolders) void folderManager.init();
   if (settings.enableNativeLocatorEnhancer) nativeLocatorEnhancer.init();
   if (settings.enableCorpusAndHighlight) {
     corpusBoard.init();

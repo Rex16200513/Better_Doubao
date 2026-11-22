@@ -170,16 +170,28 @@ export class WorkspaceCustomizer {
 
     if (composer) {
       composer.dataset.dbxSurface = 'composer';
-      // Also clear any inner pure-white wrapper inside the composer card so the card tint shows cleanly.
+      // Clear any inner pure-white wrapper inside the rounded composer card so the card tint shows cleanly.
       const innerWhite = composer.querySelectorAll<HTMLElement>('div, section, form');
       for (const inner of innerWhite) {
         if (inner.closest('button, [role="button"], [id^="dbx-"]')) continue;
         const r = inner.getBoundingClientRect();
-        if (r.width < 160 || r.height < 28) continue;
+        if (r.width < 120 || r.height < 24) continue;
         const style = window.getComputedStyle(inner);
         if (isNearWhiteOpaque(style.backgroundColor)) {
           inner.dataset.dbxSurface = 'composer-inner';
         }
+      }
+      // Make square white / white-gradient dock wrappers immediately behind the rounded composer
+      // transparent so no sharp white corners ever stick out behind the rounded composer card.
+      let ancestor: HTMLElement | null = composer.parentElement;
+      for (let depth = 0; depth < 4 && ancestor && ancestor !== document.body; depth++) {
+        if (ancestor.tagName === 'MAIN') break;
+        const aStyle = window.getComputedStyle(ancestor);
+        const aRadius = parseFloat(aStyle.borderTopLeftRadius || '0');
+        if (aRadius < 12 && (isNearWhiteOpaque(aStyle.backgroundColor) || hasWhiteGradient(aStyle.backgroundImage))) {
+          ancestor.dataset.dbxSurface = 'composer-dock';
+        }
+        ancestor = ancestor.parentElement;
       }
     }
 
@@ -245,23 +257,33 @@ export class WorkspaceCustomizer {
 
   /**
    * Locate the exact visible rounded composer card wrapping both the text editor AND
-   * the bottom toolbar (works in both Chat mode and Work mode).
+   * the bottom toolbar across all Doubao modes (Chat, Work, Image/Video AI creation, etc.).
    */
   private findComposerRoot(): HTMLElement | null {
     const input = document.querySelector<HTMLElement>(
-      '#input-engine-container, div.tiptap.ProseMirror[contenteditable="true"], [data-testid="send_textarea"], textarea'
+      '#input-engine-container, div.tiptap.ProseMirror[contenteditable="true"], [data-testid="send_textarea"], textarea, [contenteditable="true"]'
     );
     if (!input) return null;
 
     let cur: HTMLElement | null = input.parentElement;
     let fallback: HTMLElement | null = input.parentElement;
-    let roundedCard: HTMLElement | null = null;
+    let bestRoundedCard: HTMLElement | null = null;
     let skillContainer: HTMLElement | null = null;
 
-    for (let depth = 0; depth < 9 && cur && cur !== document.body; depth++) {
+    for (let depth = 0; depth < 10 && cur && cur !== document.body; depth++) {
       const rect = cur.getBoundingClientRect();
-      if (rect.width >= 380 && rect.height >= 72 && rect.height <= 340) {
-        fallback = cur;
+      if (rect.width >= 340 && rect.height >= 64 && rect.height <= 360) {
+        const style = window.getComputedStyle(cur);
+        const radius = parseFloat(style.borderTopLeftRadius || '0');
+        const border = parseFloat(style.borderTopWidth || '0');
+        const hasCardLook = border > 0 || isNearWhiteOpaque(style.backgroundColor) || style.boxShadow !== 'none';
+        const buttonCount = cur.querySelectorAll('button, [role="button"]').length;
+
+        // The real composer card always has rounded corners (>= 14px) and wraps editor + controls.
+        if (radius >= 14 && hasCardLook && (buttonCount >= 1 || rect.height >= 80)) {
+          bestRoundedCard = cur;
+        }
+
         const text = cur.textContent || '';
         const hasToolbar =
           text.includes('对话') ||
@@ -271,22 +293,20 @@ export class WorkspaceCustomizer {
           text.includes('云电脑') ||
           text.includes('插件') ||
           text.includes('技能') ||
-          text.includes('项目');
+          text.includes('项目') ||
+          text.includes('模型') ||
+          text.includes('自动比例');
 
-        if (hasToolbar) {
-          if (!skillContainer) skillContainer = cur;
-          const style = window.getComputedStyle(cur);
-          const radius = parseFloat(style.borderTopLeftRadius || '0');
-          const border = parseFloat(style.borderTopWidth || '0');
-          if (radius >= 14 && (border > 0 || isNearWhiteOpaque(style.backgroundColor) || style.boxShadow !== 'none')) {
-            roundedCard = cur;
-            break;
-          }
+        if (hasToolbar && !skillContainer) {
+          skillContainer = cur;
+        }
+        if (radius >= 14) {
+          fallback = cur;
         }
       }
       cur = cur.parentElement;
     }
-    return roundedCard || skillContainer || fallback;
+    return bestRoundedCard || skillContainer || fallback;
   }
 
   private applyComposerSkillVisibility(compact: boolean, pinnedSkills: string[]): void {

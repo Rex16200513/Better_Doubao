@@ -532,7 +532,8 @@ html[data-dbx-theme] main,
 html[data-dbx-theme] [data-dbx-surface="canvas"] {
   background-color: var(--dbx-theme-bg) !important;
 }
-html[data-dbx-theme] [data-dbx-surface="fade-mask"] {
+html[data-dbx-theme] [data-dbx-surface="fade-mask"],
+html[data-dbx-theme] [data-dbx-surface="composer-dock"] {
   background-image: none !important;
   background-color: transparent !important;
 }
@@ -1847,3 +1848,401 @@ html[data-dbx-theme="midnight"] [data-message-id] code {
 .dbx-corpus-footer { border-top-color: var(--dbx-border); }
 .dbx-corpus-item.selected { background: var(--dbx-accent-soft); border-color: var(--dbx-accent); }
 .dbx-popup-input { background: var(--dbx-surface-subtle); color: var(--dbx-text-primary); }
+
+/* Sidebar Conversation Classification Folders & Minimalist Color Dots */
+.dbx-native-chat-icon-hidden {
+  display: none !important;
+}
+
+.dbx-chat-dot {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  padding: 0 !important;
+  margin: 0 6px 0 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.14s ease, background-color 0.14s ease;
+}
+
+.dbx-chat-dot:hover {
+  background: var(--dbx-surface-hover) !important;
+  transform: scale(1.1);
+}
+
+.dbx-chat-dot-core {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.8px solid rgba(148, 163, 184, 0.58);
+  box-sizing: border-box;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.dbx-chat-dot:hover .dbx-chat-dot-core {
+  border-color: var(--dbx-accent);
+}
+
+.dbx-chat-dot.is-assigned .dbx-chat-dot-core {
+  width: 9px;
+  height: 9px;
+  border-color: transparent;
+}
+
+#dbx-folder-section {
+  margin: 4px 6px 10px;
+  padding: 4px 2px;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+}
+
+.dbx-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 3px 6px;
+}
+
+.dbx-folder-title-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dbx-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+
+.dbx-folder-title-btn:hover {
+  color: var(--dbx-text-primary);
+}
+
+.dbx-folder-section-chevron {
+  display: inline-flex;
+  transform: rotate(90deg);
+  transition: transform 0.16s ease;
+}
+
+#dbx-folder-section.is-collapsed .dbx-folder-section-chevron {
+  transform: rotate(0deg);
+}
+
+#dbx-folder-section.is-collapsed .dbx-folder-list {
+  display: none;
+}
+
+.dbx-folder-icon {
+  display: inline-flex;
+  opacity: 0.85;
+}
+
+.dbx-folder-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dbx-text-muted);
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.dbx-folder-add-btn:hover {
+  background: var(--dbx-surface-hover);
+  color: var(--dbx-accent);
+}
+
+.dbx-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.dbx-folder-empty {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--dbx-text-muted);
+  line-height: 1.5;
+}
+
+.dbx-folder-item {
+  border-radius: 9px;
+  transition: background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.dbx-folder-item.dbx-drop-target {
+  background: var(--dbx-accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--dbx-accent);
+}
+
+.dbx-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--dbx-text-primary);
+  font-size: 13px;
+  transition: background-color 0.14s ease;
+}
+
+.dbx-folder-row:hover {
+  background: var(--dbx-surface-hover);
+}
+
+.dbx-folder-expand-icon {
+  display: inline-flex;
+  color: var(--dbx-text-muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dbx-folder-item.is-expanded .dbx-folder-expand-icon {
+  transform: rotate(90deg);
+}
+
+.dbx-folder-color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dbx-folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.dbx-folder-count {
+  font-size: 11px;
+  color: var(--dbx-text-muted);
+  padding: 0 4px;
+}
+
+.dbx-folder-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dbx-text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+}
+
+.dbx-folder-row:hover .dbx-folder-menu-btn,
+.dbx-folder-menu-btn:focus-visible {
+  opacity: 1;
+}
+
+.dbx-folder-menu-btn:hover {
+  background: var(--dbx-surface-subtle);
+  color: var(--dbx-text-primary);
+}
+
+.dbx-folder-contents {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px 18px;
+}
+
+.dbx-folder-item.is-expanded .dbx-folder-contents {
+  display: flex;
+}
+
+.dbx-folder-conversation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 29px;
+  padding: 0 6px 0 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--dbx-text-secondary);
+  font-size: 12.5px;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.dbx-folder-conversation:hover {
+  background: var(--dbx-surface-hover);
+  color: var(--dbx-text-primary);
+}
+
+.dbx-folder-conv-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.dbx-conversation-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbx-folder-conversation-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dbx-text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dbx-folder-conversation:hover .dbx-folder-conversation-remove {
+  opacity: 1;
+}
+
+.dbx-folder-conversation-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.dbx-chat-folder-popover {
+  position: fixed;
+  z-index: 10026;
+  width: 206px;
+  padding: 8px;
+  border: 1px solid var(--dbx-border);
+  border-radius: 13px;
+  background: var(--dbx-surface-glass);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: var(--dbx-shadow-lg);
+  color: var(--dbx-text-primary);
+  font: 12.5px/1.4 -apple-system, BlinkMacSystemFont, 'PingFang SC', system-ui, sans-serif;
+  animation: dbx-panel-in 0.13s ease-out;
+}
+
+.dbx-folder-action-menu {
+  width: 154px;
+}
+
+.dbx-cfp-head {
+  padding: 2px 6px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dbx-text-muted);
+}
+
+.dbx-cfp-empty {
+  padding: 8px 6px;
+  font-size: 11.5px;
+  color: var(--dbx-text-muted);
+}
+
+.dbx-cfp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.dbx-cfp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dbx-text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.dbx-cfp-item:hover {
+  background: var(--dbx-surface-hover);
+  color: var(--dbx-accent);
+}
+
+.dbx-cfp-item.is-selected {
+  background: var(--dbx-accent-soft);
+  color: var(--dbx-accent);
+  font-weight: 500;
+}
+
+.dbx-cfp-item.is-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.dbx-cfp-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbx-cfp-check {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dbx-cfp-footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dbx-border);
+}
+
+.dbx-cfp-create {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px dashed var(--dbx-accent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dbx-accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.dbx-cfp-create:hover {
+  background: var(--dbx-accent-soft);
+}

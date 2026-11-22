@@ -84,9 +84,18 @@ export class LayoutStudioModal {
       );
       wfLauncher.classList.add('dbx-wf-block-launcher');
 
+      const wfFolders = this.makeToggleTile(
+        draft.enableFolders ? '分类文件夹 & 色彩圆点 · 开' : '分类文件夹 & 色彩圆点 · 关',
+        draft.enableFolders,
+        () => {
+          draft.enableFolders = !draft.enableFolders;
+          render();
+        }
+      );
+
       const wfHistory = document.createElement('div');
       wfHistory.className = 'dbx-wf-skeleton-list';
-      wfHistory.innerHTML = '<span>项目</span><i></i><i></i><i class="short"></i>';
+      wfHistory.innerHTML = '<span>最近</span><i></i><i></i><i class="short"></i>';
 
       const wfFooterPromo = this.makeToggleTile(
         draft.hideSidebarFooter ? '底部推广 · 已隐藏' : '关于豆包 / 下载 · 显示',
@@ -98,7 +107,7 @@ export class LayoutStudioModal {
       );
       wfFooterPromo.classList.add('dbx-wf-block-footer');
 
-      wfSidebar.append(wfBrand, wfLauncher, wfHistory, wfFooterPromo);
+      wfSidebar.append(wfBrand, wfLauncher, wfFolders, wfHistory, wfFooterPromo);
 
       // Main pane wireframe
       const wfMain = document.createElement('div');
@@ -351,6 +360,7 @@ export class LayoutStudioModal {
       saveBtn.addEventListener('click', () => void (async () => {
         const needsReload =
           draft.enableSidebarLauncher !== initial.enableSidebarLauncher ||
+          draft.enableFolders !== initial.enableFolders ||
           draft.enableNativeLocatorEnhancer !== initial.enableNativeLocatorEnhancer ||
           draft.enableExport !== initial.enableExport;
 
