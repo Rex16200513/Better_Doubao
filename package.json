@@ -12,6 +12,7 @@
     "build": "npm run build:chrome && npm run build:edge && node tests/build-artifacts.mjs",
     "build:chrome": "vite build --config chrome/vite.config.ts",
     "build:edge": "vite build --config edge/vite.config.ts",
+    "test": "node tests/review-regressions.mjs && node tests/unit.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
