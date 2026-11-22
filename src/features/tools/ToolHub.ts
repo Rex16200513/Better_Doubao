@@ -334,6 +334,22 @@ export class ToolHub {
         list.appendChild(rowWrap);
       }
 
+      const currentStarred = current ? (data.starredMessages[current] ?? []) : [];
+      if (!activeColor && current && currentStarred.length > 1) {
+        const clearRow = document.createElement('div');
+        clearRow.className = 'dbx-tool-actions';
+        clearRow.style.margin = '0 0 8px';
+        clearRow.appendChild(button(`清空当前对话全部收藏（${currentStarred.length} 条）`, () => void (async () => {
+          for (const idx of [...currentStarred]) {
+            await storageService.removeStarredMessage(current, idx);
+          }
+          document.dispatchEvent(new CustomEvent('dbx-starred-changed'));
+          showToast('已清空当前对话的定位点标记', 'info');
+          await render();
+        })()));
+        list.appendChild(clearRow);
+      }
+
       if (!activeColor) {
         for (const [conversation, indexes] of Object.entries(data.starredMessages)) {
           for (const i of indexes) {

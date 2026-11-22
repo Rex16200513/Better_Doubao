@@ -71,7 +71,7 @@ function hasLikeSignal(meta: string): boolean {
  * Walk up from a clicked action button to find the horizontal message action bar
  * even when icons are wrapped in tooltip containers or [like, dislike] sub-groups.
  */
-function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; index: number } | null {
+function findActionBarAndSlotIndex(btn: HTMLElement): { bar: HTMLElement; slots: HTMLElement[]; index: number } | null {
   let bar: HTMLElement | null = btn.parentElement;
 
   for (let depth = 0; depth < 4 && bar; depth++) {
@@ -81,7 +81,7 @@ function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; in
       if (iconBtns.length >= 4 && iconBtns.length <= 10) {
         const idx = iconBtns.indexOf(btn);
         if (idx >= 0) {
-          return { slots: iconBtns, index: idx };
+          return { bar, slots: iconBtns, index: idx };
         }
       }
     }
@@ -99,7 +99,7 @@ function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; in
     if (iconSlots.length >= 4 && iconSlots.length <= 10) {
       const idx = iconSlots.findIndex(s => s === btn || (typeof s.contains === 'function' && s.contains(btn)));
       if (idx >= 0) {
-        return { slots: iconSlots, index: idx };
+        return { bar, slots: iconSlots, index: idx };
       }
     }
 
@@ -114,6 +114,10 @@ function findActionBarAndSlotIndex(btn: HTMLElement): { slots: HTMLElement[]; in
  * thumbs-up ("赞") button without matching "踩" / dislike or other action controls.
  */
 export function isNativeLikeButton(btn: HTMLElement): boolean {
+  if (typeof btn.closest === 'function' && btn.closest('pre, code, table, header, nav, #input-engine-container, [contenteditable="true"]')) {
+    return false;
+  }
+
   const selfMeta = collectButtonMeta(btn);
   const parentMeta = btn.parentElement && btn.parentElement.childElementCount <= 2
     ? collectButtonMeta(btn.parentElement)
@@ -175,6 +179,7 @@ export class NativeLocatorEnhancer {
   private starredChangedHandler: (() => void) | null = null;
   private loadedConversationId = '';
   private starredSet = new Set<number>();
+  private messageIdToIndex = new Map<string, number>();
   private lastClickSig = '';
   private lastClickAt = 0;
 
@@ -189,14 +194,14 @@ export class NativeLocatorEnhancer {
 
     this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
       this.clearTickHighlights();
-      void this.ensureConversationLoaded().then(() => this.syncNativeTickHighlights());
+      void this.ensureConversationLoaded(true).then(() => this.syncNativeTickHighlights());
     });
 
     this.unsubscribeDom = pageLifecycle.onDomChange(() => {
       const currentId = getConversationId();
       if (currentId !== this.loadedConversationId) {
         this.clearTickHighlights();
-        void this.ensureConversationLoaded().then(() => this.syncNativeTickHighlights());
+        void this.ensureConversationLoaded(true).then(() => this.syncNativeTickHighlights());
         return;
       }
       this.syncNativeTickHighlights();
@@ -214,10 +219,9 @@ export class NativeLocatorEnhancer {
       const msgEl = this.resolveContainingMessage(btn);
       if (!msgEl) return;
 
-      // Guard against duplicate synthetic clicks within 250ms on the same message.
       const sig = msgEl.dataset.messageId || String(Math.round(msgEl.getBoundingClientRect().top));
       const now = Date.now();
-      if (sig === this.lastClickSig && now - this.lastClickAt < 250) return;
+      if (sig === this.lastClickSig && now - this.lastClickAt < 300) return;
       this.lastClickSig = sig;
       this.lastClickAt = now;
 
@@ -254,18 +258,29 @@ export class NativeLocatorEnhancer {
       return currentId;
     }
     this.loadedConversationId = currentId;
+    this.starredSet = new Set();
+    this.messageIdToIndex = new Map();
+
     if (!currentId || currentId === 'unknown') {
-      this.starredSet = new Set();
       return currentId;
     }
     try {
-      const starred = await storageService.getStarredMessages(currentId);
-      // Only apply if user hasn't navigated away again while awaiting storage.
-      if (getConversationId() === currentId) {
-        this.starredSet = new Set(starred);
+      const data = await storageService.getData();
+      if (getConversationId() !== currentId) return currentId;
+
+      const starred = data.starredMessages[currentId] ?? [];
+      this.starredSet = new Set(starred);
+
+      const metaMap = data.starredMeta?.[currentId] ?? {};
+      for (const [idxStr, meta] of Object.entries(metaMap)) {
+        const idx = Number(idxStr);
+        if (meta?.messageId && this.starredSet.has(idx)) {
+          this.messageIdToIndex.set(meta.messageId, idx);
+        }
       }
     } catch {
       this.starredSet = new Set();
+      this.messageIdToIndex = new Map();
     }
     return currentId;
   }
@@ -287,15 +302,21 @@ export class NativeLocatorEnhancer {
     return null;
   }
 
+  /**
+   * Resolve ONLY the single message block that owns the clicked action bar.
+   * Never climbs into a container that spans multiple turns (prevents stray clicks
+   * outside a message from falsely starring the last message).
+   */
   private resolveContainingMessage(btn: HTMLElement): HTMLElement | null {
     const direct = btn.closest<HTMLElement>('[data-message-id]');
     if (direct) return direct;
 
     let cur: HTMLElement | null = btn.parentElement;
-    for (let depth = 0; depth < 8 && cur && cur !== document.body; depth++) {
-      const messages = cur.querySelectorAll<HTMLElement>('[data-message-id]');
+    for (let depth = 0; depth < 6 && cur && cur !== document.body; depth++) {
+      const messages = Array.from(cur.querySelectorAll<HTMLElement>('[data-message-id]'))
+        .filter(el => !el.parentElement?.closest('[data-message-id]'));
       if (messages.length === 1) return messages[0];
-      if (messages.length > 1) return messages[messages.length - 1];
+      if (messages.length > 1) return null;
       cur = cur.parentElement;
     }
     return null;
@@ -307,36 +328,85 @@ export class NativeLocatorEnhancer {
     return sortElementsTopToBottom(raw);
   }
 
-  private isUserMessage(el: HTMLElement): boolean {
-    const html = el.innerHTML?.toLowerCase() || '';
-    return html.includes('send_message') ||
-      !!el.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]');
+  private hasMessageActionBar(el: HTMLElement): boolean {
+    const btns = Array.from(el.querySelectorAll<HTMLElement>('button, [role="button"]'))
+      .filter(b => !!b.querySelector('svg') && !(b.textContent?.trim()));
+    if (btns.some(b => isNativeLikeButton(b))) return true;
+
+    const svgs = Array.from(el.querySelectorAll('svg'));
+    for (const svg of svgs) {
+      const parent = svg.parentElement;
+      if (parent && !(parent.textContent?.trim()) && isNativeLikeButton(parent)) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  private getDomTurns(): Array<{ userEl: HTMLElement | null; members: HTMLElement[] }> {
+  private isUserMessage(el: HTMLElement): boolean {
+    if (this.hasMessageActionBar(el)) return false;
+
+    const ownMeta = [
+      el.getAttribute('data-testid') || '',
+      el.className?.toString() || '',
+    ].join(' ').toLowerCase();
+    if (ownMeta.includes('send_message') || ownMeta.includes('send-msg') || ownMeta.includes('user')) {
+      return true;
+    }
+
+    const html = el.innerHTML?.toLowerCase() || '';
+    if (
+      html.includes('send_message') ||
+      !!el.querySelector('[data-testid*="send_message"], [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]')
+    ) {
+      return true;
+    }
+
+    // Geometric fallback: user messages are right-aligned bubbles, assistant replies have markdown prose.
+    if (el.querySelector('.flow-markdown-body, [class*="markdown-body"], .md-box-root, [class*="md-box-root"]')) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    const parentRect = el.parentElement?.getBoundingClientRect();
+    if (parentRect && parentRect.width > 300 && rect.width > 0 && rect.width < parentRect.width * 0.78) {
+      const leftGap = rect.left - parentRect.left;
+      const rightGap = parentRect.right - rect.right;
+      if (leftGap > rightGap + 40) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Build visual top-to-bottom conversation turns.
+   * Each turn has at most one assistant reply with an action bar (1:1 with Doubao's native locator ticks).
+   */
+  private getDomTurns(): Array<{ userEl: HTMLElement | null; assistantEl: HTMLElement | null; members: HTMLElement[] }> {
     const all = this.getTopLevelMessages();
-    const turns: Array<{ userEl: HTMLElement | null; members: HTMLElement[] }> = [];
-    let current: { userEl: HTMLElement | null; members: HTMLElement[] } | null = null;
-    let prevWasUser = false;
+    const turns: Array<{ userEl: HTMLElement | null; assistantEl: HTMLElement | null; members: HTMLElement[] }> = [];
+    let current: { userEl: HTMLElement | null; assistantEl: HTMLElement | null; members: HTMLElement[] } | null = null;
 
     for (const el of all) {
       const isUser = this.isUserMessage(el);
       if (isUser) {
-        if (!prevWasUser || !current) {
-          current = { userEl: el, members: [el] };
+        if (!current || current.assistantEl || !current.userEl) {
+          current = { userEl: el, assistantEl: null, members: [el] };
           turns.push(current);
         } else {
           current.members.push(el);
         }
-        prevWasUser = true;
       } else {
-        if (!current) {
-          current = { userEl: null, members: [el] };
+        const hasBar = this.hasMessageActionBar(el);
+        // If current turn already owns a completed assistant reply with action bar, start a new turn.
+        if (!current || (current.assistantEl && hasBar)) {
+          current = { userEl: null, assistantEl: el, members: [el] };
           turns.push(current);
         } else {
+          if (!current.assistantEl || hasBar) {
+            current.assistantEl = el;
+          }
           current.members.push(el);
         }
-        prevWasUser = false;
       }
     }
     return turns;
@@ -356,7 +426,6 @@ export class NativeLocatorEnhancer {
     const visuals = ticks.map(t => this.getVisualTickElement(t));
     const hadLiked = visuals.map(v => v.classList.contains('dbx-native-tick-liked'));
 
-    // Temporarily strip our orange override synchronously to read Doubao's real native tick color.
     visuals.forEach((v, i) => {
       if (hadLiked[i]) v.classList.remove('dbx-native-tick-liked');
     });
@@ -391,7 +460,9 @@ export class NativeLocatorEnhancer {
     return -1;
   }
 
-  private getViewportActiveDomTurnIndex(turns: Array<{ userEl: HTMLElement | null; members: HTMLElement[] }>): number {
+  private getViewportActiveDomTurnIndex(
+    turns: Array<{ userEl: HTMLElement | null; assistantEl: HTMLElement | null; members: HTMLElement[] }>
+  ): number {
     const targetY = window.innerHeight * 0.4;
     let bestIdx = 0;
     let bestDist = Infinity;
@@ -419,18 +490,31 @@ export class NativeLocatorEnhancer {
     if (clickedDomTurnIdx < 0) return null;
 
     const turn = turns[clickedDomTurnIdx];
+    const messageId = clickedMsg.dataset.messageId || turn.assistantEl?.dataset.messageId || turn.userEl?.dataset.messageId;
+
+    // Anti-duplicate lock: if this exact messageId is already starred, always resolve back to its
+    // saved index so a second click cleanly cancels it instead of starring a second tick.
+    if (messageId && this.messageIdToIndex.has(messageId)) {
+      const existingIdx = this.messageIdToIndex.get(messageId)!;
+      const rawText = (turn.userEl?.textContent || clickedMsg.textContent || '').replace(/\s+/g, ' ').trim();
+      const excerpt = rawText.length > 60 ? `${rawText.slice(0, 60)}…` : (rawText || `第 ${existingIdx + 1} 轮对话`);
+      return { turnIndex: existingIdx, messageId, excerpt };
+    }
+
     const ticks = this.findNativeTickItems();
     let tickIndex = clickedDomTurnIdx;
 
     if (ticks.length > 0) {
-      const activeTickIdx = this.getActiveTickIndex(ticks);
       if (ticks.length === turns.length) {
         tickIndex = clickedDomTurnIdx;
-      } else if (activeTickIdx >= 0) {
-        const activeDomTurnIdx = this.getViewportActiveDomTurnIndex(turns);
-        tickIndex = Math.max(0, Math.min(ticks.length - 1, activeTickIdx + (clickedDomTurnIdx - activeDomTurnIdx)));
       } else {
-        tickIndex = Math.max(0, Math.min(ticks.length - 1, ticks.length - turns.length + clickedDomTurnIdx));
+        const activeTickIdx = this.getActiveTickIndex(ticks);
+        if (activeTickIdx >= 0) {
+          const activeDomTurnIdx = this.getViewportActiveDomTurnIndex(turns);
+          tickIndex = Math.max(0, Math.min(ticks.length - 1, activeTickIdx + (clickedDomTurnIdx - activeDomTurnIdx)));
+        } else {
+          tickIndex = Math.max(0, Math.min(ticks.length - 1, ticks.length - turns.length + clickedDomTurnIdx));
+        }
       }
     }
 
@@ -438,7 +522,7 @@ export class NativeLocatorEnhancer {
     const excerpt = rawText.length > 60 ? `${rawText.slice(0, 60)}…` : (rawText || `第 ${tickIndex + 1} 轮对话`);
     return {
       turnIndex: tickIndex,
-      messageId: turn.userEl?.dataset.messageId || clickedMsg.dataset.messageId,
+      messageId,
       excerpt,
     };
   }
@@ -453,6 +537,9 @@ export class NativeLocatorEnhancer {
     const nextStarred = !this.starredSet.has(info.turnIndex);
     if (nextStarred) {
       this.starredSet.add(info.turnIndex);
+      if (info.messageId) {
+        this.messageIdToIndex.set(info.messageId, info.turnIndex);
+      }
       await storageService.addStarredMessage(currentId, info.turnIndex, {
         messageId: info.messageId,
         text: info.excerpt,
@@ -460,6 +547,13 @@ export class NativeLocatorEnhancer {
       showToast(`已标记第 ${info.turnIndex + 1} 轮对话到原生定位点`, 'success');
     } else {
       this.starredSet.delete(info.turnIndex);
+      if (info.messageId) {
+        this.messageIdToIndex.delete(info.messageId);
+      } else {
+        for (const [mid, idx] of this.messageIdToIndex.entries()) {
+          if (idx === info.turnIndex) this.messageIdToIndex.delete(mid);
+        }
+      }
       await storageService.removeStarredMessage(currentId, info.turnIndex);
       showToast(`已取消第 ${info.turnIndex + 1} 轮定位点标记`, 'info');
     }
