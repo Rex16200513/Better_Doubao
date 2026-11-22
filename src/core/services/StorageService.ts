@@ -5,17 +5,43 @@ const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
 const ACCOUNT_KEY = 'dvAccountId';
 
-function getCurrentAccountId(): string {
+function getStableAccountId(): string | null {
   try {
-    const keys = ['token', 'auth_token', 'accessToken', 'userInfo', 'user_id', 'accountId'];
+    const stableKeys = ['userInfo', 'user_id', 'accountId'];
+    for (const key of stableKeys) {
+      const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (!value) continue;
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.id) return `user_${parsed.id}`;
+          if (parsed.userId) return `user_${parsed.userId}`;
+          if (parsed.sub) return `user_${parsed.sub}`;
+        }
+      } catch {
+        const trimmed = value.trim();
+        if (trimmed && trimmed.length <= 128 && /^[\w@.-]+$/.test(trimmed)) {
+          return `user_${trimmed}`;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Storage] Failed to get stable account ID:', e);
+  }
+  return null;
+}
+
+function getLegacyAccountId(): string | null {
+  try {
+    const keys = ['token', 'auth_token', 'accessToken'];
     for (const key of keys) {
       const value = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (value) {
         try {
           const parsed = JSON.parse(value);
-          if (parsed.id) return `user_${parsed.id}`;
-          if (parsed.userId) return `user_${parsed.userId}`;
-          if (parsed.sub) return `user_${parsed.sub}`;
+          if (parsed?.id) return `user_${parsed.id}`;
+          if (parsed?.userId) return `user_${parsed.userId}`;
+          if (parsed?.sub) return `user_${parsed.sub}`;
         } catch {
           if (value.length > 10 && value.length < 200) {
             return `token_${key}_${value.substring(0, 50)}`;
@@ -34,9 +60,13 @@ function getCurrentAccountId(): string {
       }
     }
   } catch (e) {
-    console.warn('[Storage] Failed to get account ID:', e);
+    console.warn('[Storage] Failed to get legacy account ID:', e);
   }
-  return 'default';
+  return null;
+}
+
+function getCurrentAccountId(): string {
+  return getStableAccountId() ?? 'default';
 }
 
 function validateFolderData(data: unknown): data is FolderData {
@@ -109,7 +139,27 @@ export class StorageService {
     const key = this.getStorageKey();
     const backupKey = `${BACKUP_KEY}_${this.currentAccountId}`;
     const stored = await browser.storage.local.get([key, backupKey]);
-    const saved = validateFolderData(stored[key]) ? stored[key] : stored[backupKey];
+    let saved: unknown = validateFolderData(stored[key]) ? stored[key] : stored[backupKey];
+
+    // Transparently migrate extension-private data from legacy volatile token/cookie keys
+    // when no data exists under the stable account key yet.
+    if (!validateFolderData(saved)) {
+      const legacyId = getLegacyAccountId();
+      if (legacyId && legacyId !== this.currentAccountId) {
+        const legacyKey = `${STORAGE_KEY}_${legacyId}`;
+        const legacyBackupKey = `${BACKUP_KEY}_${legacyId}`;
+        const legacyStored = await browser.storage.local.get([legacyKey, legacyBackupKey]);
+        const legacySaved = validateFolderData(legacyStored[legacyKey])
+          ? legacyStored[legacyKey]
+          : legacyStored[legacyBackupKey];
+        if (validateFolderData(legacySaved)) {
+          saved = legacySaved;
+          this.data = { ...legacySaved, textHighlights: legacySaved.textHighlights ?? [] };
+          await this.persist();
+        }
+      }
+    }
+
     if (validateFolderData(saved)) {
       this.data = { ...saved, textHighlights: saved.textHighlights ?? [] };
     }
@@ -187,13 +237,13 @@ export class StorageService {
     this.debouncedSave();
   }
 
-  async addConversationToFolder(folderId: string, conversation: { conversationId: string; title: string; url: string; addedAt: number }): Promise<void> {
+  async addConversationToFolder(folderId: string, conversation: ConversationReference): Promise<void> {
     if (!this.data.folderContents[folderId]) {
       this.data.folderContents[folderId] = [];
     }
     const exists = this.data.folderContents[folderId].some(c => c.conversationId === conversation.conversationId);
     if (!exists) {
-      this.data.folderContents[folderId].push(conversation as any);
+      this.data.folderContents[folderId].push(conversation);
       this.debouncedSave();
     }
   }
@@ -250,7 +300,7 @@ export class StorageService {
     return folders;
   }
 
-  async getFolderContents(folderId: string): Promise<any[]> {
+  async getFolderContents(folderId: string): Promise<ConversationReference[]> {
     return this.data.folderContents[folderId] ?? [];
   }
 
@@ -316,8 +366,14 @@ export class StorageService {
     this.debouncedSave();
   }
 
-  async clearCorpusBoard(): Promise<void> {
-    this.data.corpusBoard = [];
+  async clearCorpusBoard(conversationId?: string): Promise<void> {
+    if (conversationId) {
+      this.data.corpusBoard = this.data.corpusBoard.filter(
+        item => item.conversationId !== conversationId
+      );
+    } else {
+      this.data.corpusBoard = [];
+    }
     this.debouncedSave();
   }
 

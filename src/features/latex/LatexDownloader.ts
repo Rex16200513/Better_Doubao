@@ -1,6 +1,10 @@
+import { downloadFile } from '../../core/utils/dom';
+
 export class LatexDownloader {
   private initialized = false;
   private processedElements = new WeakSet<HTMLElement>();
+  private observer: MutationObserver | null = null;
+  private debounceTimer: number | null = null;
 
   init(): void {
     if (this.initialized) return;
@@ -14,14 +18,15 @@ export class LatexDownloader {
   }
 
   private setupObserver(): void {
-    const observer = new MutationObserver((mutations) => {
+    this.observer?.disconnect();
+    this.observer = new MutationObserver((mutations) => {
       let shouldProcess = false;
       
       for (const mutation of mutations) {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           for (const node of mutation.addedNodes) {
             if (node instanceof Element) {
-              if (node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex, [copy-text]') ||
+              if (node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex, [copy-text], [data-custom-copy-text]') ||
                   node.classList?.contains('math-inline') || node.classList?.contains('math-block')) {
                 shouldProcess = true;
                 break;
@@ -38,11 +43,15 @@ export class LatexDownloader {
       }
       
       if (shouldProcess) {
-        setTimeout(() => this.processExistingFormulas(), 200);
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = window.setTimeout(() => {
+          this.debounceTimer = null;
+          this.processExistingFormulas();
+        }, 200);
       }
     });
 
-    observer.observe(document.body, {
+    this.observer.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
@@ -53,41 +62,20 @@ export class LatexDownloader {
   private processExistingFormulas(): void {
     // Find .math-inline or .math-block elements that have copy-text attribute
     const formulaElements = document.querySelectorAll('.math-inline[copy-text], .math-block[copy-text], .math-inline[data-custom-copy-text], .math-block[data-custom-copy-text]');
-    
-    console.log(`[LatexDownloader] Found ${formulaElements.length} formula elements with copy-text`);
 
     formulaElements.forEach(el => {
       const element = el as HTMLElement;
-      if (!this.processedElements.has(element)) {
+      if (!this.processedElements.has(element) && this.addDownloadButton(element, 'inline')) {
         this.processedElements.add(element);
-        this.addDownloadButton(element, 'inline');
       }
     });
 
-    // Also try legacy approach for elements without copy-text
-    const inlineMath = document.querySelectorAll('.math-inline:not([copy-text]):not([data-custom-copy-text])');
-    const blockMath = document.querySelectorAll('.math-block:not([copy-text]):not([data-custom-copy-text])');
+    // Also handle LaTeX code blocks
     const latexCodeBlocks = document.querySelectorAll('.custom-code-block-container--latex');
-
-    inlineMath.forEach(el => {
-      const element = el as HTMLElement;
-      if (!this.processedElements.has(element)) {
-        this.processedElements.add(element);
-        this.addDownloadButton(element, 'inline');
-      }
-    });
-    blockMath.forEach(el => {
-      const element = el as HTMLElement;
-      if (!this.processedElements.has(element)) {
-        this.processedElements.add(element);
-        this.addDownloadButton(element, 'block');
-      }
-    });
     latexCodeBlocks.forEach(el => {
       const element = el as HTMLElement;
-      if (!this.processedElements.has(element)) {
+      if (!this.processedElements.has(element) && this.addLatexCodeDownloadButton(element)) {
         this.processedElements.add(element);
-        this.addLatexCodeDownloadButton(element);
       }
     });
   }
@@ -107,11 +95,13 @@ export class LatexDownloader {
     return copyText.trim();
   }
 
-  private addDownloadButton(element: HTMLElement, _type: 'inline' | 'block'): void {
-    if (element.querySelector('.dbx-latex-download-btn')) return;
+  private addDownloadButton(element: HTMLElement, _type: 'inline' | 'block'): boolean {
+    if (element.querySelector('.dbx-latex-download-btn') || element.nextElementSibling?.classList.contains('dbx-latex-btn-container')) {
+      return true;
+    }
 
     const latex = this.extractLatexCode(element);
-    if (!latex) return;
+    if (!latex) return false;
 
     const btnContainer = document.createElement('span');
     btnContainer.className = 'dbx-latex-btn-container';
@@ -201,21 +191,23 @@ export class LatexDownloader {
       } else {
         element.parentNode.appendChild(btnContainer);
       }
+      return true;
     }
+    return false;
   }
 
-  private addLatexCodeDownloadButton(element: HTMLElement): void {
+  private addLatexCodeDownloadButton(element: HTMLElement): boolean {
     const existingBtn = element.querySelector('.dbx-latex-code-download-btn');
-    if (existingBtn) return;
+    if (existingBtn) return true;
 
     const codeArea = element.querySelector('code');
-    if (!codeArea) return;
+    if (!codeArea) return false;
 
     const latexCode = codeArea.textContent?.trim() || '';
-    if (!latexCode) return;
+    if (!latexCode) return false;
 
     const header = element.querySelector('.header-wrapper-Mbk8s6, .header-IAeXdE');
-    if (!header) return;
+    if (!header) return false;
 
     const btnContainer = document.createElement('span');
     btnContainer.className = 'dbx-latex-code-btn-container';
@@ -305,18 +297,19 @@ export class LatexDownloader {
     } else {
       header.appendChild(btnContainer);
     }
+    return true;
   }
 
   private downloadLatex(latex: string): void {
     const content = this.wrapLatexDocument(latex);
     const filename = `formula_${Date.now()}.tex`;
-    this.downloadFile(content, filename, 'text/plain');
+    downloadFile(content, filename, 'text/plain');
   }
 
   private downloadLatexCode(code: string): void {
     const content = this.wrapLatexDocument(code);
     const filename = `latex_${Date.now()}.tex`;
-    this.downloadFile(content, filename, 'text/plain');
+    downloadFile(content, filename, 'text/plain');
   }
 
   private async copyToClipboard(text: string, btnElement: HTMLElement): Promise<void> {
@@ -355,16 +348,14 @@ ${latex}
 `;
   }
 
-  private downloadFile(content: string, filename: string, mimeType: string): void {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  destroy(): void {
+    this.observer?.disconnect();
+    this.observer = null;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    this.initialized = false;
   }
 }
 

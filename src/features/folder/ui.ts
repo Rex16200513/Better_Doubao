@@ -1,4 +1,4 @@
-import { Folder, ConversationReference, getFolderColor } from '../../core';
+import { Folder, ConversationReference, getFolderColor, escapeHTML } from '../../core';
 
 export interface DropZoneConfig {
   onDrop: (folderId: string) => void;
@@ -7,12 +7,14 @@ export interface DropZoneConfig {
 }
 
 export function createFolderItemHTML(folder: Folder, contents: ConversationReference[]): string {
-  const color = getFolderColor(folder.color);
+  const color = escapeHTML(getFolderColor(folder.color));
+  const folderId = escapeHTML(folder.id);
+  const folderColor = escapeHTML(folder.color);
   const isExpanded = folder.isExpanded;
   
   return `
-    <div class="dbx-folder-item ${isExpanded ? 'expanded' : ''}" data-folder-id="${folder.id}" data-folder-color="${folder.color}">
-      <div class="dbx-folder-row" data-folder-id="${folder.id}">
+    <div class="dbx-folder-item ${isExpanded ? 'expanded' : ''}" data-folder-id="${folderId}" data-folder-color="${folderColor}">
+      <div class="dbx-folder-row" data-folder-id="${folderId}">
         <div class="dbx-folder-expand-icon ${isExpanded ? 'expanded' : ''}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 18l6-6-6-6"></path>
@@ -29,7 +31,7 @@ export function createFolderItemHTML(folder: Folder, contents: ConversationRefer
           </svg>
         </button>
       </div>
-      <div class="dbx-folder-contents" data-folder-id="${folder.id}">
+      <div class="dbx-folder-contents" data-folder-id="${folderId}">
         ${contents.map(c => createConversationItemHTML(c)).join('')}
       </div>
     </div>
@@ -38,7 +40,7 @@ export function createFolderItemHTML(folder: Folder, contents: ConversationRefer
 
 export function createConversationItemHTML(conversation: ConversationReference): string {
   return `
-    <div class="dbx-folder-conversation" draggable="true" data-conversation-id="${conversation.conversationId}">
+    <div class="dbx-folder-conversation" draggable="true" data-conversation-id="${escapeHTML(conversation.conversationId)}">
       <div class="dbx-conversation-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -140,10 +142,4 @@ export function createIndicator(color: string): HTMLElement {
   return indicator;
 }
 
-export function escapeHTML(str: string): string {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-export { getFolderColor };
+export { getFolderColor, escapeHTML };

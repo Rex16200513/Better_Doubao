@@ -1,3 +1,5 @@
+import { downloadFile, escapeHTML, isSafeHttpUrl, resolveUrl, sanitizeFilename } from '../../core/utils/dom';
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -10,6 +12,8 @@ export class ExportManager {
   private initialized = false;
   private exportButton: HTMLElement | null = null;
   private dropdownMenu: HTMLElement | null = null;
+  private topbarObserver: MutationObserver | null = null;
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
   init(): void {
     if (this.initialized) {
@@ -17,7 +21,6 @@ export class ExportManager {
       return;
     }
 
-    console.log('[ExportManager] Initializing...');
     this.waitForTopbar();
     this.ensureButtonVisible();
     this.initialized = true;
@@ -50,7 +53,6 @@ export class ExportManager {
                      document.querySelector('[class*="border-b"]');
       
       if (topbar) {
-        console.log('[ExportManager] Topbar found, adding export button');
         this.addExportButton(topbar as HTMLElement);
       } else {
         // Keep export accessible even when the host changes its header markup.
@@ -59,10 +61,12 @@ export class ExportManager {
     };
 
     checkTopbar();
-    const observer = new MutationObserver(() => {
-      if (!document.getElementById('dbx-export-btn')) checkTopbar();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    if (!this.topbarObserver) {
+      this.topbarObserver = new MutationObserver(() => {
+        if (!document.getElementById('dbx-export-btn')) checkTopbar();
+      });
+      this.topbarObserver.observe(document.body, { childList: true, subtree: true });
+    }
   }
 
   private addExportButton(topbar: HTMLElement): void {
@@ -132,12 +136,15 @@ export class ExportManager {
       topbar.appendChild(this.exportButton);
     }
 
-    document.addEventListener('click', (e) => {
-      if (this.dropdownMenu && !this.dropdownMenu.contains(e.target as Node) && 
-          !this.exportButton?.contains(e.target as Node)) {
-        this.hideDropdown();
-      }
-    });
+    if (!this.outsideClickHandler) {
+      this.outsideClickHandler = (e: MouseEvent) => {
+        if (this.dropdownMenu && !this.dropdownMenu.contains(e.target as Node) &&
+            !this.exportButton?.contains(e.target as Node)) {
+          this.hideDropdown();
+        }
+      };
+      document.addEventListener('click', this.outsideClickHandler);
+    }
   }
 
   private toggleDropdown(): void {
@@ -235,8 +242,8 @@ export class ExportManager {
       return messages;
     }
 
-    const messageWrappers = chatContainer.querySelectorAll('[data-message-id]');
-    console.log('[ExportManager] Found message wrappers:', messageWrappers.length);
+    const messageWrappers = Array.from(chatContainer.querySelectorAll('[data-message-id]'))
+      .filter(el => !el.parentElement?.closest('[data-message-id]'));
 
     messageWrappers.forEach((wrapper) => {
       const contentElements = wrapper.querySelectorAll('[data-render-engine="node"], [data-render-engine="block"]');
@@ -382,10 +389,11 @@ export class ExportManager {
           const href = el.getAttribute('href') || '';
           return `[${el.textContent || ''}](${href})`;
         case 'img':
-          const src = el.getAttribute('src') || el.getAttribute('data-src') || '';
-          if (src.startsWith('data:') || src.includes('base64')) {
+          const rawSrc = el.getAttribute('src') || el.getAttribute('data-src') || '';
+          if (!rawSrc || rawSrc.startsWith('data:') || rawSrc.toLowerCase().includes('base64')) {
             return '';
           }
+          const src = resolveUrl(rawSrc);
           const alt = el.getAttribute('alt') || 'image';
           return src ? `![${alt}](${src})` : '';
         case 'ul':
@@ -412,15 +420,15 @@ export class ExportManager {
           el.querySelectorAll('tr').forEach(tr => {
             const cells: string[] = [];
             tr.querySelectorAll('th, td').forEach(cell => {
-              cells.push(processNode(cell).trim());
+              cells.push(processNode(cell).trim().replace(/\|/g, '\\|'));
             });
             if (cells.length > 0) rows.push(cells);
           });
           if (rows.length === 0) return '';
           const header = rows[0].join(' | ');
           const separator = rows[0].map(() => '---').join(' | ');
-          const body = rows.slice(1).map(row => row.join(' | ')).join('\n');
-          return `\n| ${header} |\n| ${separator} |\n${body ? '| ' + body.replace(/\n/g, '\n| ') + '|' : ''}\n`;
+          const body = rows.slice(1).map(row => `| ${row.join(' | ')} |`).join('\n');
+          return `\n| ${header} |\n| ${separator} |\n${body ? `${body}\n` : ''}`;
         default:
           return Array.from(el.childNodes).map(processNode).join('');
       }
@@ -431,113 +439,123 @@ export class ExportManager {
     return markdown;
   }
 
+  private sanitizeHtmlForPdf(content: string): string {
+    const temp = document.createElement('div');
+    temp.innerHTML = content;
+
+    temp.querySelectorAll('script, iframe, object, embed, form, meta, link, base').forEach(node => node.remove());
+    temp.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes)) {
+        const name = attr.name.toLowerCase();
+        const value = attr.value.trim();
+        if (name.startsWith('on')) {
+          node.removeAttribute(attr.name);
+        } else if ((name === 'href' || name === 'src' || name === 'xlink:href') && value && !isSafeHttpUrl(value) && !value.startsWith('#')) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    });
+
+    const codeBlocks = temp.querySelectorAll('pre code, pre');
+    codeBlocks.forEach((block) => {
+      const pre = block.tagName === 'PRE' ? block as HTMLElement : block.parentElement as HTMLElement;
+      if (pre) {
+        pre.style.cssText = 'background: #f6f8fa; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; font-family: monospace; font-size: 11px; line-height: 1.4; border: 1px solid #e1e4e8;';
+      }
+    });
+
+    const cleanImageWrappers = temp.querySelectorAll('[class*="image-wrapper"], [class*="image-box-grid"], [class*="container-MzuYIN"], [class*="container-dLabXv"], [class*="image-box-grid-item"]');
+    cleanImageWrappers.forEach((wrapper) => {
+      const imgs = wrapper.querySelectorAll('img');
+      imgs.forEach((img) => {
+        const parent = wrapper.parentElement;
+        if (parent) {
+          parent.insertBefore(img.cloneNode(true), wrapper);
+        }
+      });
+      wrapper.remove();
+    });
+
+    const pictureElements = temp.querySelectorAll('picture');
+    pictureElements.forEach((picture) => {
+      const sources = picture.querySelectorAll('source');
+      const img = picture.querySelector('img');
+      if (img) {
+        sources.forEach((source) => {
+          const srcset = source.getAttribute('srcset');
+          if (srcset && !srcset.includes('data:')) {
+            img.setAttribute('src', srcset.split(' ')[0]);
+          }
+        });
+      }
+    });
+
+    const imgs = temp.querySelectorAll('img');
+    imgs.forEach((img) => {
+      const rawSrc = img.getAttribute('src') || img.getAttribute('data-src') || '';
+      if (!rawSrc) {
+        img.remove();
+        return;
+      }
+
+      const lowerSrc = rawSrc.toLowerCase();
+      if (lowerSrc.includes('data:image/svg') || lowerSrc.includes('width=2048') || lowerSrc.includes('width="2048') || !isSafeHttpUrl(rawSrc)) {
+        img.remove();
+        return;
+      }
+
+      img.setAttribute('src', resolveUrl(rawSrc));
+      (img as HTMLElement).style.cssText = 'max-width: 200px; height: auto; border-radius: 4px; margin: 4px; display: inline-block; vertical-align: top;';
+    });
+
+    const h1s = temp.querySelectorAll('h1');
+    h1s.forEach((h1) => {
+      (h1 as HTMLElement).style.cssText = 'font-size: 14px; font-weight: 600; margin: 12px 0 8px 0; color: #1f2937;';
+    });
+
+    const h2s = temp.querySelectorAll('h2');
+    h2s.forEach((h2) => {
+      (h2 as HTMLElement).style.cssText = 'font-size: 13px; font-weight: 600; margin: 10px 0 6px 0; color: #374151;';
+    });
+
+    const uls = temp.querySelectorAll('ul, ol');
+    uls.forEach((ul) => {
+      (ul as HTMLElement).style.cssText = 'margin: 8px 0; padding-left: 20px;';
+    });
+
+    const lis = temp.querySelectorAll('li');
+    lis.forEach((li) => {
+      (li as HTMLElement).style.cssText = 'margin: 4px 0;';
+    });
+
+    const ps = temp.querySelectorAll('p');
+    ps.forEach((p) => {
+      (p as HTMLElement).style.cssText = 'margin: 8px 0;';
+    });
+
+    const srs = temp.querySelectorAll('strong');
+    srs.forEach((s) => {
+      (s as HTMLElement).style.cssText = 'font-weight: 600;';
+    });
+
+    return temp.innerHTML;
+  }
+
   private async exportToPdf(): Promise<void> {
-    console.log('[ExportManager] Exporting to PDF...');
-    
     const messages = await this.getConversationMessages();
     if (!messages.length) return;
     const title = this.getConversationTitle();
+    const safeTitle = escapeHTML(title);
     
     const userMessages = messages.filter(m => m.role === 'user');
     const assistantMessages = messages.filter(m => m.role === 'assistant');
-    
-    const processContentForPdf = (content: string): string => {
-       const temp = document.createElement('div');
-       temp.innerHTML = content;
-
-       const codeBlocks = temp.querySelectorAll('pre code, pre');
-       codeBlocks.forEach((block) => {
-         const pre = block.tagName === 'PRE' ? block as HTMLElement : block.parentElement as HTMLElement;
-         if (pre) {
-           pre.style.cssText = 'background: #f6f8fa; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; font-family: monospace; font-size: 11px; line-height: 1.4; border: 1px solid #e1e4e8;';
-         }
-       });
-
-       const cleanImageWrappers = temp.querySelectorAll('[class*="image-wrapper"], [class*="image-box-grid"], [class*="container-MzuYIN"], [class*="container-dLabXv"], [class*="image-box-grid-item"]');
-       cleanImageWrappers.forEach((wrapper) => {
-         const imgs = wrapper.querySelectorAll('img');
-         imgs.forEach((img) => {
-           const parent = wrapper.parentElement;
-           if (parent) {
-             parent.insertBefore(img.cloneNode(true), wrapper);
-           }
-         });
-         wrapper.remove();
-       });
-
-       const pictureElements = temp.querySelectorAll('picture');
-       pictureElements.forEach((picture) => {
-         const sources = picture.querySelectorAll('source');
-         const img = picture.querySelector('img');
-         if (img) {
-           sources.forEach((source) => {
-             const srcset = source.getAttribute('srcset');
-             if (srcset && !srcset.includes('data:')) {
-               img.setAttribute('src', srcset.split(' ')[0]);
-             }
-           });
-         }
-       });
-
-       const imgs = temp.querySelectorAll('img');
-       imgs.forEach((img) => {
-         const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
-         if (!src) return;
-
-         const lowerSrc = src.toLowerCase();
-         if (lowerSrc.includes('data:image/svg') || lowerSrc.includes('width=2048') || lowerSrc.includes('width="2048')) {
-           img.remove();
-           return;
-         }
-
-         if (src.startsWith('//') || src.startsWith('/')) {
-           img.setAttribute('src', 'https:' + src);
-         }
-         (img as HTMLElement).style.cssText = 'max-width: 200px; height: auto; border-radius: 4px; margin: 4px; display: inline-block; vertical-align: top;';
-         img.onerror = function() {
-           (this as HTMLImageElement).style.display = 'none';
-         };
-       });
-
-       const h1s = temp.querySelectorAll('h1');
-       h1s.forEach((h1) => {
-         (h1 as HTMLElement).style.cssText = 'font-size: 14px; font-weight: 600; margin: 12px 0 8px 0; color: #1f2937;';
-       });
-
-       const h2s = temp.querySelectorAll('h2');
-       h2s.forEach((h2) => {
-         (h2 as HTMLElement).style.cssText = 'font-size: 13px; font-weight: 600; margin: 10px 0 6px 0; color: #374151;';
-       });
-
-       const uls = temp.querySelectorAll('ul, ol');
-       uls.forEach((ul) => {
-         (ul as HTMLElement).style.cssText = 'margin: 8px 0; padding-left: 20px;';
-       });
-
-       const lis = temp.querySelectorAll('li');
-       lis.forEach((li) => {
-         (li as HTMLElement).style.cssText = 'margin: 4px 0;';
-       });
-
-       const ps = temp.querySelectorAll('p');
-       ps.forEach((p) => {
-         (p as HTMLElement).style.cssText = 'margin: 8px 0;';
-       });
-
-       const srs = temp.querySelectorAll('strong');
-       srs.forEach((s) => {
-         (s as HTMLElement).style.cssText = 'font-weight: 600;';
-       });
-
-       return temp.innerHTML;
-     };
     
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>${title}</title>
+        <title>${safeTitle}</title>
         <style>
           @page {
             size: A4;
@@ -624,13 +642,13 @@ export class ExportManager {
         </style>
       </head>
       <body>
-        <h1>${title}</h1>
+        <h1>${safeTitle}</h1>
         <div class="meta">共 ${messages.length} 条消息（用户: ${userMessages.length}, AI: ${assistantMessages.length}）</div>
         <div class="conversation">
           ${messages.map(m => `
             <div class="message message-${m.role}">
               <div class="role">${m.role === 'user' ? '用户' : 'AI'}</div>
-              <div class="content">${processContentForPdf(m.content)}</div>
+              <div class="content">${this.sanitizeHtmlForPdf(m.content)}</div>
             </div>
           `).join('')}
         </div>
@@ -649,24 +667,12 @@ export class ExportManager {
   }
 
   private async exportToTxt(): Promise<void> {
-    console.log('[ExportManager] Exporting to TXT...');
-    
     const messages = await this.getConversationMessages();
     if (!messages.length) return;
     const title = this.getConversationTitle();
     const date = new Date().toLocaleDateString('zh-CN');
     const userCount = messages.filter(m => m.role === 'user').length;
     const aiCount = messages.filter(m => m.role === 'assistant').length;
-    
-    const extractImgUrls = (htmlContent: string): string[] => {
-      const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-      const urls: string[] = [];
-      let match;
-      while ((match = imgRegex.exec(htmlContent)) !== null) {
-        urls.push(match[1]);
-      }
-      return urls;
-    };
     
     const content = [
       title,
@@ -677,38 +683,20 @@ export class ExportManager {
       ...messages.map(m => {
         const role = m.role === 'user' ? '【用户】' : '【AI】';
         const msgContent = this.htmlToMarkdown(m.content);
-        if (m.hasImages) {
-          const imgUrls = extractImgUrls(m.content);
-          if (imgUrls.length > 0) {
-            return `${role}\n${msgContent}\n\n[图片: ${imgUrls.join(', ')}]\n`;
-          }
-        }
         return `${role}\n${msgContent}\n`;
       })
     ].join('\n');
 
-    this.downloadFile(content, `${title}.txt`, 'text/plain;charset=utf-8');
+    downloadFile(content, `${sanitizeFilename(title, '对话导出')}.txt`, 'text/plain;charset=utf-8');
   }
 
   private async exportToMarkdown(): Promise<void> {
-    console.log('[ExportManager] Exporting to Markdown...');
-    
     const messages = await this.getConversationMessages();
     if (!messages.length) return;
     const title = this.getConversationTitle();
     const date = new Date().toLocaleDateString('zh-CN');
     const userCount = messages.filter(m => m.role === 'user').length;
     const aiCount = messages.filter(m => m.role === 'assistant').length;
-    
-    const extractImgUrls = (htmlContent: string): string[] => {
-      const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
-      const urls: string[] = [];
-      let match;
-      while ((match = imgRegex.exec(htmlContent)) !== null) {
-        urls.push(match[1]);
-      }
-      return urls;
-    };
     
     const content = [
       `# ${title}`,
@@ -721,32 +709,25 @@ export class ExportManager {
       ...messages.map(m => {
         const role = m.role === 'user' ? '**用户**' : '**AI**';
         const msgContent = this.htmlToMarkdown(m.content);
-        let mdContent = `### ${role}\n\n${msgContent}`;
-
-        if (m.hasImages) {
-          const imgUrls = extractImgUrls(m.content);
-          imgUrls.forEach(url => {
-            mdContent += `\n\n![图片](${url})`;
-          });
-        }
-
-        return mdContent;
+        return `### ${role}\n\n${msgContent}`;
       })
     ].join('\n');
 
-    this.downloadFile(content, `${title}.md`, 'text/markdown;charset=utf-8');
+    downloadFile(content, `${sanitizeFilename(title, '对话导出')}.md`, 'text/markdown;charset=utf-8');
   }
 
-  private downloadFile(content: string, filename: string, mimeType: string): void {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  destroy(): void {
+    this.topbarObserver?.disconnect();
+    this.topbarObserver = null;
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler);
+      this.outsideClickHandler = null;
+    }
+    this.dropdownMenu?.remove();
+    this.dropdownMenu = null;
+    this.exportButton?.remove();
+    this.exportButton = null;
+    this.initialized = false;
   }
 }
 

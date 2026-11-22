@@ -733,8 +733,8 @@ export class FolderManager {
     const isCustom = selected && !colors.find(c => c.id === selected);
     const customValue = isCustom ? selected : '#3b82f6';
     const customColorHtml = `
-      <div class="dbx-color-option dbx-color-custom ${isCustom ? 'selected' : ''}" data-color="${customValue}" style="background-color: ${isCustom ? selected : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'}">
-        <input type="color" class="dbx-color-picker" value="${customValue}">
+      <div class="dbx-color-option dbx-color-custom ${isCustom ? 'selected has-custom-color' : ''}" data-color="${escapeHTML(customValue)}" style="${isCustom ? `--custom-color: ${escapeHTML(selected)}; background-color: ${escapeHTML(selected)}` : ''}">
+        <input type="color" class="dbx-color-picker" value="${escapeHTML(customValue)}">
       </div>
     `;
     
@@ -1002,9 +1002,14 @@ export class FolderManager {
   }
 
   destroy(): void {
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = null;
+    this.rootObserver?.disconnect();
+    this.rootObserver = null;
     this.containerElement = null;
     this.sidebarContainer = null;
     this.hidePopup();
+    this.initialized = false;
   }
 }
 

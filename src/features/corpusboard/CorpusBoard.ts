@@ -1448,8 +1448,11 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   private async clearCorpus(): Promise<void> {
+    if (this.corpusItems.length === 0) return;
+    if (!window.confirm('确定清空当前对话的所有语料吗？')) return;
+
     try {
-      await storageService.clearCorpusBoard();
+      await storageService.clearCorpusBoard(this.getConversationId());
       this.corpusItems = [];
       this.updateTriggerCount();
       

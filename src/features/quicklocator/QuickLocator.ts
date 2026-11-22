@@ -15,6 +15,8 @@ export class QuickLocator {
   private locatorBar: HTMLElement | null = null;
   private initialized = false;
   private observer: MutationObserver | null = null;
+  private urlObserver: MutationObserver | null = null;
+  private urlPollTimer: number | null = null;
   private starredMarkers: Set<number> = new Set();
   private conversationId: string = 'unknown';
   private messageCache = new Map<string, Omit<MessageMarker, 'id' | 'index' | 'starred'>>();
@@ -48,17 +50,20 @@ export class QuickLocator {
 
   private setupUrlChangeListener(): void {
     let lastUrl = window.location.href;
-    new MutationObserver(() => {
+    this.urlObserver?.disconnect();
+    this.urlObserver = new MutationObserver(() => {
       if (window.location.href !== lastUrl) {
         lastUrl = window.location.href;
-        this.onConversationChange();
+        void this.onConversationChange();
       }
-    }).observe(document.body, { childList: true, subtree: true });
+    });
+    this.urlObserver.observe(document.body, { childList: true, subtree: true });
     
-    setInterval(() => {
+    if (this.urlPollTimer) clearInterval(this.urlPollTimer);
+    this.urlPollTimer = window.setInterval(() => {
       if (window.location.href !== lastUrl) {
         lastUrl = window.location.href;
-        this.onConversationChange();
+        void this.onConversationChange();
       }
     }, 1000);
   }
@@ -214,6 +219,12 @@ export class QuickLocator {
     if (this.isIndexing) return;
     this.isIndexing = true;
     const originalScrollTop = container.scrollTop;
+    const startConversationId = this.conversationId;
+    let cancelled = false;
+    const cancel = () => { cancelled = true; };
+    window.addEventListener('wheel', cancel, { passive: true, once: true });
+    window.addEventListener('pointerdown', cancel, { passive: true, once: true });
+    window.addEventListener('touchstart', cancel, { passive: true, once: true });
 
     try {
       this.messageCache.clear();
@@ -221,9 +232,10 @@ export class QuickLocator {
       let iterations = 0;
       let lastMax = -1;
 
-      while (iterations < 250) {
+      while (iterations < 250 && !cancelled && this.conversationId === startConversationId) {
         container.scrollTo({ top: target, behavior: 'auto' });
         await this.waitForVirtualList();
+        if (cancelled || this.conversationId !== startConversationId) break;
         this.collectVisibleMessages(container);
 
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
@@ -234,10 +246,17 @@ export class QuickLocator {
         iterations++;
       }
     } finally {
-      container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
-      await this.waitForVirtualList();
-      this.collectVisibleMessages(container);
-      this.rebuildMarkers();
+      window.removeEventListener('wheel', cancel);
+      window.removeEventListener('pointerdown', cancel);
+      window.removeEventListener('touchstart', cancel);
+      if (!cancelled && this.conversationId === startConversationId) {
+        container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+        await this.waitForVirtualList();
+      }
+      if (this.conversationId === startConversationId) {
+        this.collectVisibleMessages(container);
+        this.rebuildMarkers();
+      }
       this.isIndexing = false;
     }
   }
@@ -522,6 +541,18 @@ export class QuickLocator {
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
+    }
+    if (this.urlObserver) {
+      this.urlObserver.disconnect();
+      this.urlObserver = null;
+    }
+    if (this.urlPollTimer) {
+      clearInterval(this.urlPollTimer);
+      this.urlPollTimer = null;
+    }
+    if (this.tooltipEl) {
+      this.tooltipEl.remove();
+      this.tooltipEl = null;
     }
     if (this.locatorBar) {
       this.locatorBar.remove();
