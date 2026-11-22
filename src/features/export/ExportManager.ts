@@ -1,4 +1,5 @@
 import { downloadFile, escapeHTML, isSafeHttpUrl, resolveUrl, sanitizeFilename } from '../../core/utils/dom';
+import { showConfirmDialog, showToast } from '../../core/utils/ui';
 
 interface Message {
   id: string;
@@ -118,7 +119,7 @@ export class ExportManager {
     });
 
     if (topbar === document.body) {
-      this.exportButton.style.cssText += 'position:fixed;right:20px;top:80px;z-index:10001;background:white;border:1px solid #ddd;';
+      this.exportButton.style.cssText += 'position:fixed;right:20px;top:80px;z-index:10001;background:var(--dbx-surface, #fff);border:1px solid var(--dbx-border, #ddd);';
       document.body.appendChild(this.exportButton);
       return;
     }
@@ -234,11 +235,16 @@ export class ExportManager {
 
   private async getConversationMessages(): Promise<Message[]> {
     const messages: Message[] = [];
-    if (!window.confirm('将导出页面当前已加载的消息。长对话可能采用虚拟列表，导出结果不保证包含全部历史记录。是否继续？')) return messages;
+    const confirmed = await showConfirmDialog({
+      title: '导出当前对话',
+      message: '将导出页面当前已加载的消息。长对话可能采用虚拟列表，导出结果不保证包含全部历史记录。是否继续？',
+      confirmText: '继续导出',
+    });
+    if (!confirmed) return messages;
 
     const chatContainer = document.querySelector('[data-message-id]')?.closest('[class*="v_list_scroller"], main, [class*="page-main"], [class*="chat-container"]') || document.querySelector('main');
     if (!chatContainer) {
-      console.log('[ExportManager] Chat container not found');
+      showToast('未检测到当前对话内容', 'warning');
       return messages;
     }
 
@@ -688,6 +694,7 @@ export class ExportManager {
     ].join('\n');
 
     downloadFile(content, `${sanitizeFilename(title, '对话导出')}.txt`, 'text/plain;charset=utf-8');
+    showToast(`已导出 TXT（共 ${messages.length} 条消息）`, 'success');
   }
 
   private async exportToMarkdown(): Promise<void> {
@@ -714,6 +721,7 @@ export class ExportManager {
     ].join('\n');
 
     downloadFile(content, `${sanitizeFilename(title, '对话导出')}.md`, 'text/markdown;charset=utf-8');
+    showToast(`已导出 Markdown（共 ${messages.length} 条消息）`, 'success');
   }
 
   destroy(): void {

@@ -1,5 +1,6 @@
 import { storageService } from '../../core/services/StorageService';
 import { escapeHTML, getConversationId } from '../../core/utils/dom';
+import { showConfirmDialog, showToast } from '../../core/utils/ui';
 import type { CorpusItem, TextHighlight } from '../../core/types/folder';
 
 export class CorpusBoard {
@@ -101,14 +102,15 @@ export class CorpusBoard {
       z-index: 9998;
       width: 44px;
       height: 44px;
-      background: #fff;
+      background: var(--dbx-surface, #fff);
+      border: 1px solid var(--dbx-border, transparent);
       border-radius: 10px;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--dbx-shadow, 0 2px 12px rgba(0, 0, 0, 0.15));
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: grab;
-      color: #666;
+      color: var(--dbx-text-secondary, #666);
       transition: box-shadow 0.2s, transform 0.1s;
       user-select: none;
     `;
@@ -313,9 +315,10 @@ export class CorpusBoard {
       top: ${top}px;
       width: ${panelWidth}px;
       max-height: ${panelHeight}px;
-      background: #fff;
+      background: var(--dbx-surface, #fff);
+      color: var(--dbx-text-primary, #1f2937);
       border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--dbx-shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.15));
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -1371,12 +1374,19 @@ removeHighlightButton?.addEventListener('click', async (e) => {
 
   private async clearCorpus(): Promise<void> {
     if (this.corpusItems.length === 0) return;
-    if (!window.confirm('确定清空当前对话的所有语料吗？')) return;
+    const confirmed = await showConfirmDialog({
+      title: '清空语料板',
+      message: '确定清空当前对话的所有语料吗？',
+      confirmText: '清空',
+      danger: true,
+    });
+    if (!confirmed) return;
 
     try {
       await storageService.clearCorpusBoard(this.getConversationId());
       this.corpusItems = [];
       this.updateTriggerCount();
+      showToast('已清空当前对话的语料', 'success');
       
       if (this.isExpanded && this.panel) {
         this.updatePanelContent();

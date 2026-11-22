@@ -359,7 +359,7 @@ export class QuickLocator {
     if (!this.tooltipEl) {
       this.tooltipEl = document.createElement('div');
       this.tooltipEl.id = 'dbx-locator-tooltip-floating';
-      this.tooltipEl.style.cssText = 'position: fixed; z-index: 99999; background: #fff; color: #333; padding: 10px 12px; border-radius: 10px; font-size: 13px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); width: 240px; height: 90px; display: none; flex-direction: column; gap: 8px; overflow: hidden;';
+      this.tooltipEl.style.cssText = 'position: fixed; z-index: 99999; background: var(--dbx-surface, #fff); color: var(--dbx-text-primary, #333); border: 1px solid var(--dbx-border, transparent); padding: 10px 12px; border-radius: 10px; font-size: 13px; box-shadow: var(--dbx-shadow-lg, 0 4px 20px rgba(0, 0, 0, 0.15)); width: 240px; height: 90px; display: none; flex-direction: column; gap: 8px; overflow: hidden;';
       document.body.appendChild(this.tooltipEl);
       
       this.tooltipEl.addEventListener('mouseenter', () => {
@@ -380,7 +380,7 @@ export class QuickLocator {
       const text = document.createElement('div');
       text.className = 'tooltip-text';
       text.textContent = marker.text;
-      text.style.cssText = 'color: #333; line-height: 1.4; height: 54px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-wrap: break-word; word-break: break-all;';
+      text.style.cssText = 'color: var(--dbx-text-primary, #333); line-height: 1.4; height: 54px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-wrap: break-word; word-break: break-all;';
       this.tooltipEl.appendChild(text);
     }
     
@@ -388,7 +388,7 @@ export class QuickLocator {
     if (!starBtn) {
       starBtn = document.createElement('button');
       starBtn.className = 'tooltip-star';
-      starBtn.style.cssText = 'display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; margin: 0 -4px; border-radius: 6px; font-size: 12px; color: #666; cursor: pointer; background: transparent; border: none; width: fit-content;';
+      starBtn.style.cssText = 'display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; margin: 0 -4px; border-radius: 6px; font-size: 12px; color: var(--dbx-text-secondary, #666); cursor: pointer; background: transparent; border: none; width: fit-content;';
       this.tooltipEl.appendChild(starBtn);
     }
     starBtn.innerHTML = `

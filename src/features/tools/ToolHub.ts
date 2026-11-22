@@ -1,6 +1,16 @@
 import { storageService } from '../../core/services/StorageService';
+import { showConfirmDialog, showToast } from '../../core/utils/ui';
 import { corpusBoard } from '../corpusboard/CorpusBoard';
 import browser from 'webextension-polyfill';
+
+const HIGHLIGHT_SWATCHES = [
+  { color: '#FDEB00', name: '黄色' },
+  { color: '#00E52B', name: '绿色' },
+  { color: '#09DCE5', name: '青色' },
+  { color: '#F000C8', name: '粉色' },
+  { color: '#FF1616', name: '红色' },
+  { color: '#747A89', name: '灰色' },
+];
 
 const icons = [
   '<path d="M8 3h8l4 4v14H4V3h4m6 0v6h6M8 13h8M8 17h6"/>',
@@ -208,14 +218,71 @@ export class ToolHub {
   }
 
   private async saved(): Promise<void> {
-    const panel = this.open('高亮与收藏'); const data = await storageService.getData();
-    const input = document.createElement('input'); input.placeholder = '筛选摘录或对话'; input.setAttribute('aria-label', input.placeholder);
+    const panel = this.open('高亮与收藏');
+    const input = document.createElement('input');
+    input.placeholder = '筛选摘录或对话';
+    input.setAttribute('aria-label', input.placeholder);
+
+    let activeColor: string | null = null;
+    const filterBar = document.createElement('div');
+    filterBar.className = 'dbx-color-filters';
+
     const list = document.createElement('div');
-    const render = () => {
-      list.replaceChildren(); const q = input.value.toLocaleLowerCase();
+    list.className = 'dbx-saved-list';
+
+    const unwrapMarksById = (highlightId: string) => {
+      document.querySelectorAll<HTMLElement>('.dbx-text-highlight').forEach((mark) => {
+        if (mark.dataset.dbxHighlightId !== highlightId) return;
+        const parent = mark.parentNode;
+        if (!parent) return;
+        while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+        mark.remove();
+        parent.normalize();
+      });
+    };
+
+    const renderFilters = () => {
+      filterBar.replaceChildren();
+      const allChip = button('全部', () => { activeColor = null; renderFilters(); void render(); });
+      allChip.className = `dbx-color-filter-chip${activeColor === null ? ' is-active' : ''}`;
+      filterBar.appendChild(allChip);
+
+      for (const swatch of HIGHLIGHT_SWATCHES) {
+        const chip = button('', () => {
+          activeColor = activeColor?.toLowerCase() === swatch.color.toLowerCase() ? null : swatch.color;
+          renderFilters();
+          void render();
+        });
+        chip.className = `dbx-color-filter-chip dbx-color-filter-swatch${activeColor?.toLowerCase() === swatch.color.toLowerCase() ? ' is-active' : ''}`;
+        chip.title = `按${swatch.name}筛选`;
+        chip.setAttribute('aria-label', `按${swatch.name}筛选`);
+        const dot = document.createElement('span');
+        dot.className = 'dbx-highlight-color-dot';
+        dot.style.backgroundColor = swatch.color;
+        dot.style.marginRight = '0';
+        chip.appendChild(dot);
+        filterBar.appendChild(chip);
+      }
+    };
+
+    const render = async () => {
+      const data = await storageService.getData();
+      list.replaceChildren();
+      const q = input.value.trim().toLocaleLowerCase();
       const current = window.location.pathname.match(/\/chat\/([^/?#]+)/)?.[1];
+
       for (const item of data.textHighlights ?? []) {
-        if (!`${item.text} ${item.conversationId}`.toLocaleLowerCase().includes(q)) continue;
+        const normalizedColor = /^#[\da-fA-F]{3}([\da-fA-F]{3})?$/.test(item.color) ? item.color : '#FDEB00';
+        if (activeColor) {
+          const isYellowLegacy = activeColor.toLowerCase() === '#fdeb00' && normalizedColor.toLowerCase() === '#fde047';
+          if (normalizedColor.toLowerCase() !== activeColor.toLowerCase() && !isYellowLegacy) continue;
+        }
+        if (q && !`${item.text} ${item.conversationId}`.toLocaleLowerCase().includes(q)) continue;
+
+        const rowWrap = document.createElement('div');
+        rowWrap.className = 'dbx-saved-row';
+        rowWrap.style.borderLeft = `4px solid ${normalizedColor}`;
+
         const row = button(`高亮 · ${item.text}`, () => {
           if (item.conversationId !== current) { window.location.href = `/chat/${encodeURIComponent(item.conversationId)}`; return; }
           const marks = Array.from(document.querySelectorAll<HTMLElement>('.dbx-text-highlight')).filter(mark => mark.dataset.dbxHighlightId === item.id);
@@ -224,27 +291,80 @@ export class ToolHub {
             target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
             for (const mark of marks) mark.classList.add('dbx-highlight-located');
             window.setTimeout(() => marks.forEach(mark => mark.classList.remove('dbx-highlight-located')), 1800);
-          } else window.alert('该高亮尚未加载，请先滚动加载原文；摘录仍保存在目录中。');
+          } else {
+            showToast('该高亮尚未加载，请先滚动加载原文；摘录仍保存在目录中。', 'info');
+          }
         });
-        const color = /^#[\da-fA-F]{3}([\da-fA-F]{3})?$/.test(item.color) ? item.color : '#eab308';
-        row.style.borderLeft = `4px solid ${color}`;
-        const dot = document.createElement('span'); dot.className = 'dbx-highlight-color-dot'; dot.style.backgroundColor = color; dot.setAttribute('aria-label', `高亮颜色 ${color}`); row.prepend(dot);
-        list.appendChild(row);
+        row.className = 'dbx-saved-row-main';
+
+        const dot = document.createElement('span');
+        dot.className = 'dbx-highlight-color-dot';
+        dot.style.backgroundColor = normalizedColor;
+        dot.setAttribute('aria-label', `高亮颜色 ${normalizedColor}`);
+        row.prepend(dot);
+
+        const removeBtn = button('×', () => void (async () => {
+          await storageService.removeTextHighlight(item.id);
+          unwrapMarksById(item.id);
+          showToast('已删除该高亮', 'success');
+          await render();
+        })());
+        removeBtn.className = 'dbx-saved-delete';
+        removeBtn.title = '删除高亮';
+        removeBtn.setAttribute('aria-label', '删除高亮');
+
+        rowWrap.append(row, removeBtn);
+        list.appendChild(rowWrap);
       }
-      for (const [conversation, indexes] of Object.entries(data.starredMessages)) {
-        for (const i of indexes) {
-          const label = `收藏 · ${conversation} · 第 ${i + 1} 条用户消息`;
-          if (!label.toLocaleLowerCase().includes(q)) continue;
-          list.appendChild(button(label, () => {
-            if (conversation !== current) { window.location.href = `/chat/${encodeURIComponent(conversation)}`; return; }
-            const dot = document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`);
-            if (dot) dot.click(); else window.alert('该收藏尚未加载，请先滚动加载原文。');
-          }));
+
+      if (!activeColor) {
+        for (const [conversation, indexes] of Object.entries(data.starredMessages)) {
+          for (const i of indexes) {
+            const excerpt = data.starredMeta?.[conversation]?.[i]?.text;
+            const label = excerpt
+              ? `收藏 · ${excerpt}`
+              : `收藏 · ${conversation} · 第 ${i + 1} 条用户消息`;
+            if (q && !`${label} ${conversation}`.toLocaleLowerCase().includes(q)) continue;
+
+            const rowWrap = document.createElement('div');
+            rowWrap.className = 'dbx-saved-row';
+
+            const row = button(label, () => {
+              if (conversation !== current) { window.location.href = `/chat/${encodeURIComponent(conversation)}`; return; }
+              const dot = document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`);
+              if (dot) dot.click(); else showToast('该收藏尚未加载，请先滚动加载原文。', 'info');
+            });
+            row.className = 'dbx-saved-row-main';
+
+            const removeBtn = button('×', () => void (async () => {
+              await storageService.removeStarredMessage(conversation, i);
+              if (conversation === current) {
+                document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`)?.classList.remove('starred');
+              }
+              showToast('已取消收藏', 'success');
+              await render();
+            })());
+            removeBtn.className = 'dbx-saved-delete';
+            removeBtn.title = '取消收藏';
+            removeBtn.setAttribute('aria-label', '取消收藏');
+
+            rowWrap.append(row, removeBtn);
+            list.appendChild(rowWrap);
+          }
         }
       }
-      if (!list.childElementCount) list.textContent = '暂无匹配的高亮或收藏';
+
+      if (!list.childElementCount) {
+        const empty = document.createElement('p');
+        empty.textContent = '暂无匹配的高亮或收藏';
+        list.appendChild(empty);
+      }
     };
-    input.addEventListener('input', render); panel.append(input, list); render();
+
+    input.addEventListener('input', () => void render());
+    renderFilters();
+    panel.append(input, filterBar, list);
+    await render();
   }
 
   private backup(): void {
@@ -257,6 +377,7 @@ export class ToolHub {
       const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
       const link = document.createElement('a'); link.href = url; link.download = `better-doubao-${Date.now()}.json`; link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('已导出 JSON 备份文件', 'success');
     })().catch(() => { status.textContent = '备份失败，请重试。'; })));
     const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json'; file.setAttribute('aria-label', '选择恢复文件');
     file.addEventListener('change', () => void (async () => {
@@ -265,11 +386,22 @@ export class ToolHub {
       const parsed = JSON.parse(await selected.text());
       const data = storageService.validateBackup(parsed);
       status.textContent = `预览：${data.folders.length} 个文件夹、${data.corpusBoard.length} 条语料、${data.textHighlights?.length ?? 0} 条高亮`;
-      if (!window.confirm(`${status.textContent}。覆盖当前账号数据？`)) return;
+      const confirmed = await showConfirmDialog({
+        title: '确认覆盖恢复',
+        message: `${status.textContent}。确认覆盖当前账号数据？（恢复前会自动保存一份回退副本）`,
+        confirmText: '确认恢复',
+        danger: true,
+      });
+      if (!confirmed) return;
       await storageService.restoreBackup(parsed); window.location.reload();
     })().catch(error => { status.textContent = `恢复失败：${error instanceof Error ? error.message : '文件无效'}`; }));
     panel.append(file, button('恢复上次覆盖前的数据', () => void (async () => {
-      if (!window.confirm('恢复上次覆盖前的数据？当前数据将保存为新的恢复前副本。')) return;
+      const confirmed = await showConfirmDialog({
+        title: '回退上次恢复',
+        message: '恢复上次覆盖前的数据？当前数据将保存为新的恢复前副本。',
+        confirmText: '确认回退',
+      });
+      if (!confirmed) return;
       await storageService.undoRestore(); window.location.reload();
     })().catch(error => { status.textContent = error instanceof Error ? error.message : '恢复失败'; })), status);
   }
