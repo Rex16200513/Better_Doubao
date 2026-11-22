@@ -28,6 +28,7 @@ interface NavTarget {
 export class SidebarLauncher {
   private unsubscribeDom: (() => void) | null = null;
   private renderedSignature = '';
+  private renderedControls: HTMLElement[] = [];
   private tooltipEl: HTMLElement | null = null;
 
   init(): void {
@@ -40,6 +41,7 @@ export class SidebarLauncher {
     this.unsubscribeDom?.();
     this.unsubscribeDom = null;
     this.renderedSignature = '';
+    this.renderedControls = [];
     this.hideTooltip();
     this.tooltipEl?.remove();
     this.tooltipEl = null;
@@ -155,18 +157,42 @@ export class SidebarLauncher {
       }
     }
 
+    const currentControls = [
+      ...primaryTargets.map((t) => t.control),
+      ...(moreToggle ? [moreToggle.control] : []),
+      ...(isExpanded ? secondaryTargets.map((t) => t.control) : []),
+    ];
+
     const signature = [
       primaryTargets.map((t) => t.label).join(','),
       moreToggle ? moreToggle.label : '',
       isExpanded ? secondaryTargets.map((t) => t.label).join(',') : '',
     ].join('|');
 
-    if (signature === this.renderedSignature && shell.childElementCount > 0) {
+    const controlsUnchanged =
+      currentControls.length === this.renderedControls.length &&
+      currentControls.every((el, idx) => el === this.renderedControls[idx] && el.isConnected);
+
+    if (signature === this.renderedSignature && controlsUnchanged && shell.childElementCount > 0) {
       return;
     }
     this.renderedSignature = signature;
+    this.renderedControls = currentControls;
     this.hideTooltip();
     shell.replaceChildren();
+
+    const triggerNativeByLabel = (label: string, fallback: HTMLElement) => {
+      if (fallback.isConnected) {
+        fallback.click();
+        return;
+      }
+      const liveSidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+      if (!liveSidebar) return;
+      const liveLabels = Array.from(liveSidebar.querySelectorAll<HTMLElement>('span.font-medium, span, div'))
+        .filter((el) => el.childElementCount === 0 && !el.closest('#dbx-sidebar-launcher-shell, #dbx-sidebar-launcher'));
+      const fresh = this.resolveNavTarget(liveLabels, label);
+      fresh?.control.click();
+    };
 
     // 1. Fixed primary icon strip (icons never shift position when toggling "更多")
     const bar = document.createElement('div');
@@ -186,7 +212,7 @@ export class SidebarLauncher {
       button.addEventListener('blur', () => this.hideTooltip());
       button.addEventListener('click', () => {
         this.hideTooltip();
-        control.click();
+        triggerNativeByLabel(label, control);
       });
       bar.appendChild(button);
     }
@@ -206,7 +232,7 @@ export class SidebarLauncher {
       toggleBtn.addEventListener('blur', () => this.hideTooltip());
       toggleBtn.addEventListener('click', () => {
         this.hideTooltip();
-        moreToggle.control.click();
+        triggerNativeByLabel(moreToggle.label, moreToggle.control);
       });
       bar.appendChild(toggleBtn);
     }
@@ -227,7 +253,7 @@ export class SidebarLauncher {
         text.textContent = label;
         chip.appendChild(text);
         chip.addEventListener('click', () => {
-          control.click();
+          triggerNativeByLabel(label, control);
         });
         drawer.appendChild(chip);
       }

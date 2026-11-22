@@ -90,12 +90,25 @@ export class SettingsService {
   private settings: ExtensionSettings = mergeSettings(null);
   private loaded: Promise<ExtensionSettings> | null = null;
   private listeners = new Set<SettingsListener>();
+  private storageListenerBound = false;
 
   load(): Promise<ExtensionSettings> {
+    this.bindStorageListener();
     if (!this.loaded) {
       this.loaded = this.readFromStorage();
     }
     return this.loaded;
+  }
+
+  private bindStorageListener(): void {
+    if (this.storageListenerBound) return;
+    if (!browser.storage?.onChanged?.addListener) return;
+    this.storageListenerBound = true;
+    browser.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local' || !changes[SETTINGS_KEY]) return;
+      this.settings = mergeSettings(changes[SETTINGS_KEY].newValue);
+      this.notify();
+    });
   }
 
   private async readFromStorage(): Promise<ExtensionSettings> {
@@ -117,6 +130,7 @@ export class SettingsService {
   }
 
   subscribe(listener: SettingsListener): () => void {
+    this.bindStorageListener();
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -135,13 +149,24 @@ export class SettingsService {
   }
 
   async updateSettings(partial: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
-    this.settings = mergeSettings({ ...this.settings, ...partial });
+    this.bindStorageListener();
+    let latest = this.settings;
+    try {
+      const stored = await browser.storage.local.get(SETTINGS_KEY);
+      if (stored[SETTINGS_KEY] !== undefined) {
+        latest = mergeSettings(stored[SETTINGS_KEY]);
+      }
+    } catch {
+      latest = this.settings;
+    }
+    this.settings = mergeSettings({ ...latest, ...partial });
     await browser.storage.local.set({ [SETTINGS_KEY]: this.settings });
     this.notify();
     return this.getSettings();
   }
 
   async resetSettings(): Promise<ExtensionSettings> {
+    this.bindStorageListener();
     this.settings = mergeSettings(null);
     await browser.storage.local.set({ [SETTINGS_KEY]: this.settings });
     this.notify();

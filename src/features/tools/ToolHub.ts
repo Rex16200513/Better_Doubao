@@ -49,6 +49,7 @@ export class ToolHub {
     window.addEventListener('resize', () => this.position());
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
+      if (this.panel && !this.panel.isConnected) this.panel = null;
       const menu = document.getElementById('dbx-tools-menu');
       const corpusPanel = document.querySelector('.dbx-corpus-panel');
       if (!menu && !this.panel && !corpusPanel) return;
@@ -71,7 +72,7 @@ export class ToolHub {
     menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
     menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 64, rect.top - 60))}px`;
     for (const [label, title, action] of [
-      ['▤', '语料板', () => { this.panel?.remove(); corpusBoard.openPanel(); this.styleCorpus(); }],
+      ['▤', '语料板', () => { this.panel?.remove(); this.panel = null; corpusBoard.openPanel(); this.styleCorpus(); }],
       ['⌕', '对话搜索', () => this.search()],
       ['☆', '高亮与收藏', () => void this.saved()],
       ['⚙', '界面与按钮定制', () => this.customize()],
@@ -206,20 +207,38 @@ export class ToolHub {
       hits = [];
       if (query) for (const node of this.messages()) {
         const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-        const parts: { node: Text; start: number }[] = []; let text = ''; let next: Node | null;
+        const parts: { node: Text; start: number; rawStart: number }[] = [];
+        let lower = '';
+        let rawText = '';
+        let next: Node | null;
         while ((next = walker.nextNode())) {
           if (next.parentElement?.closest('button,script,style,[aria-hidden="true"]')) continue;
-          parts.push({ node: next as Text, start: text.length }); text += next.textContent;
+          const t = next as Text;
+          const chunk = t.data ?? t.textContent ?? '';
+          const lowerChunk = chunk.toLocaleLowerCase();
+          parts.push({ node: t, start: lower.length, rawStart: rawText.length });
+          lower += lowerChunk;
+          rawText += chunk;
         }
-        const lower = text.toLocaleLowerCase(); let offset = 0;
+        let offset = 0;
         while ((offset = lower.indexOf(query, offset)) !== -1) {
           const begin = [...parts].reverse().find(p => p.start <= offset);
           const end = [...parts].reverse().find(p => p.start < offset + query.length);
           if (!begin || !end) break;
-          const range = document.createRange(); range.setStart(begin.node, offset - begin.start); range.setEnd(end.node, offset + query.length - end.start);
-          const before = text.slice(Math.max(0, offset - 24), offset).split(/[。！？.!?\n]/).pop() || '';
-          const after = text.slice(offset + query.length, offset + query.length + 36).split(/[。！？.!?\n]/)[0];
-          if (range.getClientRects().length) hits.push({ node, range, text: `${offset > before.length ? '…' : ''}${before}${text.slice(offset, offset + query.length)}${after}…`.trim() });
+          const startOff = Math.min(Math.max(0, offset - begin.start), begin.node.data.length);
+          const endOff = Math.min(Math.max(0, offset + query.length - end.start), end.node.data.length);
+          try {
+            const range = document.createRange();
+            range.setStart(begin.node, startOff);
+            range.setEnd(end.node, endOff);
+            const rawOffset = begin.rawStart + startOff;
+            const before = rawText.slice(Math.max(0, rawOffset - 24), rawOffset).split(/[。！？.!?\n]/).pop() || '';
+            const matchText = range.toString() || rawText.slice(rawOffset, rawOffset + query.length);
+            const after = rawText.slice(rawOffset + matchText.length, rawOffset + matchText.length + 36).split(/[。！？.!?\n]/)[0];
+            if (range.getClientRects().length) hits.push({ node, range, text: `${rawOffset > before.length ? '…' : ''}${before}${matchText}${after}…`.trim() });
+          } catch {
+            // Skip malformed range boundaries (e.g. combining characters from locale case folding).
+          }
           offset += query.length;
         }
       }
