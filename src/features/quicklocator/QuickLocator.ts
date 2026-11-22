@@ -21,7 +21,9 @@ export class QuickLocator {
   private activeScrollContainer: HTMLElement | null = null;
   private scrollSyncHandler: (() => void) | null = null;
   private scrollRafId: number | null = null;
+  private scrollAnimRafId: number | null = null;
   private activeMarkerIndex = -1;
+  private hasCompletedFullIndex = false;
   private starredMarkers: Set<number> = new Set();
   private conversationId: string = 'unknown';
   private messageCache = new Map<string, Omit<MessageMarker, 'id' | 'index' | 'starred'>>();
@@ -68,6 +70,8 @@ export class QuickLocator {
       this.markers = [];
       this.messageCache.clear();
       this.activeMarkerIndex = -1;
+      this.hasCompletedFullIndex = false;
+      this.cancelScrollAnimation();
       this.detachScrollSync();
       this.observer?.disconnect();
       this.observer = null;
@@ -95,18 +99,19 @@ export class QuickLocator {
     
     const checkContainer = async () => {
       const container = this.scrollContainer;
-      if (container || retries >= maxRetries) {
+      const hasMessages = !!container?.querySelector('[data-message-id]');
+      if ((container && hasMessages) || retries >= maxRetries) {
         if (container) {
           await this.loadStarredMessages();
-          await this.scanMessages(settingsService.getSettings().autoIndexLongChat);
           this.createLocatorBar();
+          await this.scanMessages(settingsService.getSettings().autoIndexLongChat);
           this.setupObserver();
           this.setupScrollSync(container);
         }
         return;
       }
       retries++;
-      setTimeout(checkContainer, 500);
+      setTimeout(checkContainer, 400);
     };
     
     checkContainer();
@@ -134,7 +139,7 @@ export class QuickLocator {
     this.conversationId = this.getConversationId();
     await this.loadStarredMessages();
 
-    if (indexEntireConversation && this.isVirtualList(container)) {
+    if (indexEntireConversation && (this.isVirtualList(container) || container.scrollHeight > container.clientHeight + 80)) {
       await this.indexEntireConversation(container);
     } else {
       this.collectVisibleMessages(container);
@@ -210,10 +215,34 @@ export class QuickLocator {
     });
   }
 
+  private getTopMessageId(container: HTMLElement): string | null {
+    return container.querySelector<HTMLElement>('[data-message-id]')?.dataset.messageId ?? null;
+  }
+
+  private waitForHistoryLoad(container: HTMLElement, prevHeight: number, prevTopId: string | null, timeoutMs = 420): Promise<boolean> {
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const poll = () => {
+        const changed = container.scrollHeight > prevHeight + 8 || this.getTopMessageId(container) !== prevTopId;
+        if (changed) {
+          window.setTimeout(() => resolve(true), 60);
+          return;
+        }
+        if (performance.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+        window.setTimeout(poll, 70);
+      };
+      requestAnimationFrame(poll);
+    });
+  }
+
   private async indexEntireConversation(container: HTMLElement): Promise<void> {
     if (this.isIndexing) return;
     this.isIndexing = true;
     const originalScrollTop = container.scrollTop;
+    const initialScrollHeight = container.scrollHeight;
     const startConversationId = this.conversationId;
     let cancelled = false;
     const cancel = () => { cancelled = true; };
@@ -221,8 +250,30 @@ export class QuickLocator {
     window.addEventListener('pointerdown', cancel, { passive: true, once: true });
     window.addEventListener('touchstart', cancel, { passive: true, once: true });
 
+    const refreshBtn = this.locatorBar?.querySelector<HTMLElement>('.dbx-locator-refresh');
+    refreshBtn?.classList.add('is-spinning');
+
     try {
       this.messageCache.clear();
+
+      // Phase 1: Pull earlier paginated history by reaching the top until no more history loads.
+      let stableTopRounds = 0;
+      for (let round = 0; round < 25 && !cancelled && this.conversationId === startConversationId; round++) {
+        const prevHeight = container.scrollHeight;
+        const prevTopId = this.getTopMessageId(container);
+        container.scrollTo({ top: 0, behavior: 'auto' });
+        const loadedMore = await this.waitForHistoryLoad(container, prevHeight, prevTopId, 420);
+        if (cancelled || this.conversationId !== startConversationId) break;
+        this.collectVisibleMessages(container);
+        if (loadedMore) {
+          stableTopRounds = 0;
+        } else {
+          stableTopRounds++;
+          if (stableTopRounds >= 2) break;
+        }
+      }
+
+      // Phase 2: Sweep from top to bottom so virtualized rows in the middle are all indexed.
       let target = 0;
       let iterations = 0;
       let lastMax = -1;
@@ -236,21 +287,30 @@ export class QuickLocator {
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
         if (target >= maxScroll && maxScroll === lastMax) break;
         lastMax = maxScroll;
-        const step = Math.max(320, container.clientHeight * 0.75);
+        const step = Math.max(360, container.clientHeight * 0.8);
         target = Math.min(maxScroll, target + step);
         iterations++;
+      }
+
+      if (!cancelled && this.conversationId === startConversationId) {
+        this.hasCompletedFullIndex = true;
       }
     } finally {
       window.removeEventListener('wheel', cancel);
       window.removeEventListener('pointerdown', cancel);
       window.removeEventListener('touchstart', cancel);
+      refreshBtn?.classList.remove('is-spinning');
       if (!cancelled && this.conversationId === startConversationId) {
-        container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+        // Preserve the user's visual reading position even when earlier history prepended above.
+        const heightDelta = Math.max(0, container.scrollHeight - initialScrollHeight);
+        container.scrollTo({ top: originalScrollTop + heightDelta, behavior: 'auto' });
         await this.waitForVirtualList();
       }
       if (this.conversationId === startConversationId) {
         this.collectVisibleMessages(container);
         this.rebuildMarkers();
+        this.updateLocatorDots();
+        this.syncActiveMarkerFromScroll(container);
       }
       this.isIndexing = false;
     }
@@ -299,8 +359,22 @@ export class QuickLocator {
     const bar = document.createElement('div');
     bar.id = 'dbx-quick-locator';
     bar.innerHTML = `
+      <button type="button" class="dbx-locator-refresh" title="加载全部历史定位点" aria-label="加载全部历史定位点">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
       <div class="dbx-locator-track"></div>
     `;
+
+    bar.querySelector('.dbx-locator-refresh')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const container = this.scrollContainer;
+      if (container) {
+        void this.indexEntireConversation(container);
+      }
+    });
     
     document.body.appendChild(bar);
     this.locatorBar = bar;
@@ -448,29 +522,140 @@ export class QuickLocator {
     }, 150);
   }
 
+  private cancelScrollAnimation(): void {
+    if (this.scrollAnimRafId !== null) {
+      window.cancelAnimationFrame(this.scrollAnimRafId);
+      this.scrollAnimRafId = null;
+    }
+  }
+
+  private getCenteredScrollTop(container: HTMLElement, element: HTMLElement): number {
+    const containerRect = container.getBoundingClientRect();
+    const elRect = element.getBoundingClientRect();
+    const target = container.scrollTop + (elRect.top - containerRect.top) - Math.max(24, (container.clientHeight - elRect.height) * 0.35);
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    return Math.max(0, Math.min(maxScroll, target));
+  }
+
+  private smoothScrollContainerTo(
+    container: HTMLElement,
+    initialTargetTop: number,
+    resolveLiveTarget?: () => number | null
+  ): Promise<boolean> {
+    this.cancelScrollAnimation();
+
+    return new Promise((resolve) => {
+      const startTop = container.scrollTop;
+      let targetTop = initialTargetTop;
+      const distance = Math.abs(targetTop - startTop);
+      if (distance < 4) {
+        resolve(true);
+        return;
+      }
+
+      const duration = Math.min(620, Math.max(280, 240 + Math.sqrt(distance) * 5.5));
+      const startTime = performance.now();
+      let cancelled = false;
+
+      const onUserInterrupt = () => {
+        cancelled = true;
+        cleanup();
+        resolve(false);
+      };
+
+      const cleanup = () => {
+        this.cancelScrollAnimation();
+        window.removeEventListener('wheel', onUserInterrupt);
+        window.removeEventListener('pointerdown', onUserInterrupt);
+        window.removeEventListener('touchstart', onUserInterrupt);
+      };
+
+      window.addEventListener('wheel', onUserInterrupt, { passive: true, once: true });
+      window.addEventListener('pointerdown', onUserInterrupt, { passive: true, once: true });
+      window.addEventListener('touchstart', onUserInterrupt, { passive: true, once: true });
+
+      const step = (now: number) => {
+        if (cancelled) return;
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        // Smooth easeInOutCubic so every jump glides naturally like scrolling up/down.
+        const eased = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        if (resolveLiveTarget) {
+          const live = resolveLiveTarget();
+          if (live !== null) {
+            targetTop = live;
+          }
+        }
+
+        container.scrollTop = startTop + (targetTop - startTop) * eased;
+
+        if (progress < 1) {
+          this.scrollAnimRafId = window.requestAnimationFrame(step);
+        } else {
+          container.scrollTop = targetTop;
+          cleanup();
+          resolve(true);
+        }
+      };
+
+      this.scrollAnimRafId = window.requestAnimationFrame(step);
+    });
+  }
+
   private async scrollToMessage(marker: MessageMarker): Promise<void> {
     const container = this.scrollContainer;
     if (!container) return;
 
-    let element = marker.element?.isConnected ? marker.element : this.findMessageElement(marker.messageId);
-    if (!element) {
-      container.scrollTo({ top: marker.scrollTop, behavior: 'auto' });
-      for (let attempt = 0; attempt < 12 && !element; attempt++) {
-        await this.waitForVirtualList();
-        element = this.findMessageElement(marker.messageId);
+    this.scrollLocatorToMarker(marker.index);
+    this.setActiveMarker(marker.index);
+
+    const resolveElement = (): HTMLElement | null => {
+      if (marker.element?.isConnected) return marker.element;
+      const found = this.findMessageElement(marker.messageId);
+      if (found) marker.element = found;
+      return found;
+    };
+
+    const existing = resolveElement();
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const estimatedTop = Math.max(
+      0,
+      Math.min(maxScroll, marker.scrollTop - container.clientHeight * 0.35)
+    );
+    const initialTarget = existing
+      ? this.getCenteredScrollTop(container, existing)
+      : estimatedTop;
+
+    const completed = await this.smoothScrollContainerTo(
+      container,
+      initialTarget,
+      () => {
+        const el = resolveElement();
+        return el ? this.getCenteredScrollTop(container, el) : null;
       }
+    );
+    if (!completed) return;
+
+    let element = resolveElement();
+    for (let attempt = 0; attempt < 8 && !element; attempt++) {
+      await this.waitForVirtualList();
+      element = resolveElement();
     }
     if (!element) return;
 
-    marker.element = element;
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Gentle settle if virtual row height differed slightly from estimated offset.
+    const settledTop = this.getCenteredScrollTop(container, element);
+    if (Math.abs(container.scrollTop - settledTop) > 28) {
+      await this.smoothScrollContainerTo(container, settledTop);
+    }
+
     element.classList.add('dbx-message-highlight');
     setTimeout(() => {
       element?.classList.remove('dbx-message-highlight');
     }, 2000);
-    
-    this.scrollLocatorToMarker(marker.index);
-    this.setActiveMarker(marker.index);
   }
 
   private setupScrollSync(container: HTMLElement): void {
@@ -575,7 +760,8 @@ export class QuickLocator {
   }
 
   private debounceScan = this.debounce(async () => {
-    await this.scanMessages(false);
+    const shouldFullIndex = !this.hasCompletedFullIndex && settingsService.getSettings().autoIndexLongChat;
+    await this.scanMessages(shouldFullIndex);
   }, 1000);
 
   private debounce(fn: () => void | Promise<void>, delay: number): () => void {
@@ -587,6 +773,7 @@ export class QuickLocator {
   }
 
   destroy(): void {
+    this.cancelScrollAnimation();
     this.detachScrollSync();
     if (this.observer) {
       this.observer.disconnect();

@@ -275,7 +275,7 @@ export class CorpusBoard {
     if (this.panel) return;
 
     this.panel = document.createElement('div');
-    this.panel.className = 'dbx-corpus-panel';
+    this.panel.className = 'dbx-corpus-panel dbx-unified-panel';
     this.panel.style.cssText = this.getPanelStyles();
     document.body.appendChild(this.panel);
 
@@ -284,41 +284,26 @@ export class CorpusBoard {
 
   private getPanelStyles(): string {
     const triggerRect = this.triggerBtn?.getBoundingClientRect();
-    const panelWidth = 300;
-    const panelHeight = 400;
+    const panelWidth = Math.min(316, window.innerWidth - 24);
+    const panelHeight = Math.min(480, window.innerHeight - 24);
     
-    let left = triggerRect ? triggerRect.left - panelWidth - 8 : this.positionX - panelWidth - 8;
+    let left = triggerRect ? triggerRect.left - panelWidth - 12 : this.positionX - panelWidth - 12;
     let top = triggerRect ? triggerRect.top : this.positionY;
     
-    if (left < 8) {
-      left = triggerRect ? triggerRect.right + 8 : this.positionX + 60;
+    if (left < 12) {
+      left = triggerRect ? triggerRect.right + 12 : this.positionX + 60;
     }
-    if (left + panelWidth > window.innerWidth - 8) {
-      left = window.innerWidth - panelWidth - 8;
+    if (left + panelWidth > window.innerWidth - 12) {
+      left = window.innerWidth - panelWidth - 12;
     }
-    if (top < 8) {
-      top = triggerRect ? triggerRect.bottom + 8 : this.positionY + 60;
+    if (top < 12) {
+      top = triggerRect ? triggerRect.bottom + 12 : this.positionY + 60;
     }
-    if (top + panelHeight > window.innerHeight - 8) {
-      top = window.innerHeight - panelHeight - 8;
+    if (top + panelHeight > window.innerHeight - 12) {
+      top = window.innerHeight - panelHeight - 12;
     }
 
-    return `
-      position: fixed;
-      z-index: 9999;
-      left: ${left}px;
-      top: ${top}px;
-      width: ${panelWidth}px;
-      max-height: ${panelHeight}px;
-      background: var(--dbx-surface, #fff);
-      color: var(--dbx-text-primary, #1f2937);
-      border-radius: 12px;
-      box-shadow: var(--dbx-shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.15));
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    `;
+    return `left: ${left}px; top: ${top}px; width: ${panelWidth}px; max-height: ${panelHeight}px;`;
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
@@ -337,12 +322,29 @@ export class CorpusBoard {
     
     this.panel.innerHTML = `
       <div class="dbx-corpus-header">
-        <span class="dbx-corpus-title">语料板</span>
-        <span class="dbx-corpus-header-count">${count} 条</span>
-        <button class="dbx-corpus-clear-btn" title="清空">清空</button>
+        <div class="dbx-corpus-header-left">
+          <span class="dbx-corpus-title">语料板</span>
+          <span class="dbx-corpus-header-count">${count} 条</span>
+        </div>
+        <div class="dbx-corpus-header-right">
+          <button type="button" class="dbx-corpus-clear-btn" title="清空当前对话语料" ${count === 0 ? 'disabled' : ''}>清空</button>
+        </div>
       </div>
       <div class="dbx-corpus-list">
-        ${this.corpusItems.length === 0 ? '<div class="dbx-corpus-empty">暂无语料<br><small>选中文本后右键添加到语料板</small></div>' : ''}
+        ${this.corpusItems.length === 0 ? `
+          <div class="dbx-corpus-empty">
+            <div class="dbx-corpus-empty-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div>暂无语料</div>
+            <small>选中对话文字，点击浮动按钮即可收藏</small>
+          </div>
+        ` : ''}
         ${this.corpusItems.length > 0 ? `
           <div class="dbx-corpus-select-all">
             <input type="checkbox" id="dbx-corpus-select-all" ${selectedCount === count && count > 0 ? 'checked' : ''}>
@@ -357,20 +359,22 @@ export class CorpusBoard {
             <div class="dbx-corpus-item-body">
               <div class="dbx-corpus-item-content">${escapeHTML(item.text)}</div>
             </div>
-            <button class="dbx-corpus-item-remove" title="删除">×</button>
+            <button type="button" class="dbx-corpus-item-remove" title="删除">×</button>
           </div>
         `).join('')}
       </div>
       <div class="dbx-corpus-footer">
-        <button class="dbx-corpus-add-btn" ${selectedCount === 0 ? 'disabled' : ''}>添加到对话框${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>
+        <button type="button" class="dbx-corpus-add-btn" ${selectedCount === 0 ? 'disabled' : ''}>添加到对话框${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>
       </div>
     `;
 
     const closeButton = document.createElement('button');
-    closeButton.type = 'button'; closeButton.textContent = '×';
+    closeButton.type = 'button';
+    closeButton.className = 'dbx-panel-close';
+    closeButton.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     closeButton.title = '关闭'; closeButton.setAttribute('aria-label', '关闭语料板');
     closeButton.addEventListener('click', event => { event.stopPropagation(); this.closePanel(); });
-    this.panel.querySelector('.dbx-corpus-header')?.appendChild(closeButton);
+    this.panel.querySelector('.dbx-corpus-header-right')?.appendChild(closeButton);
     this.updateTriggerCount();
 
     this.panel.querySelector('.dbx-corpus-clear-btn')?.addEventListener('click', () => {

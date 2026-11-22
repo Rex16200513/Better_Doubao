@@ -12,6 +12,8 @@ const HIGHLIGHT_SWATCHES = [
   { color: '#747A89', name: '灰色' },
 ];
 
+const CLOSE_ICON_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
 const icons = [
   '<path d="M8 3h8l4 4v14H4V3h4m6 0v6h6M8 13h8M8 17h6"/>',
   '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
@@ -85,27 +87,33 @@ export class ToolHub {
     corpusBoard.closePanel();
     this.panel?.remove();
     const panel = document.createElement('section'); panel.id = 'dbx-tools-panel';
+    panel.className = 'dbx-unified-panel';
     panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title);
     const heading = document.createElement('h3'); heading.textContent = title;
     const header = document.createElement('header'); header.className = 'dbx-tool-header';
     this.draggable(panel);
-    const close = button('×', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
+    const close = button('', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
+    close.className = 'dbx-panel-close';
+    close.innerHTML = CLOSE_ICON_SVG;
     close.title = '关闭'; close.setAttribute('aria-label', '关闭');
-    header.append(heading, close); panel.append(header);
+    header.append(heading, close);
+    const body = document.createElement('div');
+    body.className = 'dbx-tool-body';
+    panel.append(header, body);
     panel.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         panel.remove();
         if (this.panel === panel) this.panel = null;
       }
     });
-    document.body.appendChild(panel); this.panel = panel; this.position(); return panel;
+    document.body.appendChild(panel); this.panel = panel; this.position(); return body;
   }
 
   private position(): void {
     const anchor = document.getElementById('dbx-corpus-trigger')?.getBoundingClientRect();
     for (const panel of [this.panel, document.querySelector<HTMLElement>('.dbx-corpus-panel')]) {
       if (!panel || !anchor) continue;
-      const width = Math.min(360, window.innerWidth - 24);
+      const width = Math.min(316, window.innerWidth - 24);
       panel.style.width = `${width}px`;
       if (panel.dataset.dragged === 'true') {
         panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, panel.offsetLeft))}px`;
@@ -113,7 +121,7 @@ export class ToolHub {
         continue;
       }
       panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left - width - 12))}px`;
-      const height = Math.min(540, window.innerHeight - 24);
+      const height = Math.min(480, window.innerHeight - 24);
       panel.style.maxHeight = `${height}px`;
       panel.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, anchor.top))}px`;
       panel.style.right = 'auto';
@@ -149,9 +157,15 @@ export class ToolHub {
   }
 
   private guide(): void {
-    const panel = this.open('欢迎使用随手工具');
+    const body = this.open('欢迎使用随手工具');
     const p = document.createElement('p'); p.textContent = '点击悬浮按钮，展开语料板、对话搜索、重点目录和备份。所有面板都在按钮附近打开，可点击 × 或按 Esc 关闭。搜索仅覆盖已加载内容。';
-    panel.append(p, button('开始使用', () => { void browser.storage.local.set({ dbxToolsGuideSeen: true }); panel.remove(); }));
+    const startBtn = button('开始使用', () => {
+      void browser.storage.local.set({ dbxToolsGuideSeen: true });
+      this.panel?.remove();
+      this.panel = null;
+    });
+    startBtn.className = 'dbx-tool-primary-btn';
+    body.append(p, startBtn);
   }
 
   private messages(): HTMLElement[] {

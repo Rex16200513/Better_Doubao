@@ -247,19 +247,23 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert(md.includes('![proto](https://cdn.doubao.com/p.png)'), 'protocol-relative img resolved');
   assert(!md.includes('base64'), 'base64 img filtered out');
 
-  // Test PDF HTML sanitization strips scripts, event handlers, and javascript: links
+  // Test PDF HTML sanitization strips scripts, event handlers, layout styles, empty divs, and standalone "表格" labels
   const scriptEl = new FakeElement('script', {}, [textNode('alert(1)')]);
-  const evilLink = new FakeElement('a', { href: 'javascript:alert(1)', onclick: 'steal()' }, [textNode('click')]);
+  const evilLink = new FakeElement('a', { href: 'javascript:alert(1)', onclick: 'steal()', style: 'height: 800px', class: 'tall-box' }, [textNode('click')]);
+  const tableLabel = new FakeElement('div', { class: 'table-header' }, [textNode('表格')]);
+  const emptyWrapper = new FakeElement('div', { style: 'min-height: 400px' }, [textNode('   ')]);
   const relImg = new FakeElement('img', { src: '/img/ok.png', onerror: 'evil()' });
-  nextRoot = new FakeElement('div', {}, [scriptEl, evilLink, relImg]);
+  nextRoot = new FakeElement('div', {}, [scriptEl, evilLink, tableLabel, emptyWrapper, relImg]);
   Object.defineProperty(nextRoot, 'innerHTML', {
     get() { return JSON.stringify(this.childNodes.map(c => ({ tag: c.tagName, attrs: c.attrs }))); },
     set() {},
   });
   const sanitized = JSON.parse(exporter.sanitizeHtmlForPdf('ignored'));
-  assert.equal(sanitized.length, 2, 'script node removed');
+  assert.equal(sanitized.length, 2, 'script, standalone table label, and empty wrapper removed');
   assert.equal(sanitized[0].attrs.href, undefined, 'javascript: href stripped');
   assert.equal(sanitized[0].attrs.onclick, undefined, 'onclick handler stripped');
+  assert.equal(sanitized[0].attrs.style, undefined, 'layout inline style stripped');
+  assert.equal(sanitized[0].attrs.class, undefined, 'host class stripped');
   assert.equal(sanitized[1].attrs.onerror, undefined, 'onerror handler stripped');
   assert.equal(sanitized[1].attrs.src, 'https://www.doubao.com/img/ok.png', 'relative img src resolved cleanly');
 }
