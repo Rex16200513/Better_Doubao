@@ -4,7 +4,6 @@ import type { ExtensionSettings } from '../../core/types/settings';
 type BooleanSettingKey =
   | 'enableSidebarLauncher'
   | 'enableFolders'
-  | 'enableNativeLocatorEnhancer'
   | 'enableCorpusAndHighlight'
   | 'enableExport'
   | 'enableLatexDownloader'
@@ -15,7 +14,6 @@ type BooleanSettingKey =
 const SETTING_KEYS: BooleanSettingKey[] = [
   'enableSidebarLauncher',
   'enableFolders',
-  'enableNativeLocatorEnhancer',
   'enableCorpusAndHighlight',
   'enableExport',
   'enableLatexDownloader',

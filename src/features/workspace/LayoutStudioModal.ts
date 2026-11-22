@@ -146,21 +146,6 @@ export class LayoutStudioModal {
       const wfChat = document.createElement('div');
       wfChat.className = 'dbx-wf-chat';
 
-      const wfTicks = document.createElement('button');
-      wfTicks.type = 'button';
-      wfTicks.className = `dbx-wf-ticks${draft.enableNativeLocatorEnhancer ? ' is-on' : ' is-off'}`;
-      wfTicks.title = '点击切换：点原生「赞 👍」时同步在原生定位点标星';
-      wfTicks.innerHTML = `
-        <div class="dbx-wf-tick-lines">
-          <span></span><span class="liked"></span><span></span><span></span>
-        </div>
-        <div class="dbx-wf-tick-label">${draft.enableNativeLocatorEnhancer ? '点赞标星 · 开' : '点赞标星 · 关'}</div>
-      `;
-      wfTicks.addEventListener('click', () => {
-        draft.enableNativeLocatorEnhancer = !draft.enableNativeLocatorEnhancer;
-        render();
-      });
-
       const wfBubbles = document.createElement('div');
       wfBubbles.className = 'dbx-wf-bubbles';
       wfBubbles.innerHTML = `
@@ -168,10 +153,9 @@ export class LayoutStudioModal {
         <div class="dbx-wf-bubble-ai">
           <div class="line"></div>
           <div class="line short"></div>
-          <div class="wf-ai-actions">👍 赞 → 同步标记到左侧原生定位点</div>
         </div>
       `;
-      wfChat.append(wfTicks, wfBubbles);
+      wfChat.append(wfBubbles);
 
       // Floating quick capsule bar wireframe
       const wfCapsules = document.createElement('div');
@@ -361,7 +345,6 @@ export class LayoutStudioModal {
         const needsReload =
           draft.enableSidebarLauncher !== initial.enableSidebarLauncher ||
           draft.enableFolders !== initial.enableFolders ||
-          draft.enableNativeLocatorEnhancer !== initial.enableNativeLocatorEnhancer ||
           draft.enableExport !== initial.enableExport;
 
         await settingsService.updateSettings(draft);

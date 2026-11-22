@@ -332,7 +332,7 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
 
   const merged = mergeSettings({
     enableExport: false,
-    enableNativeLocatorEnhancer: 'bad-type',
+    enableFolders: 'bad-type',
     hideSidebarFooter: true,
     themePreset: 'warm',
     pinnedComposerSkills: ['对话', '图像生成', 123, '对话'],
@@ -342,7 +342,7 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
     ],
   });
   assert.equal(merged.enableExport, false);
-  assert.equal(merged.enableNativeLocatorEnhancer, true, 'non-boolean falls back to default');
+  assert.equal(merged.enableFolders, true, 'non-boolean falls back to default');
   assert.equal(merged.enableSidebarLauncher, true);
   assert.equal(merged.hideSidebarFooter, true);
   assert.equal(merged.themePreset, 'warm');
@@ -504,70 +504,4 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-// 11. NativeLocatorEnhancer: native like button recognition & visual top-to-bottom sorting
-{
-  const { hasNativeLocatorTimestamp, isNativeLikeButton, sortElementsTopToBottom } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
-    if (name.includes('StorageService')) return { storageService: { getStarredMessages: async () => [] } };
-    if (name.includes('PageLifecycle')) return { pageLifecycle: { onUrlChange: () => () => {}, onDomChange: () => () => {} } };
-    if (name.includes('utils/dom')) return domUtils;
-    if (name.includes('utils/ui')) return { showToast() {} };
-    return {};
-  });
-  assert.equal(hasNativeLocatorTimestamp('3月12日 15:21'), true);
-  assert.equal(hasNativeLocatorTimestamp('普通文本无时间戳'), false);
-
-  // Column-reverse DOM order (bottom message first in DOM) must sort visually top-to-bottom
-  const reversedMsgs = [
-    { id: 'newest', getBoundingClientRect: () => ({ top: 900 }) },
-    { id: 'middle', getBoundingClientRect: () => ({ top: 450 }) },
-    { id: 'oldest', getBoundingClientRect: () => ({ top: 100 }) },
-  ];
-  assert.deepEqual(
-    [...sortElementsTopToBottom(reversedMsgs)].map(m => m.id),
-    ['oldest', 'middle', 'newest'],
-    'reversed DOM messages sorted visually top-to-bottom'
-  );
-
-  const makeBtn = (attrs, text = '') => ({
-    getAttribute: k => attrs[k] ?? null,
-    className: attrs.class || '',
-    textContent: text,
-    parentElement: null,
-    querySelector: () => null,
-  });
-  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '赞' })), true);
-  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_like' })), true);
-  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '踩' })), false);
-  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_dislike' })), false);
-
-  // Structural fallback when each icon button is wrapped in its own tooltip container
-  const makeSlot = (hasSvg, innerBtn) => {
-    const slot = {
-      getAttribute: () => null,
-      className: '',
-      textContent: '',
-      children: [innerBtn],
-      childElementCount: 1,
-      parentElement: null,
-      contains: el => el === innerBtn || el === slot,
-      querySelector: sel => (sel === 'svg' && hasSvg ? {} : innerBtn),
-    };
-    innerBtn.parentElement = slot;
-    return slot;
-  };
-  const slotBtns = Array.from({ length: 5 }, () => ({
-    getAttribute: () => null,
-    className: '',
-    textContent: '',
-    parentElement: null,
-    querySelector: sel => (sel === 'svg' ? {} : null),
-  }));
-  const slots = slotBtns.map(b => makeSlot(true, b));
-  const actionBar = { children: slots, childElementCount: slots.length, parentElement: null };
-  slots.forEach(s => { s.parentElement = actionBar; });
-  assert.equal(isNativeLikeButton(slotBtns[2]), true, 'wrapped 3rd icon in 5-icon action bar recognized as like');
-  assert.equal(isNativeLikeButton(slotBtns[0]), false, 'copy slot not recognized as like');
-  assert.equal(isNativeLikeButton(slotBtns[3]), false, 'dislike slot not recognized as like');
-}
-
-console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, native locator enhancer, latex, export, toolhub');
+console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub');

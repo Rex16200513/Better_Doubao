@@ -325,13 +325,6 @@ body[data-theme="dark"],
   text-align: center;
 }
 
-/* Native quick-locator tick highlight synced with Doubao native "赞" clicks */
-.dbx-native-tick-liked {
-  background-color: #f59e0b !important;
-  opacity: 1 !important;
-  transition: background-color 0.18s ease;
-}
-
 /* Global Theme Presets — drives Doubao's own native --dbx-* & --s-color-* design tokens
    so canvas, greeting ::after reveal curtain, rounded composers, and popovers all harmonize natively. */
 html[data-dbx-theme="indigo"],
@@ -1641,30 +1634,6 @@ html[data-dbx-theme="midnight"] [data-message-id] code {
   padding: 6px 4px;
 }
 
-.dbx-wf-ticks {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 6px;
-  border-radius: 9px;
-  border: 1px solid var(--wf-accent);
-  background: var(--wf-accent-soft);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.dbx-wf-ticks.is-off {
-  border-style: dashed;
-  border-color: rgba(148, 163, 184, 0.6);
-  background: transparent;
-  opacity: 0.65;
-}
-.dbx-wf-tick-lines { display: flex; flex-direction: column; gap: 4px; }
-.dbx-wf-tick-lines span { display: block; width: 12px; height: 2px; border-radius: 2px; background: currentColor; opacity: 0.35; }
-.dbx-wf-ticks.is-on .dbx-wf-tick-lines span.liked { width: 17px; background: #f59e0b; opacity: 1; }
-.dbx-wf-tick-label { font-size: 10px; color: var(--wf-accent); white-space: nowrap; }
-.dbx-wf-ticks.is-off .dbx-wf-tick-label { color: #94a3b8; }
-
 .dbx-wf-bubbles { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .dbx-wf-bubble-user {
   align-self: flex-end;
@@ -1685,7 +1654,6 @@ html[data-dbx-theme="midnight"] [data-message-id] code {
 }
 .dbx-wf-bubble-ai .line { height: 7px; border-radius: 4px; background: currentColor; opacity: 0.14; width: 88%; }
 .dbx-wf-bubble-ai .line.short { width: 58%; }
-.dbx-wf-bubble-ai .wf-ai-actions { font-size: 10.5px; opacity: 0.65; margin-top: 2px; }
 
 .dbx-wf-capsules {
   display: flex;
