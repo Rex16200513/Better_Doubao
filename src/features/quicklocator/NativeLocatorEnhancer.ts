@@ -1,59 +1,89 @@
 import { storageService } from '../../core/services/StorageService';
 import { pageLifecycle } from '../../core/services/PageLifecycle';
 import { getConversationId } from '../../core/utils/dom';
+import { showToast } from '../../core/utils/ui';
 
 const TIMESTAMP_PATTERN = /(\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{2}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|(?:今天|昨天)\s*\d{1,2}:\d{2})/;
-
-const STAR_SVG = (filled: boolean) => `
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-  </svg>
-`;
 
 export function hasNativeLocatorTimestamp(text: string): boolean {
   return TIMESTAMP_PATTERN.test(text);
 }
 
+/**
+ * Detect whether a clicked button inside a chat message action bar is Doubao's native
+ * thumbs-up ("赞") button without matching "踩" / dislike or other action controls.
+ */
+export function isNativeLikeButton(btn: HTMLElement): boolean {
+  const attrs = [
+    btn.getAttribute('aria-label') || '',
+    btn.getAttribute('title') || '',
+    btn.getAttribute('data-testid') || '',
+    btn.className?.toString() || '',
+    btn.textContent?.trim() || '',
+  ].join(' ').toLowerCase();
+
+  if (attrs.includes('dislike') || attrs.includes('unlike') || attrs.includes('踩') || attrs.includes('down')) {
+    return false;
+  }
+  if (
+    attrs.includes('like') ||
+    attrs.includes('praise') ||
+    attrs.includes('thumb') ||
+    attrs.includes('赞') ||
+    attrs.includes('good')
+  ) {
+    return true;
+  }
+
+  // Structural fallback: in Doubao's assistant action bar [copy, read/audio, like, dislike, share, ...],
+  // the like button is an icon-only button located immediately before the dislike button in the action bar.
+  const bar = btn.parentElement;
+  if (!bar || bar.childElementCount < 4) return false;
+  const buttons = Array.from(bar.querySelectorAll<HTMLElement>('button, [role="button"]'));
+  const idx = buttons.indexOf(btn);
+  if (idx === 2 && buttons.length >= 5) {
+    const hasSvg = !!btn.querySelector('svg');
+    const textEmpty = !(btn.textContent?.trim());
+    return hasSvg && textEmpty;
+  }
+  return false;
+}
+
 export class NativeLocatorEnhancer {
   private unsubscribeDom: (() => void) | null = null;
   private unsubscribeUrl: (() => void) | null = null;
-  private pointerOverHandler: (() => void) | null = null;
-  private pointerScanTimer: number | null = null;
+  private clickHandler: ((event: MouseEvent) => void) | null = null;
   private conversationId = 'unknown';
   private starredSet = new Set<number>();
-  private filterQuery = '';
-  private starredOnly = false;
 
   init(): void {
-    if (this.unsubscribeDom) return;
+    if (this.clickHandler) return;
     this.conversationId = getConversationId();
-    void this.loadStarred();
+    void this.loadStarred().then(() => this.syncNativeTickHighlights());
 
     this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
       const nextId = getConversationId();
       if (nextId !== this.conversationId) {
         this.conversationId = nextId;
-        this.filterQuery = '';
-        this.starredOnly = false;
-        void this.loadStarred().then(() => this.scanAndEnhance());
+        void this.loadStarred().then(() => this.syncNativeTickHighlights());
       }
     });
 
     this.unsubscribeDom = pageLifecycle.onDomChange(() => {
-      this.scanAndEnhance();
-    }, 100);
+      this.syncNativeTickHighlights();
+    }, 180);
 
-    // Doubao's native quick-locator cards may toggle via CSS hover/opacity without childList mutations.
-    this.pointerOverHandler = () => {
-      if (this.pointerScanTimer !== null) return;
-      this.pointerScanTimer = window.setTimeout(() => {
-        this.pointerScanTimer = null;
-        this.scanAndEnhance();
-      }, 90);
+    this.clickHandler = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const btn = target?.closest<HTMLElement>('button, [role="button"]');
+      if (!btn || btn.closest('#flow_chat_sidebar, [id^="dbx-"], .dbx-unified-panel')) return;
+      const msgEl = btn.closest<HTMLElement>('[data-message-id]');
+      if (!msgEl) return;
+      if (!isNativeLikeButton(btn)) return;
+
+      void this.handleNativeLikeClick(msgEl);
     };
-    document.addEventListener('pointerover', this.pointerOverHandler, { passive: true });
-
-    this.scanAndEnhance();
+    document.addEventListener('click', this.clickHandler, true);
   }
 
   destroy(): void {
@@ -61,18 +91,12 @@ export class NativeLocatorEnhancer {
     this.unsubscribeDom = null;
     this.unsubscribeUrl?.();
     this.unsubscribeUrl = null;
-    if (this.pointerOverHandler) {
-      document.removeEventListener('pointerover', this.pointerOverHandler);
-      this.pointerOverHandler = null;
+    if (this.clickHandler) {
+      document.removeEventListener('click', this.clickHandler, true);
+      this.clickHandler = null;
     }
-    if (this.pointerScanTimer !== null) {
-      clearTimeout(this.pointerScanTimer);
-      this.pointerScanTimer = null;
-    }
-    document.querySelectorAll('.dbx-native-locator-toolbar, .dbx-native-card-star').forEach(el => el.remove());
-    document.querySelectorAll<HTMLElement>('[data-dbx-native-card]').forEach(el => {
-      el.classList.remove('dbx-native-card-starred', 'dbx-native-card-filtered');
-      delete el.dataset.dbxNativeCard;
+    document.querySelectorAll('.dbx-native-tick-liked').forEach(el => {
+      el.classList.remove('dbx-native-tick-liked');
     });
   }
 
@@ -89,203 +113,109 @@ export class NativeLocatorEnhancer {
     }
   }
 
-  private isInsideIgnoredArea(el: Element): boolean {
-    return !!el.closest(
-      '#flow_chat_sidebar, [data-message-id], #input-engine-container, [id^="dbx-"], .dbx-unified-panel, .dbx-popup'
-    );
+  private getTopLevelMessages(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
+      .filter(el => !el.parentElement?.closest('[data-message-id]'));
   }
 
-  private extractCardTitle(card: HTMLElement): string {
-    const clone = card.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('.dbx-native-card-star, button, svg').forEach(n => n.remove());
-    const lines = (clone.innerText || clone.textContent || '')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s && !hasNativeLocatorTimestamp(s));
-    const title = lines[0] || '';
-    return title.length > 68 ? `${title.slice(0, 68)}…` : title;
+  private isUserMessage(el: HTMLElement): boolean {
+    const html = el.innerHTML?.toLowerCase() || '';
+    return html.includes('send_message') ||
+      !!el.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]');
+  }
+
+  private resolveTurnInfo(clickedMsg: HTMLElement): { turnIndex: number; messageId?: string; excerpt: string } | null {
+    const all = this.getTopLevelMessages();
+    const pos = all.indexOf(clickedMsg);
+    if (pos < 0) return null;
+
+    // Count how many user turns occurred up to and including this reply.
+    let turnIndex = -1;
+    let lastUserEl: HTMLElement | null = null;
+    let prevWasUser = false;
+    for (let i = 0; i <= pos; i++) {
+      const isUser = this.isUserMessage(all[i]);
+      if (isUser) {
+        if (!prevWasUser) {
+          turnIndex++;
+          lastUserEl = all[i];
+        }
+        prevWasUser = true;
+      } else {
+        prevWasUser = false;
+      }
+    }
+
+    if (turnIndex < 0) turnIndex = 0;
+    const rawText = (lastUserEl?.textContent || clickedMsg.textContent || '').replace(/\s+/g, ' ').trim();
+    const excerpt = rawText.length > 60 ? `${rawText.slice(0, 60)}…` : (rawText || `第 ${turnIndex + 1} 轮对话`);
+    return {
+      turnIndex,
+      messageId: lastUserEl?.dataset.messageId || clickedMsg.dataset.messageId,
+      excerpt,
+    };
+  }
+
+  private async handleNativeLikeClick(msgEl: HTMLElement): Promise<void> {
+    this.conversationId = getConversationId();
+    if (!this.conversationId || this.conversationId === 'unknown') return;
+
+    const info = this.resolveTurnInfo(msgEl);
+    if (!info) return;
+
+    const nextStarred = !this.starredSet.has(info.turnIndex);
+    if (nextStarred) {
+      this.starredSet.add(info.turnIndex);
+      await storageService.addStarredMessage(this.conversationId, info.turnIndex, {
+        messageId: info.messageId,
+        text: info.excerpt,
+      });
+      showToast('已同步标记到原生定位点与收藏目录', 'success');
+    } else {
+      this.starredSet.delete(info.turnIndex);
+      await storageService.removeStarredMessage(this.conversationId, info.turnIndex);
+      showToast('已取消该条定位点标记', 'info');
+    }
+
+    this.syncNativeTickHighlights();
   }
 
   /**
-   * Locate Doubao's native quick-locator cards by starting from timestamp leaf elements
-   * (e.g. "3月12日 17:19") and walking upward to the individual rounded card element.
+   * Find Doubao's native quick-locator tick rail (a narrow vertical stack of slender
+   * horizontal tick bars outside the sidebar and message bubbles) and highlight liked turns.
    */
-  private findNativeLocatorGroups(): Array<{ container: HTMLElement; cards: HTMLElement[] }> {
-    const groups = new Map<HTMLElement, HTMLElement[]>();
-    const seenCards = new Set<HTMLElement>();
-
-    const leaves = document.querySelectorAll<HTMLElement>('div, span, time, p');
-    leaves.forEach((leaf) => {
-      if (leaf.childElementCount > 0) return;
-      if (this.isInsideIgnoredArea(leaf)) return;
-      const leafText = leaf.textContent?.trim() || '';
-      if (leafText.length < 5 || leafText.length > 26 || !hasNativeLocatorTimestamp(leafText)) return;
-
-      const leafRect = leaf.getBoundingClientRect();
-      if (leafRect.width === 0 || leafRect.height === 0) return;
-
-      // Walk up to find the card element that holds the prompt title + snippet + timestamp.
-      let card: HTMLElement | null = leaf.parentElement;
-      for (let depth = 0; depth < 6 && card && card !== document.body; depth++) {
-        if (this.isInsideIgnoredArea(card)) {
-          card = null;
-          break;
-        }
-        const rect = card.getBoundingClientRect();
-        const text = card.textContent?.trim() || '';
-        const style = getComputedStyle(card);
-        const radius = Number.parseFloat(style.borderRadius || '0');
-        const hasCardLook = radius >= 6 || style.borderWidth !== '0px' || style.cursor === 'pointer';
-
-        if (
-          rect.width >= 150 &&
-          rect.width <= 640 &&
-          rect.height >= 44 &&
-          rect.height <= 280 &&
-          text.length > leafText.length + 4 &&
-          text.length <= 600 &&
-          hasCardLook
-        ) {
-          break;
-        }
-        card = card.parentElement;
+  findNativeTickItems(): HTMLElement[] {
+    const candidates = document.querySelectorAll<HTMLElement>('div, ul, nav');
+    for (const container of candidates) {
+      if (container.closest('#flow_chat_sidebar, [data-message-id], #input-engine-container, [id^="dbx-"], .dbx-unified-panel')) {
+        continue;
       }
+      const childCount = container.childElementCount;
+      if (childCount < 2 || childCount > 150) continue;
 
-      if (!card || card === document.body || seenCards.has(card)) return;
-      const parent = card.parentElement;
-      if (!parent || this.isInsideIgnoredArea(parent)) return;
+      const rect = container.getBoundingClientRect();
+      if (rect.width < 6 || rect.width > 48 || rect.height < 16) continue;
 
-      seenCards.add(card);
-      const list = groups.get(parent) ?? [];
-      list.push(card);
-      groups.set(parent, list);
+      const children = Array.from(container.children) as HTMLElement[];
+      const allLookLikeTicks = children.every((child) => {
+        if ((child.textContent || '').trim().length > 0) return false;
+        const r = child.getBoundingClientRect();
+        return r.width >= 4 && r.width <= 36 && r.height >= 1 && r.height <= 12;
+      });
+      if (allLookLikeTicks) {
+        return children;
+      }
+    }
+    return [];
+  }
+
+  syncNativeTickHighlights(): void {
+    const ticks = this.findNativeTickItems();
+    if (!ticks.length) return;
+
+    ticks.forEach((tick, index) => {
+      tick.classList.toggle('dbx-native-tick-liked', this.starredSet.has(index));
     });
-
-    return Array.from(groups.entries()).map(([container, cards]) => ({ container, cards }));
-  }
-
-  private scanAndEnhance(): void {
-    const groups = this.findNativeLocatorGroups();
-    for (const { container, cards } of groups) {
-      if (cards.length > 1) {
-        this.ensureToolbar(container, cards);
-      }
-      cards.forEach((card, index) => {
-        this.enhanceCard(card, index, cards);
-      });
-      this.applyFilter(cards);
-    }
-  }
-
-  private ensureToolbar(container: HTMLElement, cards: HTMLElement[]): void {
-    let toolbar = container.querySelector<HTMLElement>(':scope > .dbx-native-locator-toolbar');
-
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.className = 'dbx-native-locator-toolbar';
-
-      const input = document.createElement('input');
-      input.type = 'search';
-      input.className = 'dbx-native-locator-search';
-      input.placeholder = '筛选定位点…';
-      input.setAttribute('aria-label', '筛选定位点');
-      input.value = this.filterQuery;
-      input.addEventListener('click', e => e.stopPropagation());
-      input.addEventListener('input', () => {
-        this.filterQuery = input.value.trim().toLocaleLowerCase();
-        this.applyFilter(cards);
-      });
-
-      const starFilterBtn = document.createElement('button');
-      starFilterBtn.type = 'button';
-      starFilterBtn.className = `dbx-native-locator-filter-star${this.starredOnly ? ' is-active' : ''}`;
-      starFilterBtn.title = '仅看已收藏';
-      starFilterBtn.setAttribute('aria-label', '仅看已收藏');
-      starFilterBtn.setAttribute('aria-pressed', String(this.starredOnly));
-      starFilterBtn.innerHTML = STAR_SVG(this.starredOnly);
-      starFilterBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.starredOnly = !this.starredOnly;
-        starFilterBtn.classList.toggle('is-active', this.starredOnly);
-        starFilterBtn.setAttribute('aria-pressed', String(this.starredOnly));
-        starFilterBtn.innerHTML = STAR_SVG(this.starredOnly);
-        this.applyFilter(cards);
-      });
-
-      toolbar.append(input, starFilterBtn);
-      container.insertBefore(toolbar, container.firstChild);
-    } else {
-      const starFilterBtn = toolbar.querySelector<HTMLButtonElement>('.dbx-native-locator-filter-star');
-      if (starFilterBtn) {
-        starFilterBtn.classList.toggle('is-active', this.starredOnly);
-        starFilterBtn.setAttribute('aria-pressed', String(this.starredOnly));
-        starFilterBtn.innerHTML = STAR_SVG(this.starredOnly);
-      }
-    }
-  }
-
-  private enhanceCard(card: HTMLElement, index: number, allCards: HTMLElement[]): void {
-    const isStarred = this.starredSet.has(index);
-    card.dataset.dbxNativeCard = String(index);
-    card.classList.toggle('dbx-native-card-starred', isStarred);
-
-    if (getComputedStyle(card).position === 'static') {
-      card.style.position = 'relative';
-    }
-
-    let starBtn = card.querySelector<HTMLButtonElement>(':scope > .dbx-native-card-star');
-    if (!starBtn) {
-      starBtn = document.createElement('button');
-      starBtn.type = 'button';
-      starBtn.className = 'dbx-native-card-star';
-      starBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const cardIndex = Number.parseInt(card.dataset.dbxNativeCard || String(index), 10);
-        void this.toggleStar(card, cardIndex, allCards);
-      });
-      card.appendChild(starBtn);
-    }
-
-    starBtn.classList.toggle('is-starred', isStarred);
-    starBtn.title = isStarred ? '取消收藏' : '收藏此定位点';
-    starBtn.setAttribute('aria-label', starBtn.title);
-    starBtn.setAttribute('aria-pressed', String(isStarred));
-    starBtn.innerHTML = STAR_SVG(isStarred);
-  }
-
-  private async toggleStar(card: HTMLElement, index: number, allCards: HTMLElement[]): Promise<void> {
-    const nextStarred = !this.starredSet.has(index);
-    if (nextStarred) {
-      this.starredSet.add(index);
-    } else {
-      this.starredSet.delete(index);
-    }
-
-    this.enhanceCard(card, index, allCards);
-    this.applyFilter(allCards);
-
-    if (this.conversationId && this.conversationId !== 'unknown') {
-      try {
-        if (nextStarred) {
-          const title = this.extractCardTitle(card) || `第 ${index + 1} 条定位点`;
-          await storageService.addStarredMessage(this.conversationId, index, { text: title });
-        } else {
-          await storageService.removeStarredMessage(this.conversationId, index);
-        }
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  }
-
-  applyFilter(cards: HTMLElement[]): void {
-    for (const card of cards) {
-      const idx = Number.parseInt(card.dataset.dbxNativeCard || '-1', 10);
-      const matchesStar = !this.starredOnly || this.starredSet.has(idx);
-      const matchesQuery = !this.filterQuery || (card.textContent || '').toLocaleLowerCase().includes(this.filterQuery);
-      card.classList.toggle('dbx-native-card-filtered', !(matchesStar && matchesQuery));
-    }
   }
 }
 

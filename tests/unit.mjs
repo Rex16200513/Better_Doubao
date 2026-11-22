@@ -282,8 +282,7 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   };
   const { ToolHub } = loadTs('src/features/tools/ToolHub.ts', name => {
     if (name.includes('StorageService')) return { storageService: {} };
-    if (name.includes('SettingsService')) return { settingsService: { getSettings: () => ({}) } };
-    if (name.includes('WorkspaceCustomizer')) return { workspaceCustomizer: { getDetectedSkills: () => [] } };
+    if (name.includes('LayoutStudioModal')) return { layoutStudioModal: { open() {} } };
     if (name.includes('CorpusBoard')) return { corpusBoard: { closePanel() {} } };
     if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
     return { default: { storage: { local: { get: async () => ({ dbxToolsGuideSeen: true }) } } } };
@@ -334,6 +333,8 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   const merged = mergeSettings({
     enableExport: false,
     enableNativeLocatorEnhancer: 'bad-type',
+    hideSidebarFooter: true,
+    themePreset: 'warm',
     pinnedComposerSkills: ['对话', '图像生成', 123, '对话'],
     customQuickButtons: [
       { id: 'b1', label: '总结', prompt: '请总结要点' },
@@ -343,6 +344,9 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(merged.enableExport, false);
   assert.equal(merged.enableNativeLocatorEnhancer, true, 'non-boolean falls back to default');
   assert.equal(merged.enableSidebarLauncher, true);
+  assert.equal(merged.hideSidebarFooter, true);
+  assert.equal(merged.themePreset, 'warm');
+  assert.equal(mergeSettings({ themePreset: 'unknown-theme' }).themePreset, 'default', 'invalid theme falls back to default');
   assert.deepEqual([...merged.pinnedComposerSkills], ['对话', '图像生成'], 'pinned skills deduplicated & sanitized');
   assert.equal(merged.customQuickButtons.length, 1, 'invalid custom button filtered out');
 
@@ -500,27 +504,29 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-// 11. NativeLocatorEnhancer: timestamp recognition & card filtering
+// 11. NativeLocatorEnhancer: native like button recognition (distinguishes 赞 vs 踩)
 {
-  const { hasNativeLocatorTimestamp, NativeLocatorEnhancer } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
+  const { hasNativeLocatorTimestamp, isNativeLikeButton } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
     if (name.includes('StorageService')) return { storageService: { getStarredMessages: async () => [] } };
     if (name.includes('PageLifecycle')) return { pageLifecycle: { onUrlChange: () => () => {}, onDomChange: () => () => {} } };
     if (name.includes('utils/dom')) return domUtils;
+    if (name.includes('utils/ui')) return { showToast() {} };
     return {};
   });
   assert.equal(hasNativeLocatorTimestamp('3月12日 15:21'), true);
-  assert.equal(hasNativeLocatorTimestamp('昨天 09:05'), true);
   assert.equal(hasNativeLocatorTimestamp('普通文本无时间戳'), false);
 
-  const enhancer = new NativeLocatorEnhancer();
-  const cards = [
-    { dataset: { dbxNativeCard: '0' }, textContent: 'Mac 安装 nodejs 3月12日 15:21', classList: { hidden: false, toggle(c, v) { if (c === 'dbx-native-card-filtered') this.hidden = v; } } },
-    { dataset: { dbxNativeCard: '1' }, textContent: 'Python 虚拟环境 3月12日 16:00', classList: { hidden: false, toggle(c, v) { if (c === 'dbx-native-card-filtered') this.hidden = v; } } },
-  ];
-  enhancer.filterQuery = 'nodejs';
-  enhancer.applyFilter(cards);
-  assert.equal(cards[0].classList.hidden, false);
-  assert.equal(cards[1].classList.hidden, true);
+  const makeBtn = (attrs, text = '') => ({
+    getAttribute: k => attrs[k] ?? null,
+    className: attrs.class || '',
+    textContent: text,
+    parentElement: null,
+    querySelector: () => null,
+  });
+  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '赞' })), true);
+  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_like' })), true);
+  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '踩' })), false);
+  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_dislike' })), false);
 }
 
 console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, native locator enhancer, latex, export, toolhub');

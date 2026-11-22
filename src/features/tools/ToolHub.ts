@@ -1,8 +1,7 @@
 import { storageService } from '../../core/services/StorageService';
-import { settingsService } from '../../core/services/SettingsService';
 import { showConfirmDialog, showToast } from '../../core/utils/ui';
 import { corpusBoard } from '../corpusboard/CorpusBoard';
-import { workspaceCustomizer } from '../workspace/WorkspaceCustomizer';
+import { layoutStudioModal } from '../workspace/LayoutStudioModal';
 import browser from 'webextension-polyfill';
 
 const HIGHLIGHT_SWATCHES = [
@@ -407,136 +406,10 @@ export class ToolHub {
   }
 
   private customize(): void {
-    const body = this.open('界面与按钮定制');
-
-    const render = () => {
-      const settings = settingsService.getSettings();
-      body.replaceChildren();
-
-      // Section 1: Minimalism switches
-      const cleanSection = document.createElement('div');
-      cleanSection.className = 'dbx-customize-section';
-      const cleanTitle = document.createElement('div');
-      cleanTitle.className = 'dbx-customize-heading';
-      cleanTitle.textContent = '页面极简净化';
-      cleanSection.appendChild(cleanTitle);
-
-      const addSwitch = (label: string, checked: boolean, onChange: (next: boolean) => void) => {
-        const row = document.createElement('label');
-        row.className = 'dbx-customize-toggle';
-        const span = document.createElement('span');
-        span.textContent = label;
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = checked;
-        input.addEventListener('change', () => onChange(input.checked));
-        row.append(span, input);
-        cleanSection.appendChild(row);
-      };
-
-      addSwitch('隐藏「下载电脑版」与底部推广', settings.hideDownloadPromo, (next) => {
-        void settingsService.updateSettings({ hideDownloadPromo: next }).then(render);
-      });
-      addSwitch('精简输入框底栏技能按钮', settings.compactInputToolbar, (next) => {
-        void settingsService.updateSettings({ compactInputToolbar: next }).then(render);
-      });
-      body.appendChild(cleanSection);
-
-      // Section 2: Personalized composer skill pins
-      const skillSection = document.createElement('div');
-      skillSection.className = 'dbx-customize-section';
-      const skillTitle = document.createElement('div');
-      skillTitle.className = 'dbx-customize-heading';
-      skillTitle.textContent = '底栏保留的原生按钮（点选实时生效）';
-      skillSection.appendChild(skillTitle);
-
-      const chipGrid = document.createElement('div');
-      chipGrid.className = 'dbx-skill-chip-grid';
-      const skills = workspaceCustomizer.getDetectedSkills();
-      for (const skill of skills) {
-        const active = settings.pinnedComposerSkills.includes(skill);
-        const chip = button(skill, () => {
-          const current = settingsService.getSettings().pinnedComposerSkills;
-          const next = current.includes(skill)
-            ? current.filter(s => s !== skill)
-            : [...current, skill];
-          void settingsService.updateSettings({
-            compactInputToolbar: true,
-            pinnedComposerSkills: next,
-          }).then(render);
-        });
-        chip.className = `dbx-skill-pin-chip${active ? ' is-active' : ''}`;
-        chipGrid.appendChild(chip);
-      }
-      skillSection.appendChild(chipGrid);
-      body.appendChild(skillSection);
-
-      // Section 3: Custom quick prompt buttons
-      const customSection = document.createElement('div');
-      customSection.className = 'dbx-customize-section';
-      const customTitle = document.createElement('div');
-      customTitle.className = 'dbx-customize-heading';
-      customTitle.textContent = '自定义快捷按钮（显示在输入框上方）';
-      customSection.appendChild(customTitle);
-
-      const list = document.createElement('div');
-      list.className = 'dbx-custom-btn-list';
-      if (settings.customQuickButtons.length === 0) {
-        const hint = document.createElement('p');
-        hint.textContent = '暂无自定义按钮，可添加常用指令一键插入输入框。';
-        list.appendChild(hint);
-      } else {
-        for (const item of settings.customQuickButtons) {
-          const row = document.createElement('div');
-          row.className = 'dbx-saved-row';
-          const info = document.createElement('div');
-          info.className = 'dbx-custom-btn-info';
-          info.textContent = `${item.label} · ${item.prompt}`;
-          const del = button('×', () => {
-            const next = settingsService.getSettings().customQuickButtons.filter(b => b.id !== item.id);
-            void settingsService.updateSettings({ customQuickButtons: next }).then(() => {
-              showToast(`已移除按钮「${item.label}」`, 'success');
-              render();
-            });
-          });
-          del.className = 'dbx-saved-delete';
-          del.title = '删除按钮';
-          row.append(info, del);
-          list.appendChild(row);
-        }
-      }
-      customSection.appendChild(list);
-
-      const form = document.createElement('div');
-      form.className = 'dbx-custom-btn-form';
-      const nameInput = document.createElement('input');
-      nameInput.placeholder = '按钮名称（如：总结要点）';
-      nameInput.maxLength = 20;
-      const promptInput = document.createElement('input');
-      promptInput.placeholder = '点击插入的指令（如：请用要点总结以上内容：）';
-      const addBtn = button('添加快捷按钮', () => {
-        const label = nameInput.value.trim();
-        const prompt = promptInput.value.trim();
-        if (!label || !prompt) {
-          showToast('请填写按钮名称和指令内容', 'warning');
-          return;
-        }
-        const next = [
-          ...settingsService.getSettings().customQuickButtons,
-          { id: `btn_${Date.now()}`, label, prompt },
-        ];
-        void settingsService.updateSettings({ customQuickButtons: next }).then(() => {
-          showToast(`已添加快捷按钮「${label}」`, 'success');
-          render();
-        });
-      });
-      addBtn.className = 'dbx-tool-primary-btn';
-      form.append(nameInput, promptInput, addBtn);
-      customSection.appendChild(form);
-      body.appendChild(customSection);
-    };
-
-    render();
+    corpusBoard.closePanel();
+    this.panel?.remove();
+    this.panel = null;
+    layoutStudioModal.open();
   }
 
   private backup(): void {

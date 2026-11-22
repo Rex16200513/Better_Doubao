@@ -2,8 +2,10 @@ import browser from 'webextension-polyfill';
 import {
   DEFAULT_PINNED_SKILLS,
   DEFAULT_SETTINGS,
+  THEME_PRESETS,
   type CustomQuickButton,
   type ExtensionSettings,
+  type ThemePreset,
 } from '../types/settings';
 
 const SETTINGS_KEY = 'dbxSettings';
@@ -17,8 +19,15 @@ const BOOLEAN_KEYS = [
   'enableExport',
   'enableLatexDownloader',
   'hideDownloadPromo',
+  'hideSidebarFooter',
   'compactInputToolbar',
 ] as const;
+
+const VALID_THEMES = new Set<string>(THEME_PRESETS.map(t => t.id));
+
+function sanitizeTheme(value: unknown): ThemePreset {
+  return typeof value === 'string' && VALID_THEMES.has(value) ? (value as ThemePreset) : 'default';
+}
 
 function sanitizePinnedSkills(value: unknown): string[] {
   if (!Array.isArray(value)) return [...DEFAULT_PINNED_SKILLS];
@@ -67,6 +76,7 @@ export function mergeSettings(raw: unknown): ExtensionSettings {
     ...DEFAULT_SETTINGS,
     pinnedComposerSkills: sanitizePinnedSkills(input.pinnedComposerSkills),
     customQuickButtons: sanitizeCustomButtons(input.customQuickButtons),
+    themePreset: sanitizeTheme(input.themePreset),
   };
   for (const key of BOOLEAN_KEYS) {
     if (typeof input[key] === 'boolean') {
