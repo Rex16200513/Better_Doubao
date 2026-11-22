@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[下载安装包](#安装使用) · [Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN) · [2.0 更新说明](#20-版本更新) · [问题反馈](https://github.com/Rex16200513/Better_Doubao/issues/new/choose)
+[下载安装包](#安装使用) · [Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN) · [2.1.0 更新说明](#210-版本更新) · [问题反馈](https://github.com/Rex16200513/Better_Doubao/issues/new/choose)
 
 </div>
 
@@ -26,6 +26,18 @@
 ---
 
 ## 功能概述
+
+## 2.1.0 版本更新
+
+2.1.0 聚焦**深色模式、可定制开关、目录管理增强与安全稳定性加固**：
+
+- **深色模式适配**：全套浮层、侧边栏、定位条与设置页统一采用 CSS 主题变量，自动响应系统与豆包页面深色主题。
+- **扩展设置页功能开关**：在扩展设置页支持按需启停 7 项功能（含长对话自动全量索引开关），并支持一键恢复默认。
+- **高亮与收藏目录升级**：新增 6 色高亮快捷筛选、列表内直接删除高亮 / 取消收藏（实时同步页面 DOM），收藏条目支持展示消息摘要。
+- **快速定位器升级**：滚动阅读时实时高亮当前位置定位点；手动滚动可随时中止长对话自动扫描，不再抢夺滚动条。
+- **非阻塞交互与安全修复**：全面替换原生 `alert` / `confirm` 为轻量 Toast 与确认弹窗；修复 PDF 导出安全清洗、相对图片 URL、Markdown 表格与图片重复、LaTeX 异步属性跳过、语料板清空隔离及账号存储键稳定性，并补齐单元测试与自动化 CI/Release 流水线。
+
+**2.1.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.1.0)。商店版本以实际审核发布为准。
 
 ## 2.0 版本更新
 
@@ -247,12 +259,12 @@ better-doubao/
 
 ## 安装使用
 
-### 下载编译好的 v2.0 安装包（无需 Node.js）
+### 下载编译好的 v2.1.0 安装包（无需 Node.js）
 
-按浏览器选择对应安装包，均包含 2.0 新功能。
+按浏览器选择对应安装包，均包含 2.1.0 全部新功能与修复。
 
-- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.0/Better_Doubao_Chrome_v2.0.zip)
-- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.0/Better_Doubao_Edge_v2.0.zip)
+- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.1.0/Better_Doubao_Chrome_v2.1.0.zip)
+- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.1.0/Better_Doubao_Edge_v2.1.0.zip)
 
 下载对应浏览器的 ZIP 并解压到一个固定文件夹。Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`；开启「开发者模式」，点击「加载已解压的扩展程序」，选择解压后包含 `manifest.json` 的文件夹。安装后请保留该文件夹，不要移动或删除。ZIP 是可直接加载的编译结果，不需要自行构建；它不是双击安装的 CRX 文件。
 

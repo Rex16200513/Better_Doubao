@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Chrome/Edge Packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify typecheck, tests, and builds
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Package Chrome & Edge ZIP archives
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p release-assets
+          (cd chrome/dist && zip -r "../../release-assets/Better_Doubao_Chrome_${TAG}.zip" .)
+          (cd edge/dist && zip -r "../../release-assets/Better_Doubao_Edge_${TAG}.zip" .)
+          sha256sum release-assets/*.zip > "release-assets/SHA256SUMS_${TAG}.txt"
+
+      - name: Publish or update GitHub Release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "Better Doubao ${TAG}" \
+              --generate-notes
+          fi
