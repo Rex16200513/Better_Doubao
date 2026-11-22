@@ -40,6 +40,8 @@
 | ✨ **侧边栏「更多」双列抽屉** | 顶部快捷图标栏新增「工作台」收纳并将「更多 / 收起」固定在最右侧槽位；展开「更多」时不再顶乱图标顺序，改为在下方平滑展开双列小抽屉承接「AI 创作 / 资料库 / API 服务」等入口。 |
 | 📄 **统一毛玻璃面板 & PDF 导出修复** | 语料板、对话搜索、高亮与收藏、数据备份四个浮层统一为 `316px` 毛玻璃卡片并统一 `Better Doubao` 品牌文案；彻底修复 PDF 导出出现异常长空白与 Markdown 表格样式丢失的问题。 |
 
+**2.2.0 已发布**：[下载 Chrome / Edge 安装包](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.2.0)。商店版本以实际审核发布为准。
+
 ---
 
 ## 2.1.0 版本更新
@@ -267,12 +269,12 @@ better-doubao/
 
 ## 安装使用
 
-### 下载编译好的 v2.1.0 安装包（无需 Node.js）
+### 下载编译好的 v2.2.0 安装包（无需 Node.js）
 
-按浏览器选择对应安装包，均包含 2.1.0 全部新功能与修复。
+按浏览器选择对应安装包，均包含 2.2.0 全部新功能与修复。
 
-- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.1.0/Better_Doubao_Chrome_v2.1.0.zip)
-- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.1.0/Better_Doubao_Edge_v2.1.0.zip)
+- [下载 Chrome 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Chrome_v2.2.0.zip)
+- [下载 Edge 版 ZIP](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.0/Better_Doubao_Edge_v2.2.0.zip)
 
 下载对应浏览器的 ZIP 并解压到一个固定文件夹。Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`；开启「开发者模式」，点击「加载已解压的扩展程序」，选择解压后包含 `manifest.json` 的文件夹。安装后请保留该文件夹，不要移动或删除。ZIP 是可直接加载的编译结果，不需要自行构建；它不是双击安装的 CRX 文件。
 
