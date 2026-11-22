@@ -291,8 +291,12 @@ export class ExportManager {
         '[class*="scroll-view"]',
         '[class*="action-bar"]',
         '[class*="message-action"]',
+        '[class*="table-header"]',
+        '[class*="header-wrapper"]',
         '[class*="select-none"]',
         '[class*="opacity-0"]',
+        '.dbx-latex-btn-container',
+        '.dbx-latex-code-btn-container',
         'script',
         'style',
         '.children-wrapper',
@@ -301,6 +305,15 @@ export class ExportManager {
 
       removeSelectors.forEach(sel => {
         clone.querySelectorAll(sel).forEach(node => node.remove());
+      });
+
+      // Remove Doubao's standalone "表格" / "复制" / "下载" toolbar labels left above tables/code blocks.
+      clone.querySelectorAll('div, span, header').forEach(node => {
+        if (node.querySelector('table, pre, code, img, p, ul, ol, h1, h2, h3, h4')) return;
+        const text = node.textContent?.trim();
+        if (text === '表格' || text === '复制' || text === '复制表格' || text === '下载') {
+          node.remove();
+        }
       });
 
       let content = '';
@@ -448,26 +461,7 @@ export class ExportManager {
     const temp = document.createElement('div');
     temp.innerHTML = content;
 
-    temp.querySelectorAll('script, iframe, object, embed, form, meta, link, base').forEach(node => node.remove());
-    temp.querySelectorAll('*').forEach((node) => {
-      for (const attr of Array.from(node.attributes)) {
-        const name = attr.name.toLowerCase();
-        const value = attr.value.trim();
-        if (name.startsWith('on')) {
-          node.removeAttribute(attr.name);
-        } else if ((name === 'href' || name === 'src' || name === 'xlink:href') && value && !isSafeHttpUrl(value) && !value.startsWith('#')) {
-          node.removeAttribute(attr.name);
-        }
-      }
-    });
-
-    const codeBlocks = temp.querySelectorAll('pre code, pre');
-    codeBlocks.forEach((block) => {
-      const pre = block.tagName === 'PRE' ? block as HTMLElement : block.parentElement as HTMLElement;
-      if (pre) {
-        pre.style.cssText = 'background: #f6f8fa; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; font-family: monospace; font-size: 11px; line-height: 1.4; border: 1px solid #e1e4e8;';
-      }
-    });
+    temp.querySelectorAll('script, iframe, object, embed, form, meta, link, base, style').forEach(node => node.remove());
 
     const cleanImageWrappers = temp.querySelectorAll('[class*="image-wrapper"], [class*="image-box-grid"], [class*="container-MzuYIN"], [class*="container-dLabXv"], [class*="image-box-grid-item"]');
     cleanImageWrappers.forEach((wrapper) => {
@@ -510,37 +504,56 @@ export class ExportManager {
       }
 
       img.setAttribute('src', resolveUrl(rawSrc));
-      (img as HTMLElement).style.cssText = 'max-width: 200px; height: auto; border-radius: 4px; margin: 4px; display: inline-block; vertical-align: top;';
     });
 
-    const h1s = temp.querySelectorAll('h1');
-    h1s.forEach((h1) => {
-      (h1 as HTMLElement).style.cssText = 'font-size: 14px; font-weight: 600; margin: 12px 0 8px 0; color: #1f2937;';
+    // Strip unsafe attributes and Doubao's layout styles/classes (e.g., fixed heights,
+    // transforms, overflow boxes) that otherwise create huge vertical blanks in print output.
+    const allowedAttrs = new Set(['href', 'src', 'alt', 'colspan', 'rowspan', 'align']);
+    temp.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes)) {
+        const name = attr.name.toLowerCase();
+        const value = attr.value.trim();
+        if (name.startsWith('on')) {
+          node.removeAttribute(attr.name);
+        } else if (name === 'href' || name === 'src' || name === 'xlink:href') {
+          if (!value || (!isSafeHttpUrl(value) && !value.startsWith('#'))) {
+            node.removeAttribute(attr.name);
+          }
+        } else if (!allowedAttrs.has(name)) {
+          node.removeAttribute(attr.name);
+        }
+      }
     });
 
-    const h2s = temp.querySelectorAll('h2');
-    h2s.forEach((h2) => {
-      (h2 as HTMLElement).style.cssText = 'font-size: 13px; font-weight: 600; margin: 10px 0 6px 0; color: #374151;';
+    // Remove residual standalone table/code toolbar text labels.
+    temp.querySelectorAll('div, span, header').forEach((node) => {
+      if (node.querySelector('table, pre, code, img, p, ul, ol, h1, h2, h3, h4')) return;
+      const text = node.textContent?.trim();
+      if (text === '表格' || text === '复制' || text === '复制表格' || text === '下载') {
+        node.remove();
+      }
     });
 
-    const uls = temp.querySelectorAll('ul, ol');
-    uls.forEach((ul) => {
-      (ul as HTMLElement).style.cssText = 'margin: 8px 0; padding-left: 20px;';
-    });
+    // Prune empty layout wrapper elements from bottom up to prevent blank vertical gaps.
+    const voidOrMedia = 'img, table, tr, td, th, hr, pre, code, math';
+    const allNodes = Array.from(temp.querySelectorAll('div, p, span, section, article, header, footer'));
+    for (let i = allNodes.length - 1; i >= 0; i--) {
+      const el = allNodes[i];
+      if (!el.querySelector(voidOrMedia) && !(el.textContent?.trim())) {
+        el.remove();
+      }
+    }
 
-    const lis = temp.querySelectorAll('li');
-    lis.forEach((li) => {
-      (li as HTMLElement).style.cssText = 'margin: 4px 0;';
-    });
-
-    const ps = temp.querySelectorAll('p');
-    ps.forEach((p) => {
-      (p as HTMLElement).style.cssText = 'margin: 8px 0;';
-    });
-
-    const srs = temp.querySelectorAll('strong');
-    srs.forEach((s) => {
-      (s as HTMLElement).style.cssText = 'font-weight: 600;';
+    // Collapse runs of consecutive <br> tags into a single line break.
+    let prevWasBr = false;
+    Array.from(temp.querySelectorAll('br')).forEach((br) => {
+      const prevSibling = br.previousSibling;
+      const isConsecutive = prevSibling && prevSibling.nodeType === Node.ELEMENT_NODE && (prevSibling as Element).tagName === 'BR';
+      if (isConsecutive || (prevWasBr && !br.previousSibling?.textContent?.trim())) {
+        br.remove();
+      } else {
+        prevWasBr = true;
+      }
     });
 
     return temp.innerHTML;
@@ -551,6 +564,7 @@ export class ExportManager {
     if (!messages.length) return;
     const title = this.getConversationTitle();
     const safeTitle = escapeHTML(title);
+    const exportDate = new Date().toLocaleString('zh-CN');
     
     const userMessages = messages.filter(m => m.role === 'user');
     const assistantMessages = messages.filter(m => m.role === 'assistant');
@@ -564,91 +578,208 @@ export class ExportManager {
         <style>
           @page {
             size: A4;
-            margin: 15mm;
+            margin: 14mm 15mm;
           }
           * {
             box-sizing: border-box;
           }
           body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.4;
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+            font-size: 12.5px;
+            line-height: 1.65;
             color: #1f2937;
-            background: #fff;
-            padding: 15px;
-            max-width: 100%;
+            background: #ffffff;
+            margin: 0 auto;
+            padding: 20px 24px;
+            max-width: 820px;
           }
-          h1 {
-            font-size: 16px;
-            font-weight: 600;
-            margin: 0 0 12px 0;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e5e7eb;
+          .doc-header {
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1.5px solid #e5e7eb;
+          }
+          .doc-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 6px 0;
+            line-height: 1.35;
           }
           .meta {
             font-size: 11px;
             color: #6b7280;
-            margin-bottom: 16px;
           }
           .conversation {
             display: flex;
             flex-direction: column;
+            gap: 12px;
           }
           .message {
-            padding: 10px 12px;
-            border-radius: 6px;
-            break-inside: avoid;
-            margin-bottom: 8px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
           }
           .message-user {
-            background: #f3f4f6;
-            margin-right: 40px;
+            background: #f5f7ff;
+            border-color: #e0e7ff;
           }
           .message-assistant {
-            background: #f9fafb;
-            margin-left: 40px;
-          }
-          .message:last-child {
-            margin-bottom: 0;
+            background: #ffffff;
+            border-color: #eceef2;
           }
           .role {
-            font-size: 10px;
+            display: inline-block;
+            font-size: 10.5px;
             font-weight: 600;
-            margin-bottom: 2px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            padding: 1px 8px;
+            border-radius: 999px;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
           }
           .message-user .role {
-            color: #4b5563;
+            background: #e0e7ff;
+            color: #3730a3;
           }
           .message-assistant .role {
-            color: #6b7280;
+            background: #f3f4f6;
+            color: #4b5563;
           }
           .content {
-            white-space: pre-wrap;
+            white-space: normal;
             word-wrap: break-word;
+            overflow-wrap: break-word;
             margin: 0;
             padding: 0;
           }
-          .content p {
-            margin: 0 0 4px 0;
+          .content > :first-child {
+            margin-top: 0;
           }
-          .content p:last-child {
+          .content > :last-child {
             margin-bottom: 0;
+          }
+          .content p {
+            margin: 6px 0;
+          }
+          .content h1, .content h2, .content h3, .content h4 {
+            color: #111827;
+            font-weight: 600;
+            line-height: 1.4;
+            margin: 14px 0 6px;
+            break-after: avoid;
+            page-break-after: avoid;
+          }
+          .content h1 { font-size: 15.5px; }
+          .content h2 { font-size: 14.5px; }
+          .content h3 { font-size: 13.5px; }
+          .content h4 { font-size: 12.5px; }
+          .content ul, .content ol {
+            margin: 6px 0;
+            padding-left: 22px;
+          }
+          .content li {
+            margin: 3px 0;
+          }
+          .content strong, .content b {
+            font-weight: 600;
+            color: #111827;
+          }
+          .content blockquote {
+            margin: 8px 0;
+            padding: 6px 12px;
+            border-left: 3px solid #6366f1;
+            background: #f8fafc;
+            color: #4b5563;
+            border-radius: 0 6px 6px 0;
+            break-inside: avoid;
+          }
+          .content hr {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 12px 0;
+          }
+          .content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 12px;
+            font-size: 11.5px;
+            line-height: 1.5;
+            border: 1px solid #d1d5db;
+            table-layout: auto;
+          }
+          .content thead {
+            display: table-header-group;
+          }
+          .content tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .content th, .content td {
+            padding: 7px 10px;
+            border: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: top;
+            word-break: break-word;
+          }
+          .content th {
+            background: #f3f4f6;
+            color: #111827;
+            font-weight: 600;
+            border-bottom: 1.5px solid #d1d5db;
+          }
+          .content tbody tr:nth-child(even) {
+            background: #f9fafb;
+          }
+          .content pre {
+            background: #f6f8fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 8px 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            break-inside: avoid;
+          }
+          .content :not(pre) > code {
+            background: #f3f4f6;
+            color: #c026d3;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11.5px;
+          }
+          .content img {
+            max-width: 100%;
+            max-height: 360px;
+            height: auto;
+            border-radius: 6px;
+            margin: 6px 4px;
+            display: inline-block;
+            vertical-align: top;
+            break-inside: avoid;
+          }
+          .content a {
+            color: #4f46e5;
+            text-decoration: underline;
           }
           @media print {
             body {
               padding: 0;
-            }
-            .message {
-              page-break-inside: avoid;
+              max-width: none;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
           }
         </style>
       </head>
       <body>
-        <h1>${safeTitle}</h1>
-        <div class="meta">共 ${messages.length} 条消息（用户: ${userMessages.length}, AI: ${assistantMessages.length}）</div>
+        <div class="doc-header">
+          <h1 class="doc-title">${safeTitle}</h1>
+          <div class="meta">导出时间: ${exportDate} · 共 ${messages.length} 条消息（用户: ${userMessages.length}, AI: ${assistantMessages.length}）</div>
+        </div>
         <div class="conversation">
           ${messages.map(m => `
             <div class="message message-${m.role}">

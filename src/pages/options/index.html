@@ -106,7 +106,7 @@
     <div class="header">
       <div>
         <div class="title">Better Doubao 设置</div>
-        <div class="desc">v2.1.0 · 按需开启或关闭各增强模块（修改后刷新豆包页面生效）</div>
+        <div class="desc">v2.2.0 · 按需开启或关闭各增强模块（修改后刷新豆包页面生效）</div>
       </div>
       <span id="status" class="status" role="status"></span>
     </div>
@@ -116,50 +116,66 @@
 
       <div class="row">
         <div>
-          <div class="row-title">侧边栏快捷图标栏</div>
-          <div class="row-desc">将左侧边栏常用原生入口收纳为横排图标，减少信息密度。</div>
+          <div class="row-title">侧边栏快捷图标栏与「更多」抽屉</div>
+          <div class="row-desc">将左侧边栏常用入口收纳为横排图标，并在展开「更多」时以双列抽屉承接，不破坏侧边栏布局。</div>
         </div>
         <label class="toggle"><input id="enableSidebarLauncher" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">右侧快速定位器</div>
-          <div class="row-desc">在对话右侧显示用户消息定位圆点，支持当前阅读位置指示与消息收藏。</div>
+          <div class="row-title">分类文件夹与极简色彩圆点</div>
+          <div class="row-desc">用 8px 极简分类圆点替换「最近」列表原生对话图标，支持点击圆点一键归类与彩色文件夹管理。</div>
         </div>
-        <label class="toggle"><input id="enableQuickLocator" type="checkbox" checked><span class="slider"></span></label>
+        <label class="toggle"><input id="enableFolders" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">长对话自动全量索引</div>
-          <div class="row-desc">进入虚拟列表长对话时自动扫描定位点（手动滚动会立即中止）；关闭则仅按当前可见内容增量记录。</div>
+          <div class="row-title">原生点赞联动定位点标星</div>
+          <div class="row-desc">点击豆包消息底部的原生「赞 👍」时，自动同步高亮左侧原生快速定位点刻度并收入收藏目录。</div>
         </div>
-        <label class="toggle"><input id="autoIndexLongChat" type="checkbox" checked><span class="slider"></span></label>
+        <label class="toggle"><input id="enableNativeLocatorEnhancer" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">语料板、文字高亮与随手工具</div>
-          <div class="row-desc">启用悬浮工具菜单（语料板、对话搜索、高亮与收藏目录、JSON 备份恢复）及划词工具条。</div>
+          <div class="row-title">Better Doubao 工具栏、语料板与高亮</div>
+          <div class="row-desc">启用悬浮工具栏（语料板、对话搜索、高亮与收藏、可视化布局与配色定制、JSON 备份恢复）及划词高亮。</div>
         </div>
         <label class="toggle"><input id="enableCorpusAndHighlight" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">旧文件夹（过渡）</div>
-          <div class="row-desc">在侧边栏「项目」下方保留插件文件夹区域，原有归类数据不会丢失。</div>
+          <div class="row-title">多格式对话导出</div>
+          <div class="row-desc">在顶部导航栏提供 PDF / TXT / Markdown 清爽导出入口。</div>
         </div>
-        <label class="toggle"><input id="enableFolderManager" type="checkbox" checked><span class="slider"></span></label>
+        <label class="toggle"><input id="enableExport" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
         <div>
-          <div class="row-title">多格式对话导出</div>
-          <div class="row-desc">在顶部导航栏提供 PDF / TXT / Markdown 导出入口。</div>
+          <div class="row-title">隐藏顶栏「下载电脑版」按钮</div>
+          <div class="row-desc">隐藏顶部导航栏的桌面客户端下载推广按钮。</div>
         </div>
-        <label class="toggle"><input id="enableExport" type="checkbox" checked><span class="slider"></span></label>
+        <label class="toggle"><input id="hideDownloadPromo" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">隐藏侧边栏底部「关于豆包」推广区</div>
+          <div class="row-desc">隐藏侧边栏左下角的「关于豆包」与客户端推广栏。</div>
+        </div>
+        <label class="toggle"><input id="hideSidebarFooter" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">精简输入框底栏技能按钮</div>
+          <div class="row-desc">可在豆包页「Better Doubao 工具栏 → ⚙ 界面布局与配色定制」原型图弹窗中直观勾选、添加悬浮快捷胶囊与切换 6 套主题配色。</div>
+        </div>
+        <label class="toggle"><input id="compactInputToolbar" type="checkbox" checked><span class="slider"></span></label>
       </div>
 
       <div class="row">
@@ -174,7 +190,7 @@
     <div class="section">
       <div class="section-title">数据与隐私说明</div>
       <p class="row-desc">
-        所有文件夹、语料、高亮、收藏及扩展设置仅存储在浏览器扩展本地存储（<code>chrome.storage.local</code>）中，不向任何第三方服务器上传。建议在豆包页面的「随手工具 → 数据备份与恢复」定期导出 JSON 备份。
+        所有文件夹、语料、高亮、收藏及扩展设置仅存储在浏览器扩展本地存储（<code>chrome.storage.local</code>）中，不向任何第三方服务器上传。建议在豆包页面的「Better Doubao 工具栏 → 数据备份与恢复」定期导出 JSON 备份。
       </p>
       <div class="actions">
         <button id="reset-btn" type="button" class="btn">恢复默认设置</button>

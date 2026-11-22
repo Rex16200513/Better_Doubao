@@ -1,6 +1,7 @@
 import { storageService } from '../../core/services/StorageService';
 import { showConfirmDialog, showToast } from '../../core/utils/ui';
 import { corpusBoard } from '../corpusboard/CorpusBoard';
+import { layoutStudioModal } from '../workspace/LayoutStudioModal';
 import browser from 'webextension-polyfill';
 
 const HIGHLIGHT_SWATCHES = [
@@ -12,10 +13,13 @@ const HIGHLIGHT_SWATCHES = [
   { color: '#747A89', name: '灰色' },
 ];
 
+const CLOSE_ICON_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
 const icons = [
   '<path d="M8 3h8l4 4v14H4V3h4m6 0v6h6M8 13h8M8 17h6"/>',
   '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/>',
+  '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
   '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
 ];
 
@@ -33,8 +37,8 @@ export class ToolHub {
     const trigger = document.getElementById('dbx-corpus-trigger');
     if (!trigger || trigger.dataset.toolsBound) return;
     trigger.dataset.toolsBound = 'true';
-    trigger.title = '随手工具'; trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
-    trigger.setAttribute('aria-label', '随手工具'); trigger.setAttribute('aria-expanded', 'false');
+    trigger.title = 'Better Doubao 工具栏'; trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
+    trigger.setAttribute('aria-label', 'Better Doubao 工具栏'); trigger.setAttribute('aria-expanded', 'false');
     document.addEventListener('dbx-toggle-tools', () => this.toggle(trigger));
     trigger.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggle(trigger); } });
     document.addEventListener('pointerdown', e => {
@@ -70,6 +74,7 @@ export class ToolHub {
       ['▤', '语料板', () => { this.panel?.remove(); corpusBoard.openPanel(); this.styleCorpus(); }],
       ['⌕', '对话搜索', () => this.search()],
       ['☆', '高亮与收藏', () => void this.saved()],
+      ['⚙', '界面与按钮定制', () => this.customize()],
       ['⇩', '数据备份与恢复', () => this.backup()],
     ] as const) {
       const item = button(label, () => { menu.remove(); toggle.setAttribute('aria-expanded', 'false'); action(); });
@@ -85,27 +90,33 @@ export class ToolHub {
     corpusBoard.closePanel();
     this.panel?.remove();
     const panel = document.createElement('section'); panel.id = 'dbx-tools-panel';
+    panel.className = 'dbx-unified-panel';
     panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title);
     const heading = document.createElement('h3'); heading.textContent = title;
     const header = document.createElement('header'); header.className = 'dbx-tool-header';
     this.draggable(panel);
-    const close = button('×', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
+    const close = button('', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
+    close.className = 'dbx-panel-close';
+    close.innerHTML = CLOSE_ICON_SVG;
     close.title = '关闭'; close.setAttribute('aria-label', '关闭');
-    header.append(heading, close); panel.append(header);
+    header.append(heading, close);
+    const body = document.createElement('div');
+    body.className = 'dbx-tool-body';
+    panel.append(header, body);
     panel.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         panel.remove();
         if (this.panel === panel) this.panel = null;
       }
     });
-    document.body.appendChild(panel); this.panel = panel; this.position(); return panel;
+    document.body.appendChild(panel); this.panel = panel; this.position(); return body;
   }
 
   private position(): void {
     const anchor = document.getElementById('dbx-corpus-trigger')?.getBoundingClientRect();
     for (const panel of [this.panel, document.querySelector<HTMLElement>('.dbx-corpus-panel')]) {
       if (!panel || !anchor) continue;
-      const width = Math.min(360, window.innerWidth - 24);
+      const width = Math.min(316, window.innerWidth - 24);
       panel.style.width = `${width}px`;
       if (panel.dataset.dragged === 'true') {
         panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, panel.offsetLeft))}px`;
@@ -113,7 +124,7 @@ export class ToolHub {
         continue;
       }
       panel.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left - width - 12))}px`;
-      const height = Math.min(540, window.innerHeight - 24);
+      const height = Math.min(480, window.innerHeight - 24);
       panel.style.maxHeight = `${height}px`;
       panel.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, anchor.top))}px`;
       panel.style.right = 'auto';
@@ -149,9 +160,15 @@ export class ToolHub {
   }
 
   private guide(): void {
-    const panel = this.open('欢迎使用随手工具');
-    const p = document.createElement('p'); p.textContent = '点击悬浮按钮，展开语料板、对话搜索、重点目录和备份。所有面板都在按钮附近打开，可点击 × 或按 Esc 关闭。搜索仅覆盖已加载内容。';
-    panel.append(p, button('开始使用', () => { void browser.storage.local.set({ dbxToolsGuideSeen: true }); panel.remove(); }));
+    const body = this.open('欢迎使用 Better Doubao');
+    const p = document.createElement('p'); p.textContent = '点击悬浮按钮即可展开 Better Doubao 工具栏（语料板、对话搜索、高亮与收藏、数据备份）。可拖动标题栏调整位置，点击关闭按钮或按 Esc 收起。搜索仅覆盖已加载内容。';
+    const startBtn = button('开始使用', () => {
+      void browser.storage.local.set({ dbxToolsGuideSeen: true });
+      this.panel?.remove();
+      this.panel = null;
+    });
+    startBtn.className = 'dbx-tool-primary-btn';
+    body.append(p, startBtn);
   }
 
   private messages(): HTMLElement[] {
@@ -331,15 +348,36 @@ export class ToolHub {
 
             const row = button(label, () => {
               if (conversation !== current) { window.location.href = `/chat/${encodeURIComponent(conversation)}`; return; }
-              const dot = document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`);
-              if (dot) dot.click(); else showToast('该收藏尚未加载，请先滚动加载原文。', 'info');
+              const meta = data.starredMeta?.[conversation]?.[i];
+              const messages = this.messages();
+              let target: HTMLElement | undefined;
+              if (meta?.messageId) {
+                target = messages.find(el => el.dataset.messageId === meta.messageId);
+              }
+              if (!target && excerpt) {
+                const probe = excerpt.replace(/…$/, '').slice(0, 24);
+                target = messages.find(el => (el.textContent || '').includes(probe));
+              }
+              if (!target) {
+                const nativeCard = document.querySelector<HTMLElement>(`[data-dbx-native-card="${i}"]`);
+                if (nativeCard) { nativeCard.click(); return; }
+              }
+              if (target) {
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                target.classList.add('dbx-message-highlight');
+                window.setTimeout(() => target?.classList.remove('dbx-message-highlight'), 1800);
+              } else {
+                showToast('该收藏尚未加载，请先通过豆包定位滚动加载原文。', 'info');
+              }
             });
             row.className = 'dbx-saved-row-main';
 
             const removeBtn = button('×', () => void (async () => {
               await storageService.removeStarredMessage(conversation, i);
               if (conversation === current) {
-                document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`)?.classList.remove('starred');
+                const nativeCard = document.querySelector<HTMLElement>(`[data-dbx-native-card="${i}"]`);
+                nativeCard?.classList.remove('dbx-native-card-starred');
+                nativeCard?.querySelector('.dbx-native-card-star')?.classList.remove('is-starred');
               }
               showToast('已取消收藏', 'success');
               await render();
@@ -365,6 +403,13 @@ export class ToolHub {
     renderFilters();
     panel.append(input, filterBar, list);
     await render();
+  }
+
+  private customize(): void {
+    corpusBoard.closePanel();
+    this.panel?.remove();
+    this.panel = null;
+    layoutStudioModal.open();
   }
 
   private backup(): void {

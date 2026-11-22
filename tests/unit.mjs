@@ -247,19 +247,23 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert(md.includes('![proto](https://cdn.doubao.com/p.png)'), 'protocol-relative img resolved');
   assert(!md.includes('base64'), 'base64 img filtered out');
 
-  // Test PDF HTML sanitization strips scripts, event handlers, and javascript: links
+  // Test PDF HTML sanitization strips scripts, event handlers, layout styles, empty divs, and standalone "表格" labels
   const scriptEl = new FakeElement('script', {}, [textNode('alert(1)')]);
-  const evilLink = new FakeElement('a', { href: 'javascript:alert(1)', onclick: 'steal()' }, [textNode('click')]);
+  const evilLink = new FakeElement('a', { href: 'javascript:alert(1)', onclick: 'steal()', style: 'height: 800px', class: 'tall-box' }, [textNode('click')]);
+  const tableLabel = new FakeElement('div', { class: 'table-header' }, [textNode('表格')]);
+  const emptyWrapper = new FakeElement('div', { style: 'min-height: 400px' }, [textNode('   ')]);
   const relImg = new FakeElement('img', { src: '/img/ok.png', onerror: 'evil()' });
-  nextRoot = new FakeElement('div', {}, [scriptEl, evilLink, relImg]);
+  nextRoot = new FakeElement('div', {}, [scriptEl, evilLink, tableLabel, emptyWrapper, relImg]);
   Object.defineProperty(nextRoot, 'innerHTML', {
     get() { return JSON.stringify(this.childNodes.map(c => ({ tag: c.tagName, attrs: c.attrs }))); },
     set() {},
   });
   const sanitized = JSON.parse(exporter.sanitizeHtmlForPdf('ignored'));
-  assert.equal(sanitized.length, 2, 'script node removed');
+  assert.equal(sanitized.length, 2, 'script, standalone table label, and empty wrapper removed');
   assert.equal(sanitized[0].attrs.href, undefined, 'javascript: href stripped');
   assert.equal(sanitized[0].attrs.onclick, undefined, 'onclick handler stripped');
+  assert.equal(sanitized[0].attrs.style, undefined, 'layout inline style stripped');
+  assert.equal(sanitized[0].attrs.class, undefined, 'host class stripped');
   assert.equal(sanitized[1].attrs.onerror, undefined, 'onerror handler stripped');
   assert.equal(sanitized[1].attrs.src, 'https://www.doubao.com/img/ok.png', 'relative img src resolved cleanly');
 }
@@ -278,6 +282,7 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   };
   const { ToolHub } = loadTs('src/features/tools/ToolHub.ts', name => {
     if (name.includes('StorageService')) return { storageService: {} };
+    if (name.includes('LayoutStudioModal')) return { layoutStudioModal: { open() {} } };
     if (name.includes('CorpusBoard')) return { corpusBoard: { closePanel() {} } };
     if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
     return { default: { storage: { local: { get: async () => ({ dbxToolsGuideSeen: true }) } } } };
@@ -325,10 +330,25 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
     return { default: browser };
   });
 
-  const merged = mergeSettings({ enableExport: false, autoIndexLongChat: 'bad-type' });
+  const merged = mergeSettings({
+    enableExport: false,
+    enableNativeLocatorEnhancer: 'bad-type',
+    hideSidebarFooter: true,
+    themePreset: 'warm',
+    pinnedComposerSkills: ['对话', '图像生成', 123, '对话'],
+    customQuickButtons: [
+      { id: 'b1', label: '总结', prompt: '请总结要点' },
+      { id: 'b2', label: '', prompt: 'invalid' },
+    ],
+  });
   assert.equal(merged.enableExport, false);
-  assert.equal(merged.autoIndexLongChat, true, 'non-boolean falls back to default');
-  assert.equal(merged.enableQuickLocator, true);
+  assert.equal(merged.enableNativeLocatorEnhancer, true, 'non-boolean falls back to default');
+  assert.equal(merged.enableSidebarLauncher, true);
+  assert.equal(merged.hideSidebarFooter, true);
+  assert.equal(merged.themePreset, 'warm');
+  assert.equal(mergeSettings({ themePreset: 'unknown-theme' }).themePreset, 'default', 'invalid theme falls back to default');
+  assert.deepEqual([...merged.pinnedComposerSkills], ['对话', '图像生成'], 'pinned skills deduplicated & sanitized');
+  assert.equal(merged.customQuickButtons.length, 1, 'invalid custom button filtered out');
 
   const svc = new SettingsService();
   await svc.load();
@@ -484,4 +504,58 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub');
+// 11. NativeLocatorEnhancer: native like button recognition (distinguishes 赞 vs 踩)
+{
+  const { hasNativeLocatorTimestamp, isNativeLikeButton } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
+    if (name.includes('StorageService')) return { storageService: { getStarredMessages: async () => [] } };
+    if (name.includes('PageLifecycle')) return { pageLifecycle: { onUrlChange: () => () => {}, onDomChange: () => () => {} } };
+    if (name.includes('utils/dom')) return domUtils;
+    if (name.includes('utils/ui')) return { showToast() {} };
+    return {};
+  });
+  assert.equal(hasNativeLocatorTimestamp('3月12日 15:21'), true);
+  assert.equal(hasNativeLocatorTimestamp('普通文本无时间戳'), false);
+
+  const makeBtn = (attrs, text = '') => ({
+    getAttribute: k => attrs[k] ?? null,
+    className: attrs.class || '',
+    textContent: text,
+    parentElement: null,
+    querySelector: () => null,
+  });
+  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '赞' })), true);
+  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_like' })), true);
+  assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '踩' })), false);
+  assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_dislike' })), false);
+
+  // Structural fallback when each icon button is wrapped in its own tooltip container
+  const makeSlot = (hasSvg, innerBtn) => {
+    const slot = {
+      getAttribute: () => null,
+      className: '',
+      textContent: '',
+      children: [innerBtn],
+      childElementCount: 1,
+      parentElement: null,
+      contains: el => el === innerBtn || el === slot,
+      querySelector: sel => (sel === 'svg' && hasSvg ? {} : innerBtn),
+    };
+    innerBtn.parentElement = slot;
+    return slot;
+  };
+  const slotBtns = Array.from({ length: 5 }, () => ({
+    getAttribute: () => null,
+    className: '',
+    textContent: '',
+    parentElement: null,
+    querySelector: sel => (sel === 'svg' ? {} : null),
+  }));
+  const slots = slotBtns.map(b => makeSlot(true, b));
+  const actionBar = { children: slots, childElementCount: slots.length, parentElement: null };
+  slots.forEach(s => { s.parentElement = actionBar; });
+  assert.equal(isNativeLikeButton(slotBtns[2]), true, 'wrapped 3rd icon in 5-icon action bar recognized as like');
+  assert.equal(isNativeLikeButton(slotBtns[0]), false, 'copy slot not recognized as like');
+  assert.equal(isNativeLikeButton(slotBtns[3]), false, 'dislike slot not recognized as like');
+}
+
+console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, native locator enhancer, latex, export, toolhub');

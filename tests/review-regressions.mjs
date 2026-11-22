@@ -32,26 +32,46 @@ for (const [label, records, remove] of [
 }
 
 for (const action of ['cancel', 'confirm', 'outside']) {
-  const handlers = {}; let removed = false; let deleted = false;
-  const popup = {
-    style: {},
-    querySelector: selector => ({ addEventListener: (_event, handler) => { handlers[selector] = handler; } }),
-    addEventListener: (_event, handler) => { handlers.outside = handler; },
-    remove: () => { removed = true; },
+  const keyHandlers = new Set();
+  const makeNode = () => {
+    const handlers = {};
+    return {
+      className: '',
+      textContent: '',
+      style: {},
+      children: [],
+      removed: false,
+      setAttribute() {},
+      append(...items) { this.children.push(...items); },
+      appendChild(item) { this.children.push(item); },
+      addEventListener(ev, fn) { handlers[ev] = fn; },
+      click() { handlers.click?.({ target: this }); },
+      focus() {},
+      remove() { this.removed = true; },
+      _handlers: handlers,
+    };
   };
-  const storageService = { deleteFolder: async () => { deleted = true; }, getData: async () => valid };
-  const { FolderManager } = load('src/features/folder/FolderManager.ts', name => name === '../../core' ? { storageService } : { escapeHTML: value => value }, {
-    document: { createElement: () => popup, body: { appendChild() {} } },
+  let overlay = null;
+  const { showConfirmDialog } = load('src/core/utils/ui.ts', () => ({}), {
+    document: {
+      createElement: makeNode,
+      body: { appendChild(el) { overlay = el; } },
+      addEventListener(_ev, fn) { keyHandlers.add(fn); },
+      removeEventListener(_ev, fn) { keyHandlers.delete(fn); },
+    },
+    window: { setTimeout },
   });
-  const manager = new FolderManager();
-  manager.render = () => {};
-  manager.refreshAllIndicators = () => {};
-  manager.showDeleteConfirm({ name: 'Example' }, 'folder');
-  if (action === 'cancel') handlers['.dbx-popup-btn-cancel']();
-  if (action === 'confirm') await handlers['.dbx-popup-btn-danger']();
-  if (action === 'outside') handlers.outside({ target: popup });
-  assert(removed, `${action}: popup removed`);
-  assert.equal(deleted, action === 'confirm');
-  assert.equal(manager.popupElement, null);
+
+  const promise = showConfirmDialog({ title: '确认操作', message: '继续？', danger: true });
+  const actions = overlay.children[0].children[2];
+  const [cancelBtn, confirmBtn] = actions.children;
+  if (action === 'cancel') cancelBtn.click();
+  if (action === 'confirm') confirmBtn.click();
+  if (action === 'outside') overlay._handlers.click({ target: overlay });
+
+  const result = await promise;
+  assert.equal(overlay.removed, true, `${action}: modal removed`);
+  assert.equal(result, action === 'confirm', `${action}: resolved value`);
+  assert.equal(keyHandlers.size, 0, `${action}: Esc listener cleaned up`);
 }
 console.log('PASS: legacy recovery preservation, valid fallback, cancel/confirm/outside modal cleanup');

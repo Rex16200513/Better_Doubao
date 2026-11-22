@@ -1,1010 +1,708 @@
-import { storageService, type Folder, type FolderData, type ConversationReference, getFolderColor } from '../../core';
-import { createFolderItemHTML, createEmptyFolderHTML, createFolderSectionHTML, setupDropZone, setupDraggable, createIndicator, escapeHTML } from './ui';
+import {
+  storageService,
+  FOLDER_COLORS,
+  getFolderColor,
+  escapeHTML,
+  showConfirmDialog,
+  showToast,
+  type Folder,
+  type FolderData,
+  type ConversationReference,
+} from '../../core';
+import { pageLifecycle } from '../../core/services/PageLifecycle';
 
-interface DragData {
-  type: string;
-  conversationId?: string;
+interface DragPayload {
+  conversationId: string;
   title: string;
+  url: string;
   sourceFolderId?: string;
 }
 
+const FOLDER_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+const CHEVRON_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+const PLUS_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+const MORE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
+const CLOSE_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
 export class FolderManager {
   private data: FolderData = { folders: [], folderContents: {}, starredMessages: {}, corpusBoard: [] };
-  private containerElement: HTMLElement | null = null;
-  private sidebarContainer: HTMLElement | null = null;
-  private popupElement: HTMLElement | null = null;
-  private dragData: DragData | null = null;
-  private initialized = false;
+  private sectionEl: HTMLElement | null = null;
   private sectionCollapsed = false;
-  private sidebarObserver: MutationObserver | null = null;
-  private rootObserver: MutationObserver | null = null;
-
-  constructor() {
-    this.init = this.init.bind(this);
-    this.render = this.render.bind(this);
-  }
+  private unsubscribeDom: (() => void) | null = null;
+  private dragData: DragPayload | null = null;
+  private activePopover: HTMLElement | null = null;
+  private activeDialog: HTMLElement | null = null;
+  private docClickHandler: ((e: MouseEvent) => void) | null = null;
 
   async init(): Promise<void> {
+    if (this.unsubscribeDom) return;
     await storageService.init();
     this.data = await storageService.getData();
     this.sectionCollapsed = await storageService.getSectionCollapsed();
-    if (localStorage.getItem('dbx_legacy_folder_expanded') === null) {
-      this.sectionCollapsed = true;
-    }
-    this.data.folders.forEach(f => f.isExpanded = false);
-    await this.waitForSidebar();
-    this.findSidebarContainer();
-    this.setupObservers();
-    
-    if (this.containerElement) {
-      this.render();
-    }
-    
-    this.addConversationIndicators();
-    this.setupFolderDropZones();
-    this.initialized = true;
+
+    this.docClickHandler = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (this.activePopover && !this.activePopover.contains(target) && !target?.closest('.dbx-chat-dot, .dbx-folder-menu-btn')) {
+        this.closePopover();
+      }
+    };
+    document.addEventListener('click', this.docClickHandler);
+
+    this.unsubscribeDom = pageLifecycle.onDomChange(() => this.syncSidebar(), 140);
+    this.syncSidebar();
   }
 
-  private waitForSidebar(): Promise<void> {
-    return new Promise((resolve) => {
-      const checkSidebar = () => {
-        const sidebar = document.querySelector('#flow_chat_sidebar');
-        if (sidebar) {
-          resolve();
-          return true;
-        }
-        return false;
-      };
-
-      if (checkSidebar()) return;
-
-      let retries = 0;
-      const maxRetries = 100;
-
-      const checkInterval = setInterval(() => {
-        if (checkSidebar() || retries >= maxRetries) {
-          clearInterval(checkInterval);
-          if (retries >= maxRetries) {
-            console.warn('[FolderManager] Sidebar not found after max retries');
-          }
-          resolve();
-        }
-        retries++;
-      }, 250);
+  destroy(): void {
+    this.unsubscribeDom?.();
+    this.unsubscribeDom = null;
+    if (this.docClickHandler) {
+      document.removeEventListener('click', this.docClickHandler);
+      this.docClickHandler = null;
+    }
+    this.closePopover();
+    this.closeDialog();
+    this.sectionEl?.remove();
+    this.sectionEl = null;
+    document.querySelectorAll('.dbx-chat-dot').forEach(el => el.remove());
+    document.querySelectorAll('.dbx-native-chat-icon-hidden').forEach(el => {
+      el.classList.remove('dbx-native-chat-icon-hidden');
     });
   }
 
-  private findSidebarContainer(): void {
-    this.sidebarContainer = document.querySelector('#flow_chat_sidebar') as HTMLElement;
-    if (this.sidebarContainer) {
-      this.containerElement = this.sidebarContainer.querySelector('#dbx-folder-section') as HTMLElement;
-      if (!this.containerElement) {
-        this.createFolderSection();
-      } else {
-        this.setupFolderEvents();
+  private closePopover(): void {
+    this.activePopover?.remove();
+    this.activePopover = null;
+  }
+
+  private closeDialog(): void {
+    this.activeDialog?.remove();
+    this.activeDialog = null;
+  }
+
+  private syncSidebar(): void {
+    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+    if (!sidebar) return;
+
+    if (!this.sectionEl || !sidebar.contains(this.sectionEl)) {
+      this.sectionEl = sidebar.querySelector<HTMLElement>('#dbx-folder-section') || this.createSection();
+      this.placeSection(sidebar, this.sectionEl);
+      this.renderFolders();
+    } else {
+      this.placeSection(sidebar, this.sectionEl);
+    }
+
+    this.decorateConversationList(sidebar);
+  }
+
+  private createSection(): HTMLElement {
+    const section = document.createElement('div');
+    section.id = 'dbx-folder-section';
+    section.className = 'dbx-folder-section';
+    section.innerHTML = `
+      <div class="dbx-folder-header">
+        <button type="button" class="dbx-folder-title-btn" title="展开/收起分类文件夹">
+          <span class="dbx-folder-section-chevron">${CHEVRON_SVG}</span>
+          <span class="dbx-folder-icon">${FOLDER_ICON_SVG}</span>
+          <span class="dbx-folder-title">分类文件夹</span>
+        </button>
+        <button type="button" class="dbx-folder-add-btn" title="新建分类文件夹">${PLUS_SVG}</button>
+      </div>
+      <div class="dbx-folder-list"></div>
+    `;
+
+    section.querySelector('.dbx-folder-title-btn')?.addEventListener('click', () => {
+      this.sectionCollapsed = !this.sectionCollapsed;
+      storageService.setSectionCollapsed(this.sectionCollapsed);
+      this.applySectionCollapseState();
+    });
+
+    section.querySelector('.dbx-folder-add-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openFolderDialog();
+    });
+
+    return section;
+  }
+
+  private placeSection(sidebar: HTMLElement, section: HTMLElement): void {
+    // Prefer inserting directly above the "最近" section, or directly below "项目"
+    const recentHeader = Array.from(sidebar.querySelectorAll<HTMLElement>('span, div, p'))
+      .find((el) => el.childElementCount === 0 && el.textContent?.trim() === '最近' && !el.closest('#dbx-folder-section'));
+    const recentSection = recentHeader?.closest<HTMLElement>('section') || recentHeader?.parentElement;
+    if (recentSection?.parentElement && recentSection.parentElement !== sidebar) {
+      if (section.parentElement !== recentSection.parentElement || section.nextElementSibling !== recentSection) {
+        recentSection.parentElement.insertBefore(section, recentSection);
       }
+      return;
+    }
+
+    const projectSection = Array.from(sidebar.querySelectorAll<HTMLElement>('[data-history-container] section'))
+      .find((sec) => Array.from(sec.querySelectorAll<HTMLElement>('span')).some(s => s.textContent?.trim() === '项目'));
+    if (projectSection?.parentElement) {
+      if (section.parentElement !== projectSection.parentElement || section.previousElementSibling !== projectSection) {
+        projectSection.parentElement.insertBefore(section, projectSection.nextSibling);
+      }
+      return;
+    }
+
+    const historyContainer = sidebar.querySelector<HTMLElement>('[data-history-container], [class*="history"]');
+    if (historyContainer?.parentElement) {
+      if (section.parentElement !== historyContainer.parentElement || section.nextElementSibling !== historyContainer) {
+        historyContainer.parentElement.insertBefore(section, historyContainer);
+      }
+      return;
+    }
+
+    if (section.parentElement !== sidebar) {
+      sidebar.appendChild(section);
     }
   }
 
-  private findMoreButtonContainer(): HTMLElement | null {
-    if (!this.sidebarContainer) return null;
+  private applySectionCollapseState(): void {
+    if (!this.sectionEl) return;
+    this.sectionEl.classList.toggle('is-collapsed', this.sectionCollapsed);
+  }
 
-    const spans = this.sidebarContainer.querySelectorAll('span.font-medium');
-    for (const span of Array.from(spans)) {
-      if (span.textContent?.trim() === '更多') {
-        // 排除我们自己 folder section 内部的 span
-        if ((span as HTMLElement).closest('#dbx-folder-section')) continue;
+  private renderFolders(): void {
+    if (!this.sectionEl) return;
+    this.applySectionCollapseState();
+    const listEl = this.sectionEl.querySelector<HTMLElement>('.dbx-folder-list');
+    if (!listEl) return;
 
-        // 将文件夹放在 React 管理的整个「更多」菜单外面，避免菜单展开时被重排到末尾。
-        const menuContainer = span.closest('[aria-haspopup="dialog"]') as HTMLElement | null;
-        if (menuContainer) return menuContainer;
+    listEl.replaceChildren();
+    if (this.data.folders.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dbx-folder-empty';
+      empty.textContent = '点右上角 + 新建分类，或点对话前圆点归类';
+      listEl.appendChild(empty);
+      return;
+    }
 
-        // 旧版 DOM 中"更多"项外层是 <div data-expand="false">
-        const itemContainer = span.closest('div[data-expand="false"]') as HTMLElement | null;
-        if (itemContainer) return itemContainer;
+    for (const folder of this.data.folders) {
+      const contents = this.data.folderContents[folder.id] || [];
+      const color = getFolderColor(folder.color);
 
-        // 回退：nav-link 的直接父元素
-        const navLink = span.closest('.nav-link-IkIer0') as HTMLElement | null;
-        if (navLink?.parentElement) return navLink.parentElement as HTMLElement;
+      const item = document.createElement('div');
+      item.className = `dbx-folder-item${folder.isExpanded ? ' is-expanded' : ''}`;
+      item.dataset.folderId = folder.id;
 
-        return navLink;
+      const row = document.createElement('div');
+      row.className = 'dbx-folder-row';
+
+      const chevron = document.createElement('span');
+      chevron.className = 'dbx-folder-expand-icon';
+      chevron.innerHTML = CHEVRON_SVG;
+
+      const dot = document.createElement('span');
+      dot.className = 'dbx-folder-color-dot';
+      dot.style.backgroundColor = color;
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'dbx-folder-name';
+      nameEl.textContent = folder.name;
+
+      const countEl = document.createElement('span');
+      countEl.className = 'dbx-folder-count';
+      countEl.textContent = String(contents.length);
+
+      const menuBtn = document.createElement('button');
+      menuBtn.type = 'button';
+      menuBtn.className = 'dbx-folder-menu-btn';
+      menuBtn.title = '重命名 / 改色 / 删除';
+      menuBtn.innerHTML = MORE_SVG;
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openFolderMenu(folder, menuBtn);
+      });
+
+      row.append(chevron, dot, nameEl, countEl, menuBtn);
+      row.addEventListener('click', () => {
+        folder.isExpanded = !folder.isExpanded;
+        void storageService.updateFolder(folder.id, { isExpanded: folder.isExpanded });
+        this.renderFolders();
+      });
+
+      // Drop zone: drag any conversation from 最近 or another folder onto this folder row
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.add('dbx-drop-target');
+      });
+      item.addEventListener('dragleave', (e) => {
+        if (!item.contains(e.relatedTarget as Node | null)) {
+          item.classList.remove('dbx-drop-target');
+        }
+      });
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove('dbx-drop-target');
+        void this.handleDropIntoFolder(folder.id, e);
+      });
+
+      const contentsEl = document.createElement('div');
+      contentsEl.className = 'dbx-folder-contents';
+      for (const conv of contents) {
+        const convEl = document.createElement('div');
+        convEl.className = 'dbx-folder-conversation';
+        convEl.draggable = true;
+        convEl.dataset.conversationId = conv.conversationId;
+
+        const cDot = document.createElement('span');
+        cDot.className = 'dbx-folder-conv-dot';
+        cDot.style.backgroundColor = color;
+
+        const titleEl = document.createElement('span');
+        titleEl.className = 'dbx-conversation-title';
+        titleEl.textContent = conv.title;
+        titleEl.title = conv.title;
+
+        const rmBtn = document.createElement('button');
+        rmBtn.type = 'button';
+        rmBtn.className = 'dbx-folder-conversation-remove';
+        rmBtn.title = '移出文件夹';
+        rmBtn.innerHTML = CLOSE_SVG;
+        rmBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          void this.removeFromFolder(folder.id, conv.conversationId);
+        });
+
+        convEl.append(cDot, titleEl, rmBtn);
+        convEl.addEventListener('click', () => this.openConversation(conv.conversationId, conv.url));
+        convEl.addEventListener('dragstart', (e) => {
+          this.dragData = {
+            conversationId: conv.conversationId,
+            title: conv.title,
+            url: conv.url,
+            sourceFolderId: folder.id,
+          };
+          e.dataTransfer?.setData('application/x-dbx-chat', JSON.stringify(this.dragData));
+        });
+        convEl.addEventListener('dragend', () => {
+          this.dragData = null;
+        });
+
+        contentsEl.appendChild(convEl);
+      }
+
+      item.append(row, contentsEl);
+      listEl.appendChild(item);
+    }
+  }
+
+  private getConversationElements(sidebar: HTMLElement): HTMLElement[] {
+    const raw = Array.from(sidebar.querySelectorAll<HTMLElement>(
+      'a[id^="conversation_"], a[href^="/chat/"], [data-conversation-id]'
+    )).filter(el => !el.closest('#dbx-folder-section, #dbx-sidebar-launcher-shell'));
+    return Array.from(new Set(raw.map(el => el.closest<HTMLElement>('a[href^="/chat/"]') || el)));
+  }
+
+  private getConversationId(el: HTMLElement): string | undefined {
+    const idMatch = el.id?.match(/conversation_([^/?#]+)/);
+    if (idMatch) return idMatch[1];
+    const dataId = el.dataset.conversationId || el.querySelector<HTMLElement>('[data-conversation-id]')?.dataset.conversationId;
+    if (dataId) return dataId;
+    return el.getAttribute('href')?.match(/\/chat\/([^/?#]+)/)?.[1];
+  }
+
+  private getConversationTitle(el: HTMLElement): string {
+    return (el.textContent || '').replace(/\s+/g, ' ').trim() || '未命名对话';
+  }
+
+  private findFoldersForConversation(conversationId: string): Folder[] {
+    const matched: Folder[] = [];
+    for (const folder of this.data.folders) {
+      const list = this.data.folderContents[folder.id];
+      if (list?.some(c => c.conversationId === conversationId)) {
+        matched.push(folder);
+      }
+    }
+    return matched;
+  }
+
+  /**
+   * Locate the native leading skeuomorphic chat icon (blue circle / speech bubble / laptop)
+   * on the left side of a sidebar conversation row so we can replace it cleanly with our dot.
+   */
+  private findLeadingNativeIcon(row: HTMLElement): HTMLElement | null {
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.width < 40) return null;
+
+    const media = Array.from(row.querySelectorAll<HTMLElement>('img, svg'))
+      .filter(el => !el.closest('.dbx-chat-dot, [id^="dbx-"]'));
+
+    for (const el of media) {
+      const r = el.getBoundingClientRect();
+      if (r.width >= 12 && r.width <= 34 && r.height >= 12 && r.height <= 34 && r.left - rowRect.left < 46) {
+        let target: HTMLElement = el;
+        const parent = el.parentElement;
+        if (
+          parent &&
+          parent !== row &&
+          parent.childElementCount === 1 &&
+          !(parent.textContent || '').trim()
+        ) {
+          const pr = parent.getBoundingClientRect();
+          if (pr.width <= 36 && pr.height <= 36) {
+            target = parent;
+          }
+        }
+        return target;
       }
     }
     return null;
   }
 
-  private createFolderSection(): void {
-    if (!this.sidebarContainer) return;
+  private decorateConversationList(sidebar: HTMLElement): void {
+    const rows = this.getConversationElements(sidebar);
+    for (const row of rows) {
+      const conversationId = this.getConversationId(row);
+      if (!conversationId) continue;
 
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = createFolderSectionHTML();
-    const folderSection = tempDiv.firstElementChild as HTMLElement;
-
-    // 优先放在原生项目下方；没有项目区的旧页面再放到「更多」下方。
-    this.placeFolderSection(folderSection);
-
-    this.containerElement = folderSection;
-    this.setupFolderEvents();
-  }
-
-  private placeFolderSection(folderSection: HTMLElement): void {
-    if (!this.sidebarContainer) return;
-    const projectSection = Array.from(this.sidebarContainer.querySelectorAll<HTMLElement>('[data-history-container] section'))
-      .find((section) => Array.from(section.querySelectorAll<HTMLElement>('span'))
-        .some((span) => span.textContent?.trim() === '项目'));
-    if (projectSection?.parentNode) {
-      if (folderSection.parentNode !== projectSection.parentNode || folderSection.previousElementSibling !== projectSection) {
-        projectSection.parentNode.insertBefore(folderSection, projectSection.nextSibling);
+      // Setup drag into folders
+      if (row.dataset.dbxDragBound !== 'true') {
+        row.dataset.dbxDragBound = 'true';
+        row.draggable = true;
+        row.addEventListener('dragstart', (e) => {
+          const title = this.getConversationTitle(row);
+          const url = row.getAttribute('href') || `/chat/${conversationId}`;
+          this.dragData = { conversationId, title, url };
+          e.dataTransfer?.setData('application/x-dbx-chat', JSON.stringify(this.dragData));
+        });
+        row.addEventListener('dragend', () => {
+          this.dragData = null;
+        });
       }
-      return;
-    }
 
-    const moreContainer = this.findMoreButtonContainer();
-    if (moreContainer?.parentNode) {
-      if (folderSection.parentNode !== moreContainer.parentNode || folderSection.previousElementSibling !== moreContainer) {
-        moreContainer.parentNode.insertBefore(folderSection, moreContainer.nextSibling);
-      }
-    } else {
-      // 查找历史对话区域（新前端使用 data-history-container，旧前端用 class*="history"）
-      const historySection = this.sidebarContainer.querySelector('[data-history-container], [class*="history"]');
-      if (historySection && historySection.parentNode) {
-        historySection.parentNode.insertBefore(folderSection, historySection);
-      } else {
-        // 查找用户信息区域（底部），在它之前插入
-        const userSection = this.sidebarContainer.querySelector('[class*="-mx-12"]');
-        if (userSection && userSection.parentNode) {
-          userSection.parentNode.insertBefore(folderSection, userSection);
+      // Replace ugly native icon with sleek color-classification dot
+      const matchedFolders = this.findFoldersForConversation(conversationId);
+      const primaryFolder = matchedFolders[0] || null;
+      const color = primaryFolder ? getFolderColor(primaryFolder.color) : '';
+
+      let dot = row.querySelector<HTMLButtonElement>(':scope .dbx-chat-dot');
+      if (!dot) {
+        const nativeIcon = this.findLeadingNativeIcon(row);
+        dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'dbx-chat-dot';
+        dot.innerHTML = '<span class="dbx-chat-dot-core"></span>';
+        dot.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.openChatCategoryPopover(
+            conversationId,
+            this.getConversationTitle(row),
+            row.getAttribute('href') || `/chat/${conversationId}`,
+            dot!
+          );
+        });
+
+        if (nativeIcon && nativeIcon.parentElement) {
+          nativeIcon.classList.add('dbx-native-chat-icon-hidden');
+          nativeIcon.parentElement.insertBefore(dot, nativeIcon);
         } else {
-          // 最后在侧边栏末尾添加
-          this.sidebarContainer.appendChild(folderSection);
+          row.insertBefore(dot, row.firstChild);
         }
-      }
-    }
-  }
-
-  private setupFolderEvents(): void {
-    if (!this.containerElement) return;
-
-    const toggleBtn = this.containerElement.querySelector('.dbx-folder-toggle-btn');
-    if (toggleBtn && !toggleBtn.hasAttribute('data-dv-event-bound')) {
-      toggleBtn.setAttribute('data-dv-event-bound', 'true');
-      toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleSectionCollapsed();
-      });
-    }
-
-    const addBtn = this.containerElement.querySelector('.dbx-folder-add-btn');
-    if (addBtn && !addBtn.hasAttribute('data-dv-event-bound')) {
-      addBtn.setAttribute('data-dv-event-bound', 'true');
-      addBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.showCreateFolderDialog(addBtn as HTMLElement);
-      });
-    }
-  }
-
-  private setupObservers(): void {
-    let observerTimeout: number | null = null;
-    const refresh = () => {
-      if (observerTimeout) clearTimeout(observerTimeout);
-      observerTimeout = window.setTimeout(() => {
-        const sidebar = document.querySelector('#flow_chat_sidebar');
-        if (!sidebar) return;
-
-        if (sidebar !== this.sidebarContainer) {
-          this.sidebarObserver?.disconnect();
-          this.observeSidebar(sidebar as HTMLElement, refresh);
-        }
-        this.sidebarContainer = sidebar as HTMLElement;
-
-        if (this.initialized) {
-          const existingSection = sidebar.querySelector('#dbx-folder-section');
-          if (!existingSection) {
-            this.findSidebarContainer();
-            this.render();
-          } else {
-            this.containerElement = existingSection as HTMLElement;
-            this.placeFolderSection(this.containerElement);
-            this.setupFolderEvents();
-          }
-          this.addConversationIndicators();
-          this.setupFolderDropZones();
-        } else {
-          this.findSidebarContainer();
-        }
-      }, 100);
-    };
-
-    const sidebar = document.querySelector('#flow_chat_sidebar');
-    if (sidebar) {
-      this.observeSidebar(sidebar as HTMLElement, refresh);
-    }
-
-    // 豆包切换工作区时会整体替换侧边栏；监听 document 才能重新挂载到新节点。
-    this.rootObserver?.disconnect();
-    this.rootObserver = new MutationObserver(() => {
-      const currentSidebar = document.querySelector('#flow_chat_sidebar');
-      if (currentSidebar !== this.sidebarContainer) refresh();
-    });
-    this.rootObserver.observe(document.body, { childList: true, subtree: true });
-  }
-
-  private observeSidebar(sidebar: HTMLElement, refresh: () => void): void {
-    this.sidebarObserver?.disconnect();
-    this.sidebarObserver = new MutationObserver(refresh);
-    this.sidebarObserver.observe(sidebar, { childList: true, subtree: true });
-  }
-
-  private addConversationIndicators(): void {
-    this.getConversationElements().forEach((element) => {
-      if (element.dataset.dvProcessed) return;
-      element.dataset.dvProcessed = 'true';
-
-      const conversationId = this.getConversationIdFromElement(element);
-
-      if (!conversationId) return;
-
-      const folders = this.findConversationFolders(conversationId);
-      this.updateConversationIndicator(element, folders);
-
-      this.setupConversationDrag(element, conversationId);
-    });
-    
-    this.setupFolderDropZones();
-  }
-
-  private updateConversationIndicator(element: HTMLElement, folders: string[]): void {
-    const existingIndicator = element.querySelector('.dbx-folder-indicator');
-    
-    if (folders.length > 0) {
-      const firstFolder = this.data.folders.find(f => f.id === folders[0]);
-      const color = firstFolder ? getFolderColor(firstFolder.color) : '#6b7280';
-      
-      if (existingIndicator) {
-        (existingIndicator as HTMLElement).style.backgroundColor = color;
       } else {
-        const indicator = createIndicator(color);
-        const wrapper = element.querySelector('.wrapper-Xy3kj9') || element.querySelector('div:first-child') || element;
-        if (wrapper) {
-          (wrapper as HTMLElement).style.position = 'relative';
-          wrapper.insertBefore(indicator, wrapper.firstChild);
-        }
+        // Ensure re-rendered native icon stays hidden
+        const nativeIcon = this.findLeadingNativeIcon(row);
+        if (nativeIcon) nativeIcon.classList.add('dbx-native-chat-icon-hidden');
       }
-    } else if (existingIndicator) {
-      existingIndicator.remove();
-    }
-  }
 
-  private refreshAllIndicators(): void {
-    this.getConversationElements().forEach((element) => {
-      const conversationId = this.getConversationIdFromElement(element);
-      if (!conversationId) return;
-
-      const folders = this.findConversationFolders(conversationId);
-      this.updateConversationIndicator(element, folders);
-    });
-  }
-
-  private getConversationElements(): HTMLElement[] {
-    const elements = Array.from(document.querySelectorAll<HTMLElement>(
-      '#flow_chat_sidebar a[id^="conversation_"], #flow_chat_sidebar a[href^="/chat/"], #flow_chat_sidebar [data-conversation-id]'
-    ));
-    return Array.from(new Set(elements.map((element) => element.closest<HTMLElement>('a[href^="/chat/"]') || element)));
-  }
-
-  private getConversationIdFromElement(element: HTMLElement): string | undefined {
-    const idMatch = element.id.match(/conversation_([^/?#]+)/);
-    if (idMatch) return idMatch[1];
-
-    const dataId = element.dataset.conversationId || element.querySelector<HTMLElement>('[data-conversation-id]')?.dataset.conversationId;
-    if (dataId) return dataId;
-
-    return element.getAttribute('href')?.match(/\/chat\/([^/?#]+)/)?.[1];
-  }
-
-  private setupConversationDrag(element: HTMLElement, conversationId: string): void {
-    if (element.dataset.dvDraggable === 'true') return;
-    element.dataset.dvDraggable = 'true';
-
-    const titleEl = element.querySelector('[class*="content"]') || element.querySelector('div');
-    const title = titleEl?.textContent?.trim() || '对话';
-
-    setupDraggable(element, conversationId, title);
-  }
-
-  private setupFolderDropZones(): void {
-    const folderContents = document.querySelectorAll('.dbx-folder-contents');
-    folderContents.forEach((el) => {
-      const element = el as HTMLElement;
-      if (element.dataset.dvDropZone === 'true') return;
-      element.dataset.dvDropZone = 'true';
-
-      const folderId = element.dataset.folderId;
-      if (!folderId) return;
-
-      setupDropZone(element, {
-        onDrop: (targetFolderId) => this.handleDrop(targetFolderId),
-        onDragOver: () => this.expandFolderOnDrag(folderId),
-      });
-    });
-  }
-
-  private setupDropZoneForFolderRow(folderEl: HTMLElement, folderId: string): void {
-    if (folderEl.dataset.dvDropZoneRow === 'true') return;
-    folderEl.dataset.dvDropZoneRow = 'true';
-
-    const row = folderEl.querySelector('.dbx-folder-row') as HTMLElement;
-    if (!row) return;
-
-    setupDropZone(row, {
-      onDrop: (targetFolderId) => this.handleDrop(targetFolderId),
-      onDragOver: () => {
-        folderEl.classList.add('dbx-drop-target');
-        this.expandFolderOnDrag(folderId);
-      },
-      onDragLeave: () => {
-        folderEl.classList.remove('dbx-drop-target');
-      },
-    });
-  }
-
-  private expandFolderOnDrag(folderId: string): void {
-    const folder = this.data.folders.find(f => f.id === folderId);
-    if (folder && !folder.isExpanded) {
-      folder.isExpanded = true;
-      this.render();
-    }
-  }
-
-  private findConversationFolders(conversationId: string): string[] {
-    const folders: string[] = [];
-    for (const [folderId, contents] of Object.entries(this.data.folderContents)) {
-      if (contents.some(c => c.conversationId === conversationId)) {
-        folders.push(folderId);
+      const core = dot.querySelector<HTMLElement>('.dbx-chat-dot-core');
+      if (primaryFolder && core) {
+        dot.classList.add('is-assigned');
+        core.style.backgroundColor = color;
+        core.style.boxShadow = `0 0 0 3px ${color}29`;
+        dot.title = `分类：${primaryFolder.name}（点击切换或移出）`;
+      } else if (core) {
+        dot.classList.remove('is-assigned');
+        core.style.backgroundColor = '';
+        core.style.boxShadow = '';
+        dot.title = '未分类（点击设置颜色分类 / 加入文件夹）';
       }
     }
-    return folders;
   }
 
-  render(): void {
-    if (!this.containerElement) return;
-    const listEl = this.containerElement.querySelector('.dbx-folder-list');
-    if (!listEl) return;
+  private openChatCategoryPopover(
+    conversationId: string,
+    title: string,
+    url: string,
+    anchor: HTMLElement
+  ): void {
+    this.closePopover();
+
+    const pop = document.createElement('div');
+    pop.id = 'dbx-chat-folder-popover';
+    pop.className = 'dbx-chat-folder-popover';
+
+    const head = document.createElement('div');
+    head.className = 'dbx-cfp-head';
+    head.textContent = '设置会话分类';
+    pop.appendChild(head);
+
+    const assignedIds = new Set(this.findFoldersForConversation(conversationId).map(f => f.id));
 
     if (this.data.folders.length === 0) {
-      listEl.innerHTML = createEmptyFolderHTML();
+      const hint = document.createElement('div');
+      hint.className = 'dbx-cfp-empty';
+      hint.textContent = '还没有分类文件夹，点击下方新建';
+      pop.appendChild(hint);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'dbx-cfp-list';
+      for (const folder of this.data.folders) {
+        const isIn = assignedIds.has(folder.id);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `dbx-cfp-item${isIn ? ' is-selected' : ''}`;
+        const dot = document.createElement('span');
+        dot.className = 'dbx-folder-color-dot';
+        dot.style.backgroundColor = getFolderColor(folder.color);
+        const label = document.createElement('span');
+        label.className = 'dbx-cfp-label';
+        label.textContent = folder.name;
+        const mark = document.createElement('span');
+        mark.className = 'dbx-cfp-check';
+        mark.textContent = isIn ? '✓' : '';
+        btn.append(dot, label, mark);
+        btn.addEventListener('click', () => void (async () => {
+          if (isIn) {
+            await this.removeFromFolder(folder.id, conversationId);
+          } else {
+            await this.assignToFolder(folder.id, {
+              conversationId,
+              title,
+              url,
+              addedAt: Date.now(),
+            });
+          }
+          this.closePopover();
+        })());
+        list.appendChild(btn);
+      }
+      pop.appendChild(list);
+    }
+
+    const footer = document.createElement('div');
+    footer.className = 'dbx-cfp-footer';
+    const createBtn = document.createElement('button');
+    createBtn.type = 'button';
+    createBtn.className = 'dbx-cfp-create';
+    createBtn.textContent = '+ 新建分类并加入';
+    createBtn.addEventListener('click', () => {
+      this.closePopover();
+      this.openFolderDialog(undefined, { conversationId, title, url, addedAt: Date.now() });
+    });
+    footer.appendChild(createBtn);
+    pop.appendChild(footer);
+
+    document.body.appendChild(pop);
+    this.activePopover = pop;
+    this.positionPopover(pop, anchor);
+  }
+
+  private refreshSidebarDecorations(): void {
+    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+    if (sidebar) this.decorateConversationList(sidebar);
+  }
+
+  private async refreshFoldersAndDecorations(): Promise<void> {
+    this.data = await storageService.getData();
+    this.renderFolders();
+    this.refreshSidebarDecorations();
+  }
+
+  private openFolderMenu(folder: Folder, anchor: HTMLElement): void {
+    this.closePopover();
+
+    const menu = document.createElement('div');
+    menu.className = 'dbx-chat-folder-popover dbx-folder-action-menu';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'dbx-cfp-item';
+    editBtn.textContent = '重命名与修改颜色';
+    editBtn.addEventListener('click', () => {
+      this.closePopover();
+      this.openFolderDialog(folder);
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'dbx-cfp-item is-danger';
+    delBtn.textContent = '删除文件夹';
+    delBtn.addEventListener('click', () => void (async () => {
+      this.closePopover();
+      const ok = await showConfirmDialog({
+        title: '删除分类文件夹',
+        message: `确定删除「${folder.name}」吗？其中的对话记录不会被删除，仅解除分类归属。`,
+        confirmText: '确认删除',
+        danger: true,
+      });
+      if (!ok) return;
+      await storageService.deleteFolder(folder.id);
+      await this.refreshFoldersAndDecorations();
+      showToast(`已删除分类「${folder.name}」`, 'info');
+    })());
+
+    menu.append(editBtn, delBtn);
+    document.body.appendChild(menu);
+    this.activePopover = menu;
+    this.positionPopover(menu, anchor);
+  }
+
+  private positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
+    const aRect = anchor.getBoundingClientRect();
+    const pRect = pop.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - pRect.width - 10, Math.max(10, aRect.right + 8));
+    const top = Math.min(window.innerHeight - pRect.height - 10, Math.max(10, aRect.top - 4));
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  }
+
+  private openFolderDialog(existing?: Folder, autoAssign?: ConversationReference): void {
+    this.closeDialog();
+
+    let selectedColor = existing?.color || 'blue';
+    const overlay = document.createElement('div');
+    overlay.className = 'dbx-popup';
+
+    const card = document.createElement('div');
+    card.className = 'dbx-popup-content';
+    card.innerHTML = `
+      <div class="dbx-popup-title">${existing ? '编辑分类文件夹' : '新建分类文件夹'}</div>
+      <input type="text" class="dbx-popup-input" placeholder="输入分类名称（如：工作、代码、资料）" maxlength="24" value="${escapeHTML(existing?.name || '')}" />
+      <div class="dbx-popup-color-label">选择颜色标识</div>
+      <div class="dbx-popup-colors"></div>
+      <div class="dbx-popup-actions">
+        <button type="button" class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
+        <button type="button" class="dbx-popup-btn dbx-popup-btn-confirm">${existing ? '保存' : '创建'}</button>
+      </div>
+    `;
+
+    const input = card.querySelector<HTMLInputElement>('.dbx-popup-input')!;
+    const colorsEl = card.querySelector<HTMLElement>('.dbx-popup-colors')!;
+
+    for (const c of FOLDER_COLORS) {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = `dbx-color-option${selectedColor === c.id || selectedColor === c.value ? ' selected' : ''}`;
+      swatch.style.backgroundColor = c.value;
+      swatch.title = c.name;
+      swatch.addEventListener('click', () => {
+        selectedColor = c.id;
+        colorsEl.querySelectorAll('.dbx-color-option').forEach(el => el.classList.remove('selected'));
+        swatch.classList.add('selected');
+      });
+      colorsEl.appendChild(swatch);
+    }
+
+    const submit = async () => {
+      const name = input.value.trim();
+      if (!name) {
+        showToast('请输入分类名称', 'warning');
+        input.focus();
+        return;
+      }
+      if (existing) {
+        await storageService.updateFolder(existing.id, { name, color: selectedColor });
+        showToast(`已更新分类「${name}」`, 'success');
+      } else {
+        const now = Date.now();
+        const folder: Folder = {
+          id: `folder_${now}_${Math.random().toString(36).slice(2, 7)}`,
+          name,
+          parentId: null,
+          isExpanded: true,
+          color: selectedColor,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await storageService.addFolder(folder);
+        if (autoAssign) {
+          await storageService.addConversationToFolder(folder.id, autoAssign);
+        }
+        this.sectionCollapsed = false;
+        storageService.setSectionCollapsed(false);
+        showToast(autoAssign ? `已创建「${name}」并归类当前对话` : `已创建分类「${name}」`, 'success');
+      }
+
+      this.closeDialog();
+      await this.refreshFoldersAndDecorations();
+    };
+
+    card.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.closeDialog());
+    card.querySelector('.dbx-popup-btn-confirm')?.addEventListener('click', () => void submit());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') void submit();
+      if (e.key === 'Escape') this.closeDialog();
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.closeDialog();
+    });
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    this.activeDialog = overlay;
+    input.focus();
+    input.select();
+  }
+
+  private async assignToFolder(folderId: string, conv: ConversationReference): Promise<void> {
+    await storageService.addConversationToFolder(folderId, conv);
+    await this.refreshFoldersAndDecorations();
+  }
+
+  private async removeFromFolder(folderId: string, conversationId: string): Promise<void> {
+    await storageService.removeConversationFromFolder(folderId, conversationId);
+    await this.refreshFoldersAndDecorations();
+  }
+
+  private async handleDropIntoFolder(targetFolderId: string, e: DragEvent): Promise<void> {
+    let payload = this.dragData;
+    if (!payload) {
+      const raw = e.dataTransfer?.getData('application/x-dbx-chat');
+      if (raw) {
+        try { payload = JSON.parse(raw) as DragPayload; } catch { payload = null; }
+      }
+    }
+    if (!payload?.conversationId) return;
+
+    const conv: ConversationReference = {
+      conversationId: payload.conversationId,
+      title: payload.title,
+      url: payload.url || `/chat/${payload.conversationId}`,
+      addedAt: Date.now(),
+    };
+
+    if (payload.sourceFolderId && payload.sourceFolderId !== targetFolderId) {
+      await storageService.moveConversationBetweenFolders(payload.sourceFolderId, targetFolderId, conv);
+    } else {
+      await storageService.addConversationToFolder(targetFolderId, conv);
+    }
+
+    this.data = await storageService.getData();
+    const folder = this.data.folders.find(f => f.id === targetFolderId);
+    if (folder) {
+      folder.isExpanded = true;
+      await storageService.updateFolder(folder.id, { isExpanded: true });
+    }
+    this.renderFolders();
+    this.refreshSidebarDecorations();
+    showToast(`已归类到「${folder?.name || '文件夹'}」`, 'success');
+  }
+
+  private openConversation(conversationId: string, url?: string): void {
+    const existingLink = document.querySelector<HTMLElement>(
+      `#flow_chat_sidebar a[id="conversation_${conversationId}"], #flow_chat_sidebar a[href="/chat/${conversationId}"]`
+    );
+    if (existingLink) {
+      existingLink.click();
       return;
     }
-
-    listEl.innerHTML = this.data.folders
-      .map(folder => {
-        const contents = this.data.folderContents[folder.id] || [];
-        return createFolderItemHTML(folder, contents);
-      })
-      .join('');
-
-    this.setupFolderElementEvents();
-    this.setupFolderDropZones();
-    this.updateSectionCollapseUI();
-  }
-
-  private setupFolderElementEvents(): void {
-    const folderItems = this.containerElement?.querySelectorAll('.dbx-folder-item');
-    folderItems?.forEach((item) => {
-      const folderEl = item as HTMLElement;
-      const folderId = folderEl.dataset.folderId;
-      if (!folderId) return;
-
-      const row = folderEl.querySelector('.dbx-folder-row') as HTMLElement;
-      if (row) {
-        row.addEventListener('click', (e) => {
-          const target = e.target as HTMLElement;
-          if (target.closest('.dbx-folder-menu-btn')) return;
-          this.toggleFolder(folderId);
-        });
-      }
-
-      const menuBtn = folderEl.querySelector('.dbx-folder-menu-btn');
-      menuBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.showFolderMenu(folderId, menuBtn as HTMLElement);
-      });
-
-      this.setupDropZoneForFolderRow(folderEl, folderId);
-
-      folderEl.querySelectorAll('.dbx-folder-conversation').forEach((conv) => {
-        const convEl = conv as HTMLElement;
-        
-        convEl.addEventListener('click', (e) => {
-          const target = e.target as HTMLElement;
-          if (target.closest('.dbx-folder-conversation-remove')) return;
-          e.stopPropagation();
-          const convId = convEl.dataset.conversationId;
-          if (convId) {
-            window.location.href = `/chat/${convId}`;
-          }
-        });
-
-        const removeBtn = convEl.querySelector('.dbx-folder-conversation-remove');
-        removeBtn?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const convId = convEl.dataset.conversationId;
-          const convTitle = convEl.querySelector('.dbx-conversation-title')?.textContent || '对话';
-          if (convId) {
-            this.showRemoveConfirm(folderId, convId, convTitle, removeBtn as HTMLElement);
-          }
-        });
-
-        this.setupFolderContentDrag(convEl, folderId);
-      });
-    });
-  }
-
-  private setupFolderContentDrag(convEl: HTMLElement, sourceFolderId: string): void {
-    if (convEl.dataset.dvContentDragBound === 'true') return;
-    convEl.dataset.dvContentDragBound = 'true';
-
-    convEl.addEventListener('dragstart', (e) => {
-      convEl.classList.add('dbx-dragging');
-      const convId = convEl.dataset.conversationId;
-      const convTitle = convEl.querySelector('.dbx-conversation-title')?.textContent?.trim() || '对话';
-
-      if (e.dataTransfer && convId) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('application/json', JSON.stringify({
-          type: 'conversation',
-          conversationId: convId,
-          title: convTitle,
-          sourceFolderId,
-        }));
-      }
-
-      this.dragData = {
-        type: 'conversation',
-        conversationId: convId,
-        title: convTitle,
-        sourceFolderId,
-      };
-    });
-
-    convEl.addEventListener('dragend', () => {
-      convEl.classList.remove('dbx-dragging');
-      this.dragData = null;
-    });
-  }
-
-  private showRemoveConfirm(folderId: string, conversationId: string, conversationTitle: string, button: HTMLElement): void {
-    this.hidePopup();
-    
-    const rect = button.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.className = 'dbx-popup';
-    popup.innerHTML = `
-      <div class="dbx-popup-content">
-        <div class="dbx-popup-title">从文件夹移除</div>
-        <div class="dbx-popup-message">确定要将"${escapeHTML(conversationTitle)}"从文件夹中移除吗？<br>对话不会被删除，仍在历史记录中。</div>
-        <div class="dbx-popup-actions">
-          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
-          <button class="dbx-popup-btn dbx-popup-btn-danger">移除</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    if (button) {
-      popup.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
-        background: transparent;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-start;
-      `;
-    }
-
-    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
-    popup.querySelector('.dbx-popup-btn-danger')?.addEventListener('click', async () => {
-      await storageService.removeConversationFromFolder(folderId, conversationId);
-      this.data = await storageService.getData();
-      this.render();
-      this.refreshAllIndicators();
-      this.hidePopup();
-    });
-
-    popup.addEventListener('click', (e) => {
-      if (e.target === popup) this.hidePopup();
-    });
-  }
-
-  private handleDrop(folderId: string): void {
-    let conversationId = '';
-    let title = '对话';
-    let sourceFolderId: string | undefined;
-
-    const droppedEl = document.querySelector('.dbx-dragging') as HTMLElement;
-    if (droppedEl) {
-      conversationId = this.getConversationIdFromElement(droppedEl) || '';
-      const titleEl = droppedEl.querySelector('[class*="content"]') || droppedEl.querySelector('div');
-      title = titleEl?.textContent?.trim() || '对话';
-      sourceFolderId = droppedEl.dataset.sourceFolderId || undefined;
-    }
-
-    if (this.dragData?.conversationId) {
-      conversationId = this.dragData.conversationId;
-      title = this.dragData.title;
-      sourceFolderId = this.dragData.sourceFolderId;
-    }
-
-    if (!conversationId) return;
-    if (sourceFolderId === folderId) return;
-
-    if (sourceFolderId) {
-      this.moveConversationBetweenFolders(sourceFolderId, folderId, conversationId, title);
-    } else {
-      this.addConversationToFolder(folderId, conversationId, title);
-    }
-  }
-
-  private async addConversationToFolder(folderId: string, conversationId: string, title: string): Promise<void> {
-    const conversation: ConversationReference = {
-      conversationId,
-      title,
-      url: `/chat/${conversationId}`,
-      addedAt: Date.now(),
-    };
-
-    await storageService.addConversationToFolder(folderId, conversation);
-    this.data = await storageService.getData();
-    this.render();
-    this.refreshAllIndicators();
-  }
-
-  private async moveConversationBetweenFolders(
-    sourceFolderId: string,
-    targetFolderId: string,
-    conversationId: string,
-    title: string
-  ): Promise<void> {
-    const conversation: ConversationReference = {
-      conversationId,
-      title,
-      url: `/chat/${conversationId}`,
-      addedAt: Date.now(),
-    };
-
-    await storageService.moveConversationBetweenFolders(sourceFolderId, targetFolderId, conversation);
-    this.data = await storageService.getData();
-    this.render();
-    this.refreshAllIndicators();
-  }
-
-  private toggleFolder(folderId: string): void {
-    const folder = this.data.folders.find(f => f.id === folderId);
-    if (folder) {
-      folder.isExpanded = !folder.isExpanded;
-      this.render();
-    }
-  }
-
-  private toggleSectionCollapsed(): void {
-    this.sectionCollapsed = !this.sectionCollapsed;
-    localStorage.setItem('dbx_legacy_folder_expanded', String(!this.sectionCollapsed));
-    this.updateSectionCollapseUI();
-    storageService.setSectionCollapsed(this.sectionCollapsed);
-  }
-
-  private updateSectionCollapseUI(): void {
-    if (!this.containerElement) return;
-    this.containerElement.classList.toggle('collapsed', this.sectionCollapsed);
-    const toggleBtn = this.containerElement.querySelector('.dbx-folder-toggle-btn');
-    toggleBtn?.classList.toggle('collapsed', this.sectionCollapsed);
-  }
-
-  private showCreateFolderDialog(button?: HTMLElement): void {
-    this.hidePopup();
-    
-    const popup = document.createElement('div');
-    popup.className = 'dbx-popup';
-    popup.innerHTML = `
-      <div class="dbx-popup-content">
-        <div class="dbx-popup-title">新建文件夹</div>
-        <input type="text" class="dbx-popup-input" placeholder="输入文件夹名称" maxlength="20">
-        <div class="dbx-popup-color-label">选择颜色</div>
-        <div class="dbx-popup-colors">
-          ${this.getColorOptionsHTML('blue')}
-        </div>
-        <div class="dbx-popup-actions">
-          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
-          <button class="dbx-popup-btn dbx-popup-btn-confirm">创建</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    if (button) {
-      const rect = button.getBoundingClientRect();
-      const popupHeight = 280;
-      const viewportHeight = window.innerHeight;
-      const spaceBelow = viewportHeight - rect.bottom;
-      
-      let top: number;
-      if (spaceBelow >= popupHeight + 8) {
-        top = rect.bottom + 8;
-      } else {
-        top = rect.top - popupHeight - 8;
-      }
-      
-      popup.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${top}px;
-        background: transparent;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-start;
-      `;
-    }
-
-    const input = popup.querySelector('.dbx-popup-input') as HTMLInputElement;
-    input?.focus();
-
-    let selectedColor = 'blue';
-    const colorOptions = popup.querySelectorAll('.dbx-color-option');
-    colorOptions.forEach(opt => {
-      opt.addEventListener('click', () => {
-        colorOptions.forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-        selectedColor = (opt as HTMLElement).dataset.color || 'blue';
-      });
-    });
-    colorOptions[0]?.classList.add('selected');
-    selectedColor = (colorOptions[0] as HTMLElement)?.dataset.color || 'blue';
-
-    const colorPicker = popup.querySelector('.dbx-color-picker') as HTMLInputElement;
-    const customColorOption = popup.querySelector('.dbx-color-custom');
-    
-    customColorOption?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      colorPicker?.click();
-    });
-    
-    colorPicker?.addEventListener('input', () => {
-      colorOptions.forEach(o => o.classList.remove('selected'));
-      customColorOption?.classList.add('selected');
-      customColorOption?.classList.add('has-custom-color');
-      (customColorOption as HTMLElement).style.setProperty('--custom-color', colorPicker.value);
-      (customColorOption as HTMLElement).setAttribute('data-color', colorPicker.value);
-      selectedColor = colorPicker.value;
-    });
-    
-    colorPicker?.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-
-    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
-    popup.querySelector('.dbx-popup-btn-confirm')?.addEventListener('click', async () => {
-      const name = input.value.trim();
-      if (!name) return;
-
-      const folder: Folder = {
-        id: `folder_${Date.now()}`,
-        name,
-        parentId: null,
-        color: selectedColor,
-        isExpanded: false,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      await storageService.addFolder(folder);
-      this.data = await storageService.getData();
-      this.render();
-      this.hidePopup();
-    });
-
-    popup.addEventListener('click', (e) => {
-      if (e.target === popup) this.hidePopup();
-    });
-  }
-
-  private getColorOptionsHTML(selected?: string): string {
-    const colors = [
-      { id: 'blue', value: '#3b82f6' },
-      { id: 'green', value: '#22c55e' },
-      { id: 'yellow', value: '#eab308' },
-      { id: 'orange', value: '#f97316' },
-      { id: 'red', value: '#ef4444' },
-      { id: 'purple', value: '#a855f7' },
-      { id: 'pink', value: '#ec4899' },
-      { id: 'gray', value: '#6b7280' },
-    ];
-    
-    const isCustom = selected && !colors.find(c => c.id === selected);
-    const customValue = isCustom ? selected : '#3b82f6';
-    const customColorHtml = `
-      <div class="dbx-color-option dbx-color-custom ${isCustom ? 'selected has-custom-color' : ''}" data-color="${escapeHTML(customValue)}" style="${isCustom ? `--custom-color: ${escapeHTML(selected)}; background-color: ${escapeHTML(selected)}` : ''}">
-        <input type="color" class="dbx-color-picker" value="${escapeHTML(customValue)}">
-      </div>
-    `;
-    
-    return colors.map(c => 
-      `<div class="dbx-color-option ${selected === c.id ? 'selected' : ''}" data-color="${c.id}" style="background-color: ${c.value}"></div>`
-    ).join('') + customColorHtml;
-  }
-
-  private showFolderMenu(folderId: string, button: HTMLElement): void {
-    this.hidePopup();
-    
-    const folder = this.data.folders.find(f => f.id === folderId);
-    if (!folder) return;
-    
-    const rect = button.getBoundingClientRect();
-    const popup = document.createElement('div');
-    popup.className = 'dbx-folder-context-menu';
-    popup.style.cssText = `
-      position: fixed;
-      top: ${rect.bottom + 4}px;
-      left: ${rect.left - 60}px;
-      z-index: 10000;
-    `;
-    popup.innerHTML = `
-      <div class="dbx-folder-menu-item" data-action="rename">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>
-        <span>重命名</span>
-      </div>
-      <div class="dbx-folder-menu-item" data-action="color">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="13.5" cy="6.5" r="2.5"></circle>
-          <circle cx="17.5" cy="10.5" r="2.5"></circle>
-          <circle cx="8.5" cy="7.5" r="2.5"></circle>
-          <circle cx="6.5" cy="12.5" r="2.5"></circle>
-        </svg>
-        <span>更换颜色</span>
-      </div>
-      <div class="dbx-folder-menu-item danger" data-action="delete">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        </svg>
-        <span>删除</span>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    popup.querySelectorAll('.dbx-folder-menu-item').forEach(item => {
-      item.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const action = (item as HTMLElement).dataset.action;
-        
-        this.hidePopup();
-        
-        setTimeout(() => {
-          if (action === 'rename') {
-            this.showRenameDialog(folder, button);
-          } else if (action === 'color') {
-            this.showColorPicker(folder, button);
-          } else if (action === 'delete') {
-            this.showDeleteConfirm(folder, folderId, button);
-          }
-        }, 50);
-      });
-    });
-
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (this.popupElement && !this.popupElement.contains(e.target as Node)) {
-        this.hidePopup();
-      }
-    };
-    
-    setTimeout(() => {
-      document.addEventListener('click', handleOutsideClick, { once: true });
-    }, 0);
-  }
-
-  private showRenameDialog(folder: Folder, button?: HTMLElement): void {
-    this.hidePopup();
-    
-    const popup = document.createElement('div');
-    popup.className = 'dbx-popup';
-    popup.innerHTML = `
-      <div class="dbx-popup-content">
-        <div class="dbx-popup-title">重命名文件夹</div>
-        <input type="text" class="dbx-popup-input" placeholder="输入新名称" maxlength="20">
-        <div class="dbx-popup-actions">
-          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
-          <button class="dbx-popup-btn dbx-popup-btn-confirm">确定</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    if (button) {
-      const rect = button.getBoundingClientRect();
-      popup.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
-        background: transparent;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-start;
-      `;
-    }
-
-    const input = popup.querySelector('.dbx-popup-input') as HTMLInputElement;
-    input.value = folder.name;
-    input?.focus();
-    input?.select();
-
-    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
-    popup.querySelector('.dbx-popup-btn-confirm')?.addEventListener('click', async () => {
-      const name = input.value.trim();
-      if (!name) return;
-
-      await storageService.updateFolder(folder.id, { name });
-      this.data = await storageService.getData();
-      this.render();
-      this.hidePopup();
-    });
-
-    popup.addEventListener('click', (e) => {
-      if (e.target === popup) this.hidePopup();
-    });
-  }
-
-  private showColorPicker(folder: Folder, button?: HTMLElement): void {
-    this.hidePopup();
-    
-    const popup = document.createElement('div');
-    popup.className = 'dbx-popup';
-    popup.innerHTML = `
-      <div class="dbx-popup-content">
-        <div class="dbx-popup-title">选择颜色</div>
-        <div class="dbx-popup-colors dbx-popup-colors-lg">
-          ${this.getColorOptionsHTML(folder.color)}
-        </div>
-        <div class="dbx-popup-actions">
-          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
-          <button class="dbx-popup-btn dbx-popup-btn-confirm">确定</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    this.popupElement = popup;
-
-    if (button) {
-      const rect = button.getBoundingClientRect();
-      popup.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
-        background: transparent;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-start;
-      `;
-    }
-
-    let selectedColor = folder.color;
-    const colorOptions = popup.querySelectorAll('.dbx-color-option');
-    const colorPicker = popup.querySelector('.dbx-color-picker') as HTMLInputElement;
-    const customColorOption = popup.querySelector('.dbx-color-custom');
-    
-    colorOptions.forEach(opt => {
-      opt.addEventListener('click', async () => {
-        if ((opt as HTMLElement).classList.contains('dbx-color-custom')) {
-          return;
-        }
-        colorOptions.forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-        selectedColor = (opt as HTMLElement).dataset.color || folder.color;
-        
-        await storageService.updateFolder(folder.id, { color: selectedColor });
-        this.data = await storageService.getData();
-        this.render();
-        this.refreshAllIndicators();
-        this.hidePopup();
-      });
-    });
-    
-    customColorOption?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      colorPicker?.click();
-    });
-    
-    colorPicker?.addEventListener('input', () => {
-      colorOptions.forEach(o => o.classList.remove('selected'));
-      customColorOption?.classList.add('selected');
-      customColorOption?.classList.add('has-custom-color');
-      (customColorOption as HTMLElement).style.setProperty('--custom-color', colorPicker.value);
-      (customColorOption as HTMLElement).setAttribute('data-color', colorPicker.value);
-      selectedColor = colorPicker.value;
-    });
-    
-    colorPicker?.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-    
-    let confirmBtn = popup.querySelector('.dbx-popup-btn-confirm') as HTMLButtonElement;
-    confirmBtn?.addEventListener('click', async () => {
-      await storageService.updateFolder(folder.id, { color: selectedColor });
-      this.data = await storageService.getData();
-      this.render();
-      this.refreshAllIndicators();
-      this.hidePopup();
-    });
-    
-    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
-
-    popup.addEventListener('click', (e) => {
-      if (e.target === popup) this.hidePopup();
-    });
-  }
-
-  private showDeleteConfirm(folder: Folder, folderId: string, _button?: HTMLElement): void {
-    this.hidePopup();
-    
-    const popup = document.createElement('div');
-    popup.className = 'dbx-popup';
-    popup.innerHTML = `
-      <div class="dbx-popup-content">
-        <div class="dbx-popup-title">删除文件夹</div>
-        <div class="dbx-popup-message">确定要删除"${escapeHTML(folder.name)}"吗？</div>
-        <div class="dbx-popup-actions">
-          <button class="dbx-popup-btn dbx-popup-btn-cancel">取消</button>
-          <button class="dbx-popup-btn dbx-popup-btn-danger">删除</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(popup);
-    // Center the modal in the viewport rather than below an off-screen row.
-    this.popupElement = popup;
-    popup.style.zIndex = '10002';
-    popup.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.hidePopup());
-    popup.querySelector('.dbx-popup-btn-danger')?.addEventListener('click', async () => {
-      await storageService.deleteFolder(folderId);
-      this.data = await storageService.getData();
-      this.render();
-      this.refreshAllIndicators();
-      this.hidePopup();
-    });
-
-    popup.addEventListener('click', (e) => {
-      if (e.target === popup) this.hidePopup();
-    });
-  }
-
-  private hidePopup(): void {
-    if (this.popupElement) {
-      this.popupElement.remove();
-      this.popupElement = null;
-    }
-  }
-
-  destroy(): void {
-    this.sidebarObserver?.disconnect();
-    this.sidebarObserver = null;
-    this.rootObserver?.disconnect();
-    this.rootObserver = null;
-    this.containerElement = null;
-    this.sidebarContainer = null;
-    this.hidePopup();
-    this.initialized = false;
+    const targetUrl = url && url.startsWith('/') ? url : `/chat/${conversationId}`;
+    window.location.href = targetUrl;
   }
 }
 
