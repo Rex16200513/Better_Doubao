@@ -12,9 +12,26 @@ export interface MessageMarker {
   starred: boolean;
 }
 
+const STAR_SVG = (filled: boolean) => `
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+  </svg>
+`;
+
+const REFRESH_SVG = `
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+    <polyline points="21 3 21 9 15 9"/>
+  </svg>
+`;
+
 export class QuickLocator {
   private markers: MessageMarker[] = [];
   private locatorBar: HTMLElement | null = null;
+  private popoverEl: HTMLElement | null = null;
+  private hidePopoverTimer: number | null = null;
+  private filterStarredOnly = false;
+  private hoveredIndex = -1;
   private initialized = false;
   private observer: MutationObserver | null = null;
   private unsubscribeUrl: (() => void) | null = null;
@@ -39,7 +56,8 @@ export class QuickLocator {
       '[class*="page-main"]',
     ];
     for (const selector of selectors) {
-      const element = document.querySelector<HTMLElement>(selector);
+      const element = Array.from(document.querySelectorAll<HTMLElement>(selector))
+        .find((el) => !el.dataset.dbxFreezeSnapshot);
       if (element) return element;
     }
     return null;
@@ -47,10 +65,10 @@ export class QuickLocator {
 
   init(): void {
     if (this.initialized) return;
-    
+
     this.conversationId = this.getConversationId();
-    this.loadStarredMessages();
-    this.waitForChatContainer();
+    void this.loadStarredMessages();
+    void this.waitForChatContainer();
     this.setupUrlChangeListener();
     this.initialized = true;
   }
@@ -66,20 +84,23 @@ export class QuickLocator {
     const newConversationId = this.getConversationId();
     if (newConversationId !== this.conversationId) {
       this.conversationId = newConversationId;
-      
+
       this.markers = [];
       this.messageCache.clear();
       this.activeMarkerIndex = -1;
+      this.hoveredIndex = -1;
+      this.filterStarredOnly = false;
       this.hasCompletedFullIndex = false;
       this.cancelScrollAnimation();
       this.detachScrollSync();
       this.observer?.disconnect();
       this.observer = null;
+      this.hidePopoverImmediate();
       if (this.locatorBar) {
         this.locatorBar.remove();
         this.locatorBar = null;
       }
-      
+
       await this.loadStarredMessages();
       await this.waitForChatContainer();
     }
@@ -96,7 +117,7 @@ export class QuickLocator {
   private async waitForChatContainer(): Promise<void> {
     let retries = 0;
     const maxRetries = 30;
-    
+
     const checkContainer = async () => {
       const container = this.scrollContainer;
       const hasMessages = !!container?.querySelector('[data-message-id]');
@@ -111,22 +132,23 @@ export class QuickLocator {
         return;
       }
       retries++;
-      setTimeout(checkContainer, 400);
+      window.setTimeout(checkContainer, 350);
     };
-    
-    checkContainer();
+
+    void checkContainer();
   }
 
   private async loadStarredMessages(): Promise<void> {
     if (!this.conversationId || this.conversationId === 'unknown') {
       return;
     }
-    
+
     try {
       this.starredMarkers = new Set();
       const starred = await storageService.getStarredMessages(this.conversationId);
       this.starredMarkers = new Set(starred);
-    } catch (error) {
+    } catch {
+      // Ignore storage read failure
     }
   }
 
@@ -158,7 +180,6 @@ export class QuickLocator {
     let prevWasUser = false;
 
     messageElements.forEach((el) => {
-      // 新前端 data-message-id 元素本身即消息根；旧前端需向上找到 inner-item 容器
       const root = el.closest<HTMLElement>('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') || el;
 
       const html = root.innerHTML?.toLowerCase() || '';
@@ -168,7 +189,6 @@ export class QuickLocator {
         html.includes('bubble-bg');
 
       const hasBubble = root.querySelector('.bg-g-send-msg-bubble-bg, [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"], .content-KTJ1Rj, [class*="text-g-send-msg-bubble-text"]');
-
       const hasUserImageBlock = root.querySelector('[data-plugin-identifier*="block_type:10052"]');
       const hasJustifyEnd = root.querySelector('[class*="justify-end"]');
 
@@ -205,36 +225,85 @@ export class QuickLocator {
 
   private rebuildMarkers(): void {
     const cached = Array.from(this.messageCache.values()).sort((a, b) => a.scrollTop - b.scrollTop);
-    this.markers = cached.map((entry, index) => {
-      return {
-        id: `marker_${index}`,
-        ...entry,
-        index,
-        starred: this.starredMarkers.has(index),
-      };
-    });
+    this.markers = cached.map((entry, index) => ({
+      id: `marker_${index}`,
+      ...entry,
+      index,
+      starred: this.starredMarkers.has(index),
+    }));
+  }
+
+  private resolveOpaqueBackground(el: HTMLElement): string {
+    let cur: HTMLElement | null = el;
+    while (cur) {
+      const bg = getComputedStyle(cur).backgroundColor;
+      if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+        return bg;
+      }
+      cur = cur.parentElement;
+    }
+    return 'var(--dbx-surface, #ffffff)';
+  }
+
+  /**
+   * Place a pixel-aligned static clone over the scroll viewport so the user sees a completely
+   * steady page while the underlying container rapidly loads and indexes virtualized history.
+   */
+  private mountFreezeSnapshot(container: HTMLElement, scrollTop: number): HTMLElement | null {
+    const parent = container.parentElement;
+    if (!parent) return null;
+    const rect = container.getBoundingClientRect();
+    if (rect.width < 100 || rect.height < 100) return null;
+
+    const snapshot = container.cloneNode(true) as HTMLElement;
+    snapshot.dataset.dbxFreezeSnapshot = 'true';
+    snapshot.setAttribute('aria-hidden', 'true');
+    snapshot.removeAttribute('id');
+    snapshot.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+    snapshot.querySelectorAll('[data-message-id]').forEach((node) => node.removeAttribute('data-message-id'));
+
+    snapshot.style.position = 'fixed';
+    snapshot.style.left = `${rect.left}px`;
+    snapshot.style.top = `${rect.top}px`;
+    snapshot.style.width = `${rect.width}px`;
+    snapshot.style.height = `${rect.height}px`;
+    snapshot.style.margin = '0';
+    snapshot.style.zIndex = '9990';
+    snapshot.style.pointerEvents = 'none';
+    snapshot.style.overflow = 'hidden';
+    snapshot.style.background = this.resolveOpaqueBackground(container);
+
+    parent.appendChild(snapshot);
+    snapshot.scrollTop = scrollTop;
+    return snapshot;
   }
 
   private getTopMessageId(container: HTMLElement): string | null {
     return container.querySelector<HTMLElement>('[data-message-id]')?.dataset.messageId ?? null;
   }
 
-  private waitForHistoryLoad(container: HTMLElement, prevHeight: number, prevTopId: string | null, timeoutMs = 420): Promise<boolean> {
+  private waitForHistoryLoad(container: HTMLElement, prevHeight: number, prevTopId: string | null, timeoutMs = 260): Promise<boolean> {
     return new Promise((resolve) => {
       const start = performance.now();
       const poll = () => {
         const changed = container.scrollHeight > prevHeight + 8 || this.getTopMessageId(container) !== prevTopId;
         if (changed) {
-          window.setTimeout(() => resolve(true), 60);
+          window.setTimeout(() => resolve(true), 30);
           return;
         }
         if (performance.now() - start >= timeoutMs) {
           resolve(false);
           return;
         }
-        window.setTimeout(poll, 70);
+        window.setTimeout(poll, 45);
       };
       requestAnimationFrame(poll);
+    });
+  }
+
+  private waitForVirtualTick(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => window.setTimeout(resolve, 16));
     });
   }
 
@@ -244,25 +313,35 @@ export class QuickLocator {
     const originalScrollTop = container.scrollTop;
     const initialScrollHeight = container.scrollHeight;
     const startConversationId = this.conversationId;
+    const deadline = performance.now() + 2600;
     let cancelled = false;
-    const cancel = () => { cancelled = true; };
+
+    const snapshot = this.mountFreezeSnapshot(container, originalScrollTop);
+    const removeSnapshot = () => { snapshot?.remove(); };
+    const cancel = () => {
+      cancelled = true;
+      removeSnapshot();
+    };
     window.addEventListener('wheel', cancel, { passive: true, once: true });
     window.addEventListener('pointerdown', cancel, { passive: true, once: true });
     window.addEventListener('touchstart', cancel, { passive: true, once: true });
 
-    const refreshBtn = this.locatorBar?.querySelector<HTMLElement>('.dbx-locator-refresh');
-    refreshBtn?.classList.add('is-spinning');
+    const setSpinning = (spinning: boolean) => {
+      this.locatorBar?.querySelector<HTMLElement>('.dbx-locator-refresh')?.classList.toggle('is-spinning', spinning);
+      this.popoverEl?.querySelector<HTMLElement>('.dbx-locator-refresh')?.classList.toggle('is-spinning', spinning);
+    };
+    setSpinning(true);
 
     try {
       this.messageCache.clear();
 
-      // Phase 1: Pull earlier paginated history by reaching the top until no more history loads.
+      // Phase 1: Pull earlier paginated history quietly behind the freeze snapshot.
       let stableTopRounds = 0;
-      for (let round = 0; round < 25 && !cancelled && this.conversationId === startConversationId; round++) {
+      for (let round = 0; round < 15 && !cancelled && performance.now() < deadline && this.conversationId === startConversationId; round++) {
         const prevHeight = container.scrollHeight;
         const prevTopId = this.getTopMessageId(container);
         container.scrollTo({ top: 0, behavior: 'auto' });
-        const loadedMore = await this.waitForHistoryLoad(container, prevHeight, prevTopId, 420);
+        const loadedMore = await this.waitForHistoryLoad(container, prevHeight, prevTopId, 240);
         if (cancelled || this.conversationId !== startConversationId) break;
         this.collectVisibleMessages(container);
         if (loadedMore) {
@@ -273,21 +352,21 @@ export class QuickLocator {
         }
       }
 
-      // Phase 2: Sweep from top to bottom so virtualized rows in the middle are all indexed.
+      // Phase 2: Fast top-to-bottom sweep with large steps (~16ms/step) behind the freeze snapshot.
       let target = 0;
       let iterations = 0;
       let lastMax = -1;
 
-      while (iterations < 250 && !cancelled && this.conversationId === startConversationId) {
+      while (iterations < 160 && !cancelled && performance.now() < deadline && this.conversationId === startConversationId) {
         container.scrollTo({ top: target, behavior: 'auto' });
-        await this.waitForVirtualList();
+        await this.waitForVirtualTick();
         if (cancelled || this.conversationId !== startConversationId) break;
         this.collectVisibleMessages(container);
 
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
         if (target >= maxScroll && maxScroll === lastMax) break;
         lastMax = maxScroll;
-        const step = Math.max(360, container.clientHeight * 0.8);
+        const step = Math.max(480, container.clientHeight * 0.92);
         target = Math.min(maxScroll, target + step);
         iterations++;
       }
@@ -299,18 +378,21 @@ export class QuickLocator {
       window.removeEventListener('wheel', cancel);
       window.removeEventListener('pointerdown', cancel);
       window.removeEventListener('touchstart', cancel);
-      refreshBtn?.classList.remove('is-spinning');
+      setSpinning(false);
       if (!cancelled && this.conversationId === startConversationId) {
-        // Preserve the user's visual reading position even when earlier history prepended above.
         const heightDelta = Math.max(0, container.scrollHeight - initialScrollHeight);
         container.scrollTo({ top: originalScrollTop + heightDelta, behavior: 'auto' });
-        await this.waitForVirtualList();
+        await this.waitForVirtualTick();
       }
+      removeSnapshot();
       if (this.conversationId === startConversationId) {
         this.collectVisibleMessages(container);
         this.rebuildMarkers();
         this.updateLocatorDots();
         this.syncActiveMarkerFromScroll(container);
+        if (this.popoverEl?.classList.contains('is-open')) {
+          this.renderPopoverList();
+        }
       }
       this.isIndexing = false;
     }
@@ -318,15 +400,15 @@ export class QuickLocator {
 
   private waitForVirtualList(): Promise<void> {
     return new Promise((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 40)));
+      requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 35)));
     });
   }
 
   private extractMessageText(element: HTMLElement): string {
     const clone = element.cloneNode(true) as HTMLElement;
-    
+
     const removeSelectors = [
-      'svg', 'button', '[class*="avatar"]', '[class*="time"]', 
+      'svg', 'button', '[class*="avatar"]', '[class*="time"]',
       '[class*="timestamp"]', '[class*="meta"]', '[class*="action"]',
       '[class*="toolbar"]', '[data-testid*="action"]'
     ];
@@ -336,19 +418,19 @@ export class QuickLocator {
 
     let text = clone.textContent?.trim() || '';
     text = text.replace(/\s+/g, ' ').trim();
-    
+
     if (!text) {
-      const hasImage = clone.querySelector('img') || 
-                       clone.querySelector('[class*="image"]') ||
-                       clone.querySelector('[data-testid*="image"]') ||
-                       clone.innerHTML.includes('imagex-type');
+      const hasImage = clone.querySelector('img') ||
+        clone.querySelector('[class*="image"]') ||
+        clone.querySelector('[data-testid*="image"]') ||
+        clone.innerHTML.includes('imagex-type');
       if (hasImage) {
         return '[图片]';
       }
     }
-    
-    if (text.length > 40) {
-      return text.substring(0, 40) + '...';
+
+    if (text.length > 68) {
+      return text.substring(0, 68) + '…';
     }
     return text;
   }
@@ -358,24 +440,18 @@ export class QuickLocator {
 
     const bar = document.createElement('div');
     bar.id = 'dbx-quick-locator';
-    bar.innerHTML = `
-      <button type="button" class="dbx-locator-refresh" title="加载全部历史定位点" aria-label="加载全部历史定位点">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
-          <polyline points="21 3 21 9 15 9"/>
-        </svg>
-      </button>
-      <div class="dbx-locator-track"></div>
-    `;
+    bar.innerHTML = `<div class="dbx-locator-track"></div>`;
 
-    bar.querySelector('.dbx-locator-refresh')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const container = this.scrollContainer;
-      if (container) {
-        void this.indexEntireConversation(container);
+    bar.addEventListener('mouseenter', () => {
+      this.openPopover();
+    });
+    bar.addEventListener('mouseleave', (e) => {
+      const related = e.relatedTarget as Node | null;
+      if (!this.popoverEl || !related || !this.popoverEl.contains(related)) {
+        this.scheduleHidePopover();
       }
     });
-    
+
     document.body.appendChild(bar);
     this.locatorBar = bar;
     this.updateLocatorDots();
@@ -383,7 +459,7 @@ export class QuickLocator {
 
   private updateLocatorDots(): void {
     if (!this.locatorBar) return;
-    
+
     const track = this.locatorBar.querySelector('.dbx-locator-track');
     if (!track) return;
 
@@ -392,21 +468,19 @@ export class QuickLocator {
 
     this.markers.forEach((marker, index) => {
       const dot = document.createElement('button');
-      dot.className = 'dbx-locator-dot' + (marker.starred ? ' starred' : '');
+      dot.type = 'button';
+      dot.className = 'dbx-locator-dot' +
+        (marker.starred ? ' starred' : '') +
+        (index === this.activeMarkerIndex ? ' active' : '');
       dot.setAttribute('data-marker-index', String(index));
       dot.setAttribute('data-marker-text', marker.text);
-      
-      dot.addEventListener('mouseenter', (e) => {
-        this.showTooltip(e.target as HTMLElement, marker);
+      dot.setAttribute('aria-label', `跳转到第 ${index + 1} 条消息：${marker.text}`);
+
+      dot.addEventListener('mouseenter', () => {
+        this.hoveredIndex = index;
+        this.openPopover(index);
       });
-      
-      dot.addEventListener('mouseleave', (e) => {
-        const relatedTarget = e.relatedTarget as HTMLElement;
-        if (!this.tooltipEl || !this.tooltipEl.contains(relatedTarget)) {
-          this.hideTooltip();
-        }
-      });
-      
+
       dot.addEventListener('click', () => {
         void this.scrollToMessage(marker);
       });
@@ -414,112 +488,213 @@ export class QuickLocator {
       track.appendChild(dot);
     });
     track.scrollTop = previousScrollTop;
+
+    if (this.popoverEl?.classList.contains('is-open')) {
+      this.renderPopoverList();
+    }
   }
 
-  private tooltipEl: HTMLElement | null = null;
-  private hideTooltipTimeout: number | null = null;
+  private ensurePopover(): HTMLElement {
+    if (this.popoverEl) return this.popoverEl;
 
-  private showTooltip(dot: HTMLElement, marker: MessageMarker): void {
-    if (this.hideTooltipTimeout) {
-      clearTimeout(this.hideTooltipTimeout);
-      this.hideTooltipTimeout = null;
-    }
-    
-    if (!this.tooltipEl) {
-      this.tooltipEl = document.createElement('div');
-      this.tooltipEl.id = 'dbx-locator-tooltip-floating';
-      this.tooltipEl.style.cssText = 'position: fixed; z-index: 99999; background: var(--dbx-surface, #fff); color: var(--dbx-text-primary, #333); border: 1px solid var(--dbx-border, transparent); padding: 10px 12px; border-radius: 10px; font-size: 13px; box-shadow: var(--dbx-shadow-lg, 0 4px 20px rgba(0, 0, 0, 0.15)); width: 240px; height: 90px; display: none; flex-direction: column; gap: 8px; overflow: hidden;';
-      document.body.appendChild(this.tooltipEl);
-      
-      this.tooltipEl.addEventListener('mouseenter', () => {
-        if (this.hideTooltipTimeout) {
-          clearTimeout(this.hideTooltipTimeout);
-          this.hideTooltipTimeout = null;
-        }
-      });
-      this.tooltipEl.addEventListener('mouseleave', () => {
-        this.hideTooltip();
-      });
-    }
-    
-    const textEl = this.tooltipEl.querySelector('.tooltip-text');
-    if (textEl) {
-      textEl.textContent = marker.text;
-    } else {
-      const text = document.createElement('div');
-      text.className = 'tooltip-text';
-      text.textContent = marker.text;
-      text.style.cssText = 'color: var(--dbx-text-primary, #333); line-height: 1.4; height: 54px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-wrap: break-word; word-break: break-all;';
-      this.tooltipEl.appendChild(text);
-    }
-    
-    let starBtn = this.tooltipEl.querySelector('.tooltip-star') as HTMLButtonElement;
-    if (!starBtn) {
-      starBtn = document.createElement('button');
-      starBtn.className = 'tooltip-star';
-      starBtn.style.cssText = 'display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; margin: 0 -4px; border-radius: 6px; font-size: 12px; color: var(--dbx-text-secondary, #666); cursor: pointer; background: transparent; border: none; width: fit-content;';
-      this.tooltipEl.appendChild(starBtn);
-    }
-    starBtn.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="${marker.starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-      </svg>
-      ${marker.starred ? '已收藏' : '收藏'}
+    const popover = document.createElement('aside');
+    popover.id = 'dbx-locator-popover';
+    popover.setAttribute('aria-label', '对话快速定位目录');
+    popover.innerHTML = `
+      <header class="dbx-locator-popover-header">
+        <div class="dbx-locator-popover-title-group">
+          <span class="dbx-locator-popover-title">对话目录</span>
+          <span class="dbx-locator-popover-count">0</span>
+        </div>
+        <div class="dbx-locator-popover-actions">
+          <button type="button" class="dbx-locator-filter-star" title="仅显示已收藏" aria-label="仅显示已收藏" aria-pressed="false">
+            ${STAR_SVG(false)}
+          </button>
+          <button type="button" class="dbx-locator-refresh" title="静默加载全部历史定位点" aria-label="静默加载全部历史定位点">
+            ${REFRESH_SVG}
+          </button>
+        </div>
+      </header>
+      <div class="dbx-locator-list"></div>
     `;
-    starBtn.onclick = async (e) => {
+
+    popover.addEventListener('mouseenter', () => {
+      if (this.hidePopoverTimer !== null) {
+        clearTimeout(this.hidePopoverTimer);
+        this.hidePopoverTimer = null;
+      }
+    });
+
+    popover.addEventListener('mouseleave', (e) => {
+      const related = e.relatedTarget as Node | null;
+      if (!this.locatorBar || !related || !this.locatorBar.contains(related)) {
+        this.scheduleHidePopover();
+      }
+    });
+
+    popover.querySelector('.dbx-locator-filter-star')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isNowStarred = !marker.starred;
-      
-      starBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="${isNowStarred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-        </svg>
-        ${isNowStarred ? '已收藏' : '收藏'}
-      `;
-      starBtn.style.color = isNowStarred ? '#f59e0b' : '#666';
-      
-      const dot = this.locatorBar?.querySelector(`[data-marker-index="${marker.index}"]`) as HTMLElement;
-      if (dot) {
-        dot.classList.toggle('starred', isNowStarred);
+      this.filterStarredOnly = !this.filterStarredOnly;
+      this.renderPopoverList();
+    });
+
+    popover.querySelector('.dbx-locator-refresh')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const container = this.scrollContainer;
+      if (container) {
+        void this.indexEntireConversation(container);
       }
-      
-      if (this.starredMarkers.has(marker.index)) {
-        this.starredMarkers.delete(marker.index);
-      } else {
-        this.starredMarkers.add(marker.index);
-      }
-      this.markers[marker.index].starred = isNowStarred;
-      
-      if (this.conversationId) {
-        try {
-          if (isNowStarred) {
-            await storageService.addStarredMessage(this.conversationId, marker.index, {
-              messageId: marker.messageId,
-              text: marker.text,
-            });
-          } else {
-            await storageService.removeStarredMessage(this.conversationId, marker.index);
-          }
-        } catch (error) {
-        }
-      }
-    };
-    
-    const rect = dot.getBoundingClientRect();
-    this.tooltipEl.style.display = 'flex';
-    this.tooltipEl.style.left = (rect.left - 240) + 'px';
-    this.tooltipEl.style.top = (rect.top + rect.height / 2 - 35) + 'px';
+    });
+
+    document.body.appendChild(popover);
+    this.popoverEl = popover;
+    return popover;
   }
 
-  private hideTooltip(): void {
-    if (this.hideTooltipTimeout) return;
-    
-    this.hideTooltipTimeout = window.setTimeout(() => {
-      if (this.tooltipEl) {
-        this.tooltipEl.style.display = 'none';
+  private openPopover(focusIndex?: number): void {
+    if (this.hidePopoverTimer !== null) {
+      clearTimeout(this.hidePopoverTimer);
+      this.hidePopoverTimer = null;
+    }
+
+    const popover = this.ensurePopover();
+    this.renderPopoverList();
+
+    if (this.locatorBar) {
+      const barRect = this.locatorBar.getBoundingClientRect();
+      const rightOffset = Math.max(16, window.innerWidth - barRect.left + 10);
+      popover.style.right = `${rightOffset}px`;
+    }
+
+    popover.classList.add('is-open');
+
+    const targetIdx = focusIndex ?? this.activeMarkerIndex;
+    if (targetIdx >= 0) {
+      const row = popover.querySelector<HTMLElement>(`.dbx-locator-item[data-marker-index="${targetIdx}"]`);
+      row?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  private scheduleHidePopover(): void {
+    if (this.hidePopoverTimer !== null) {
+      clearTimeout(this.hidePopoverTimer);
+    }
+    this.hidePopoverTimer = window.setTimeout(() => {
+      this.hidePopoverImmediate();
+    }, 180);
+  }
+
+  private hidePopoverImmediate(): void {
+    if (this.hidePopoverTimer !== null) {
+      clearTimeout(this.hidePopoverTimer);
+      this.hidePopoverTimer = null;
+    }
+    this.hoveredIndex = -1;
+    this.popoverEl?.classList.remove('is-open');
+  }
+
+  private renderPopoverList(): void {
+    if (!this.popoverEl) return;
+
+    const countEl = this.popoverEl.querySelector('.dbx-locator-popover-count');
+    if (countEl) {
+      countEl.textContent = String(this.markers.length);
+    }
+
+    const filterBtn = this.popoverEl.querySelector<HTMLButtonElement>('.dbx-locator-filter-star');
+    if (filterBtn) {
+      filterBtn.classList.toggle('is-active', this.filterStarredOnly);
+      filterBtn.setAttribute('aria-pressed', String(this.filterStarredOnly));
+      filterBtn.innerHTML = STAR_SVG(this.filterStarredOnly);
+    }
+
+    const list = this.popoverEl.querySelector('.dbx-locator-list');
+    if (!list) return;
+    list.replaceChildren();
+
+    const visibleMarkers = this.filterStarredOnly
+      ? this.markers.filter((m) => m.starred)
+      : this.markers;
+
+    if (visibleMarkers.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dbx-locator-empty';
+      empty.textContent = this.filterStarredOnly ? '暂无已收藏的消息' : '暂无可定位的用户消息';
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const marker of visibleMarkers) {
+      const row = document.createElement('div');
+      row.className = 'dbx-locator-item' +
+        (marker.index === this.activeMarkerIndex ? ' is-active' : '') +
+        (marker.index === this.hoveredIndex ? ' is-hovered' : '');
+      row.dataset.markerIndex = String(marker.index);
+
+      const mainBtn = document.createElement('button');
+      mainBtn.type = 'button';
+      mainBtn.className = 'dbx-locator-item-main';
+
+      const idxBadge = document.createElement('span');
+      idxBadge.className = 'dbx-locator-item-index';
+      idxBadge.textContent = String(marker.index + 1).padStart(2, '0');
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'dbx-locator-item-text';
+      textSpan.textContent = marker.text;
+
+      mainBtn.append(idxBadge, textSpan);
+      mainBtn.addEventListener('click', () => {
+        void this.scrollToMessage(marker);
+      });
+
+      const starBtn = document.createElement('button');
+      starBtn.type = 'button';
+      starBtn.className = `dbx-locator-item-star${marker.starred ? ' is-starred' : ''}`;
+      starBtn.title = marker.starred ? '取消收藏' : '收藏消息';
+      starBtn.setAttribute('aria-label', starBtn.title);
+      starBtn.setAttribute('aria-pressed', String(marker.starred));
+      starBtn.innerHTML = STAR_SVG(marker.starred);
+
+      starBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void this.toggleMarkerStar(marker);
+      });
+
+      row.append(mainBtn, starBtn);
+      list.appendChild(row);
+    }
+  }
+
+  private async toggleMarkerStar(marker: MessageMarker): Promise<void> {
+    const isNowStarred = !marker.starred;
+    marker.starred = isNowStarred;
+
+    if (isNowStarred) {
+      this.starredMarkers.add(marker.index);
+    } else {
+      this.starredMarkers.delete(marker.index);
+    }
+
+    const dot = this.locatorBar?.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${marker.index}"]`);
+    dot?.classList.toggle('starred', isNowStarred);
+
+    this.renderPopoverList();
+
+    if (this.conversationId && this.conversationId !== 'unknown') {
+      try {
+        if (isNowStarred) {
+          await storageService.addStarredMessage(this.conversationId, marker.index, {
+            messageId: marker.messageId,
+            text: marker.text,
+          });
+        } else {
+          await storageService.removeStarredMessage(this.conversationId, marker.index);
+        }
+      } catch {
+        // Ignore storage write error
       }
-      this.hideTooltipTimeout = null;
-    }, 150);
+    }
   }
 
   private cancelScrollAnimation(): void {
@@ -578,7 +753,6 @@ export class QuickLocator {
         if (cancelled) return;
         const elapsed = now - startTime;
         const progress = Math.min(1, elapsed / duration);
-        // Smooth easeInOutCubic so every jump glides naturally like scrolling up/down.
         const eased = progress < 0.5
           ? 4 * progress * progress * progress
           : 1 - Math.pow(-2 * progress + 2, 3) / 2;
@@ -646,14 +820,13 @@ export class QuickLocator {
     }
     if (!element) return;
 
-    // Gentle settle if virtual row height differed slightly from estimated offset.
     const settledTop = this.getCenteredScrollTop(container, element);
     if (Math.abs(container.scrollTop - settledTop) > 28) {
       await this.smoothScrollContainerTo(container, settledTop);
     }
 
     element.classList.add('dbx-message-highlight');
-    setTimeout(() => {
+    window.setTimeout(() => {
       element?.classList.remove('dbx-message-highlight');
     }, 2000);
   }
@@ -706,30 +879,36 @@ export class QuickLocator {
     const next = this.locatorBar.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${index}"]`);
     next?.classList.add('active');
     this.activeMarkerIndex = index;
+
+    if (this.popoverEl?.classList.contains('is-open')) {
+      this.popoverEl.querySelectorAll<HTMLElement>('.dbx-locator-item').forEach((row) => {
+        row.classList.toggle('is-active', row.dataset.markerIndex === String(index));
+      });
+    }
   }
 
   private findMessageElement(messageId: string): HTMLElement | null {
     const node = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
-      .find((el) => el.dataset.messageId === messageId);
+      .find((el) => el.dataset.messageId === messageId && !el.closest('[data-dbx-freeze-snapshot="true"]'));
     return node?.closest<HTMLElement>('.inner-item-BjaxFt, .inner-item-w21SQO, [data-testid="union_message"], [data-testid="message-block-container"]') || node || null;
   }
-  
+
   private scrollLocatorToMarker(index: number): void {
     const track = this.locatorBar?.querySelector('.dbx-locator-track');
     if (!track) return;
-    
+
     const dots = track.querySelectorAll('.dbx-locator-dot');
     const targetDot = dots[index] as HTMLElement;
     if (!targetDot) return;
-    
+
     const trackRect = track.getBoundingClientRect();
     const dotRect = targetDot.getBoundingClientRect();
-    
+
     const trackHeight = trackRect.height;
     const dotTop = dotRect.top - trackRect.top;
     const dotCenter = dotTop + dotRect.height / 2;
     const scrollTarget = track.scrollTop + dotCenter - trackHeight / 2;
-    
+
     track.scrollTo({
       top: scrollTarget,
       behavior: 'smooth'
@@ -750,7 +929,7 @@ export class QuickLocator {
           break;
         }
       }
-      
+
       if (shouldRescan) {
         this.debounceScan();
       }
@@ -775,15 +954,16 @@ export class QuickLocator {
   destroy(): void {
     this.cancelScrollAnimation();
     this.detachScrollSync();
+    this.hidePopoverImmediate();
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
     }
     this.unsubscribeUrl?.();
     this.unsubscribeUrl = null;
-    if (this.tooltipEl) {
-      this.tooltipEl.remove();
-      this.tooltipEl = null;
+    if (this.popoverEl) {
+      this.popoverEl.remove();
+      this.popoverEl = null;
     }
     if (this.locatorBar) {
       this.locatorBar.remove();

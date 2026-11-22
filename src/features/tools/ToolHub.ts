@@ -35,8 +35,8 @@ export class ToolHub {
     const trigger = document.getElementById('dbx-corpus-trigger');
     if (!trigger || trigger.dataset.toolsBound) return;
     trigger.dataset.toolsBound = 'true';
-    trigger.title = '随手工具'; trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
-    trigger.setAttribute('aria-label', '随手工具'); trigger.setAttribute('aria-expanded', 'false');
+    trigger.title = 'Better Doubao 工具栏'; trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
+    trigger.setAttribute('aria-label', 'Better Doubao 工具栏'); trigger.setAttribute('aria-expanded', 'false');
     document.addEventListener('dbx-toggle-tools', () => this.toggle(trigger));
     trigger.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggle(trigger); } });
     document.addEventListener('pointerdown', e => {
@@ -157,8 +157,8 @@ export class ToolHub {
   }
 
   private guide(): void {
-    const body = this.open('欢迎使用随手工具');
-    const p = document.createElement('p'); p.textContent = '点击悬浮按钮，展开语料板、对话搜索、重点目录和备份。所有面板都在按钮附近打开，可点击 × 或按 Esc 关闭。搜索仅覆盖已加载内容。';
+    const body = this.open('欢迎使用 Better Doubao');
+    const p = document.createElement('p'); p.textContent = '点击悬浮按钮即可展开 Better Doubao 工具栏（语料板、对话搜索、高亮与收藏、数据备份）。可拖动标题栏调整位置，点击关闭按钮或按 Esc 收起。搜索仅覆盖已加载内容。';
     const startBtn = button('开始使用', () => {
       void browser.storage.local.set({ dbxToolsGuideSeen: true });
       this.panel?.remove();
