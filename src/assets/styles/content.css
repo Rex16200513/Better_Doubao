@@ -344,307 +344,111 @@ body[data-theme="dark"],
   background-color: rgba(239, 68, 68, 0.1);
 }
 
-#dbx-quick-locator {
-  position: fixed;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 9999;
+/* Enhancements layered cleanly onto Doubao's native quick-locator cards */
+.dbx-native-locator-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 10px 6px;
-  background: transparent;
-  border-radius: 16px;
-  max-height: 62vh;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  border: 1px solid transparent;
-}
-
-#dbx-quick-locator:hover {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 8px;
+  margin-bottom: 4px;
   background: var(--dbx-surface-glass);
-  border-color: var(--dbx-border);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: var(--dbx-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--dbx-border);
 }
 
-.dbx-locator-track {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 7px;
-  max-height: 54vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  padding: 4px 2px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+.dbx-native-locator-search {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--dbx-border);
+  border-radius: 8px;
+  background: var(--dbx-surface-subtle);
+  color: var(--dbx-text-primary);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'PingFang SC', system-ui, sans-serif;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.dbx-locator-track::-webkit-scrollbar {
-  display: none;
-}
-
-/* ChatGPT-inspired slender tick rail */
-.dbx-locator-dot {
-  width: 10px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--dbx-text-muted);
-  opacity: 0.45;
-  border: none;
-  cursor: pointer;
-  transition: width 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
-  flex-shrink: 0;
-  position: relative;
-  padding: 0;
-}
-
-#dbx-quick-locator:hover .dbx-locator-dot {
-  opacity: 0.72;
-}
-
-.dbx-locator-dot:hover {
-  width: 18px;
-  opacity: 1 !important;
-  background: var(--dbx-accent);
-}
-
-.dbx-locator-dot.starred {
-  width: 14px;
-  opacity: 0.92;
-  background: #f59e0b;
-}
-
-.dbx-locator-dot.starred:hover {
-  width: 20px;
-  background: #d97706;
-}
-
-.dbx-locator-dot.active {
-  width: 18px;
-  opacity: 1 !important;
-  background: var(--dbx-accent);
+.dbx-native-locator-search:focus {
+  border-color: var(--dbx-accent);
   box-shadow: 0 0 0 2px var(--dbx-accent-soft);
 }
 
-.dbx-locator-dot.starred.active {
-  background: #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
-}
-
-/* ChatGPT-inspired glassmorphic outline popover */
-#dbx-locator-popover {
-  position: fixed;
-  top: 50%;
-  right: 44px;
-  transform: translateY(-50%) translateX(6px);
-  width: 280px;
-  max-height: min(420px, 70vh);
-  z-index: 10005;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--dbx-border);
-  border-radius: 16px;
-  background: var(--dbx-surface-glass);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  box-shadow: var(--dbx-shadow-lg);
-  color: var(--dbx-text-primary);
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
-}
-
-#dbx-locator-popover.is-open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
-}
-
-.dbx-locator-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px 10px 14px;
-  border-bottom: 1px solid var(--dbx-border);
+.dbx-native-locator-filter-star {
   flex-shrink: 0;
-}
-
-.dbx-locator-popover-title-group {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.dbx-locator-popover-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dbx-text-primary);
-}
-
-.dbx-locator-popover-count {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--dbx-text-muted);
-  background: var(--dbx-surface-subtle);
-}
-
-.dbx-locator-popover-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dbx-locator-filter-star,
-.dbx-locator-popover-actions .dbx-locator-refresh {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
+  border: 1px solid var(--dbx-border);
+  border-radius: 8px;
+  background: var(--dbx-surface-subtle);
   color: var(--dbx-text-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.dbx-locator-filter-star:hover,
-.dbx-locator-popover-actions .dbx-locator-refresh:hover {
-  background: var(--dbx-surface-subtle);
-  color: var(--dbx-text-primary);
+.dbx-native-locator-filter-star:hover {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
-.dbx-locator-filter-star.is-active {
+.dbx-native-locator-filter-star.is-active {
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.5);
 }
 
-.dbx-locator-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  scrollbar-width: thin;
-}
-
-.dbx-locator-empty {
-  padding: 24px 12px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--dbx-text-muted);
-}
-
-.dbx-locator-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  border-radius: 9px;
-  transition: background-color 0.14s ease;
-}
-
-.dbx-locator-item:hover,
-.dbx-locator-item.is-hovered {
-  background: var(--dbx-surface-subtle);
-}
-
-.dbx-locator-item.is-active {
-  background: var(--dbx-accent-soft);
-}
-
-.dbx-locator-item-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 6px 7px 8px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.dbx-locator-item-index {
-  flex-shrink: 0;
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--dbx-text-muted);
-  margin-top: 2px;
-}
-
-.dbx-locator-item.is-active .dbx-locator-item-index {
-  color: var(--dbx-accent);
-}
-
-.dbx-locator-item-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--dbx-text-primary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-}
-
-.dbx-locator-item-star {
-  flex-shrink: 0;
+.dbx-native-card-star {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin: 4px 4px 0 0;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--dbx-text-muted);
-  opacity: 0.35;
+  opacity: 0.45;
   cursor: pointer;
   transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
 }
 
-.dbx-locator-item:hover .dbx-locator-item-star,
-.dbx-locator-item-star:focus-visible {
-  opacity: 0.85;
+[data-dbx-native-card]:hover > .dbx-native-card-star,
+.dbx-native-card-star:focus-visible {
+  opacity: 0.9;
 }
 
-.dbx-locator-item-star:hover {
+.dbx-native-card-star:hover {
   opacity: 1;
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.12);
-  transform: scale(1.06);
+  transform: scale(1.08);
 }
 
-.dbx-locator-item-star.is-starred {
+.dbx-native-card-star.is-starred {
   opacity: 1 !important;
   color: #f59e0b;
 }
 
-.dbx-locator-item-star.is-starred:hover {
-  background: rgba(245, 158, 11, 0.18);
+.dbx-native-card-starred {
+  box-shadow: inset 3px 0 0 #f59e0b !important;
+}
+
+.dbx-native-card-filtered {
+  display: none !important;
 }
 
 .dbx-message-highlight {

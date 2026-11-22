@@ -345,15 +345,36 @@ export class ToolHub {
 
             const row = button(label, () => {
               if (conversation !== current) { window.location.href = `/chat/${encodeURIComponent(conversation)}`; return; }
-              const dot = document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`);
-              if (dot) dot.click(); else showToast('该收藏尚未加载，请先滚动加载原文。', 'info');
+              const meta = data.starredMeta?.[conversation]?.[i];
+              const messages = this.messages();
+              let target: HTMLElement | undefined;
+              if (meta?.messageId) {
+                target = messages.find(el => el.dataset.messageId === meta.messageId);
+              }
+              if (!target && excerpt) {
+                const probe = excerpt.replace(/…$/, '').slice(0, 24);
+                target = messages.find(el => (el.textContent || '').includes(probe));
+              }
+              if (!target) {
+                const nativeCard = document.querySelector<HTMLElement>(`[data-dbx-native-card="${i}"]`);
+                if (nativeCard) { nativeCard.click(); return; }
+              }
+              if (target) {
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                target.classList.add('dbx-message-highlight');
+                window.setTimeout(() => target?.classList.remove('dbx-message-highlight'), 1800);
+              } else {
+                showToast('该收藏尚未加载，请先通过豆包定位滚动加载原文。', 'info');
+              }
             });
             row.className = 'dbx-saved-row-main';
 
             const removeBtn = button('×', () => void (async () => {
               await storageService.removeStarredMessage(conversation, i);
               if (conversation === current) {
-                document.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${i}"]`)?.classList.remove('starred');
+                const nativeCard = document.querySelector<HTMLElement>(`[data-dbx-native-card="${i}"]`);
+                nativeCard?.classList.remove('dbx-native-card-starred');
+                nativeCard?.querySelector('.dbx-native-card-star')?.classList.remove('is-starred');
               }
               showToast('已取消收藏', 'success');
               await render();

@@ -3,8 +3,7 @@ import type { ExtensionSettings } from '../../core/types/settings';
 
 const SETTING_KEYS: Array<keyof ExtensionSettings> = [
   'enableSidebarLauncher',
-  'enableQuickLocator',
-  'autoIndexLongChat',
+  'enableNativeLocatorEnhancer',
   'enableCorpusAndHighlight',
   'enableExport',
   'enableLatexDownloader',

@@ -329,10 +329,10 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
     return { default: browser };
   });
 
-  const merged = mergeSettings({ enableExport: false, autoIndexLongChat: 'bad-type' });
+  const merged = mergeSettings({ enableExport: false, enableNativeLocatorEnhancer: 'bad-type' });
   assert.equal(merged.enableExport, false);
-  assert.equal(merged.autoIndexLongChat, true, 'non-boolean falls back to default');
-  assert.equal(merged.enableQuickLocator, true);
+  assert.equal(merged.enableNativeLocatorEnhancer, true, 'non-boolean falls back to default');
+  assert.equal(merged.enableSidebarLauncher, true);
 
   const svc = new SettingsService();
   await svc.load();
@@ -488,4 +488,27 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub');
+// 11. NativeLocatorEnhancer: timestamp recognition & card filtering
+{
+  const { hasNativeLocatorTimestamp, NativeLocatorEnhancer } = loadTs('src/features/quicklocator/NativeLocatorEnhancer.ts', name => {
+    if (name.includes('StorageService')) return { storageService: { getStarredMessages: async () => [] } };
+    if (name.includes('PageLifecycle')) return { pageLifecycle: { onUrlChange: () => () => {}, onDomChange: () => () => {} } };
+    if (name.includes('utils/dom')) return domUtils;
+    return {};
+  });
+  assert.equal(hasNativeLocatorTimestamp('3月12日 15:21'), true);
+  assert.equal(hasNativeLocatorTimestamp('昨天 09:05'), true);
+  assert.equal(hasNativeLocatorTimestamp('普通文本无时间戳'), false);
+
+  const enhancer = new NativeLocatorEnhancer();
+  const cards = [
+    { dataset: { dbxNativeCard: '0' }, textContent: 'Mac 安装 nodejs 3月12日 15:21', classList: { hidden: false, toggle(c, v) { if (c === 'dbx-native-card-filtered') this.hidden = v; } } },
+    { dataset: { dbxNativeCard: '1' }, textContent: 'Python 虚拟环境 3月12日 16:00', classList: { hidden: false, toggle(c, v) { if (c === 'dbx-native-card-filtered') this.hidden = v; } } },
+  ];
+  enhancer.filterQuery = 'nodejs';
+  enhancer.applyFilter(cards);
+  assert.equal(cards[0].classList.hidden, false);
+  assert.equal(cards[1].classList.hidden, true);
+}
+
+console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, native locator enhancer, latex, export, toolhub');
