@@ -1,4 +1,5 @@
 import { storageService } from '../../core/services/StorageService';
+import { escapeHTML, getConversationId } from '../../core/utils/dom';
 import type { CorpusItem, TextHighlight } from '../../core/types/folder';
 
 export class CorpusBoard {
@@ -23,15 +24,12 @@ export class CorpusBoard {
   init(): void {
     if (this.initialized) return;
 
-    console.log('[CorpusBoard] Initializing...');
-    
     this.loadCorpusItems();
     this.createTriggerButton();
     this.setupTextSelectionListener();
     this.setupHighlightPersistence();
     this.setupPositionTracking();
     this.initialized = true;
-    console.log('[CorpusBoard] Initialized, trigger button:', this.triggerBtn);
     
     setTimeout(() => {
       this.recalculatePosition();
@@ -42,14 +40,12 @@ export class CorpusBoard {
     // 页面初次加载时输入框可能尚未渲染，2 秒后用真实输入框位置校正。
     // 但若用户已拖动自定义过位置（localStorage 有记录），则尊重用户偏好不覆盖。
     if (localStorage.getItem('dbx_corpus_trigger_pos')) {
-      console.log('[CorpusBoard] User has custom position, skip recalculation');
       return;
     }
     const newPos = this.getDefaultPosition();
     this.positionX = newPos.x;
     this.positionY = newPos.y;
     this.applyTriggerPosition();
-    console.log('[CorpusBoard] Position recalculated to:', newPos);
   }
 
   private async loadCorpusItems(): Promise<void> {
@@ -65,9 +61,6 @@ export class CorpusBoard {
  
   private createTriggerButton(): void {
     if (this.triggerBtn) return;
-
-    console.log('[CorpusBoard] Creating trigger button...');
-    console.log('[CorpusBoard] document.body exists:', !!document.body);
 
     const savedPos = this.loadPosition();
     this.positionX = savedPos.x;
@@ -91,8 +84,6 @@ export class CorpusBoard {
     this.applyTriggerPosition();
     this.triggerBtn.style.display = 'flex';
 
-    console.log('[CorpusBoard] Trigger button created, in DOM:', document.body?.contains(this.triggerBtn));
-
     this.triggerBtn.addEventListener('click', () => {
       if (!this.isDragging) {
         document.dispatchEvent(new CustomEvent('dbx-toggle-tools'));
@@ -102,7 +93,6 @@ export class CorpusBoard {
     this.setupDrag();
 
     document.body.appendChild(this.triggerBtn);
-    console.log('[CorpusBoard] Trigger button appended to body');
   }
 
   private getTriggerStyles(): string {
@@ -362,12 +352,12 @@ export class CorpusBoard {
           </div>
         ` : ''}
         ${this.corpusItems.map(item => `
-          <div class="dbx-corpus-item ${item.selected ? 'selected' : ''}" data-id="${item.id}">
+          <div class="dbx-corpus-item ${item.selected ? 'selected' : ''}" data-id="${escapeHTML(item.id)}">
             <div class="dbx-corpus-item-checkbox">
               <input type="checkbox" ${item.selected ? 'checked' : ''}>
             </div>
             <div class="dbx-corpus-item-body">
-              <div class="dbx-corpus-item-content">${this.escapeHtml(item.text)}</div>
+              <div class="dbx-corpus-item-content">${escapeHTML(item.text)}</div>
             </div>
             <button class="dbx-corpus-item-remove" title="删除">×</button>
           </div>
@@ -426,10 +416,35 @@ export class CorpusBoard {
     });
   }
 
-  private escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  private isInChatMessageArea(el: Element | null): boolean {
+    if (!el) return false;
+    const testid = el.getAttribute('data-testid') || '';
+    let className = '';
+    try {
+      className = (el as HTMLElement).className?.toString() || '';
+    } catch {
+      className = '';
+    }
+
+    if (
+      testid.includes('message') ||
+      testid.includes('message-list') ||
+      testid.includes('message_content') ||
+      testid.includes('message_text') ||
+      className.includes('message-list') ||
+      className.includes('message-block')
+    ) {
+      return true;
+    }
+
+    if (
+      el.classList.contains('flow-markdown-body') ||
+      el.closest('[data-testid="message-list"]')
+    ) {
+      return true;
+    }
+
+    return this.isInChatMessageArea(el.parentElement);
   }
 
   private updateTriggerCount(): void {
@@ -452,12 +467,9 @@ export class CorpusBoard {
     let hideTimeout: number | null = null;
     let savedSelectionText: string = '';
     let savedSelectionRange: Range | null = null;
-    let selectedHighlightColor = '#fde047';
-    console.log('[CorpusBoard] Setting up text selection listener');
+    let selectedHighlightColor = '#FDEB00';
 
     const showSelectionButton = (selection: Selection, text: string) => {
-      console.log('[CorpusBoard] showSelectionButton called', text);
-      
       if (!text || text.trim().length === 0) {
         if (selectionButton) {
           selectionButton.style.display = 'none';
@@ -466,50 +478,19 @@ export class CorpusBoard {
       }
 
       savedSelectionText = text;
-      console.log('[CorpusBoard] Saved selection text:', savedSelectionText);
       
       const range = selection.getRangeAt(0);
       savedSelectionRange = range.cloneRange();
       const rect = range.getBoundingClientRect();
-      console.log('[CorpusBoard] Selection rect:', rect);
       
       const container = range.commonAncestorContainer;
       const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
 
       if (!containerEl || containerEl.closest('.dbx-popup-content')) {
-        console.log('[CorpusBoard] Selection in dbx-popup-content, not showing button');
         return;
       }
       
-      const isInChatMessageArea = (el: Element | null): boolean => {
-        if (!el) return false;
-        const testid = el.getAttribute('data-testid') || '';
-        let className = '';
-        try {
-          className = (el as HTMLElement).className?.toString() || '';
-        } catch (e) {
-          className = '';
-        }
-        
-        if (testid.includes('message') || 
-            testid.includes('message-list') ||
-            testid.includes('message_content') ||
-            testid.includes('message_text') ||
-            className.includes('message-list') ||
-            className.includes('message-block')) {
-          return true;
-        }
-        
-        if (el.classList.contains('flow-markdown-body') ||
-            el.closest('[data-testid="message-list"]')) {
-          return true;
-        }
-        
-        return isInChatMessageArea(el.parentElement);
-      };
-      
-      if (!isInChatMessageArea(containerEl)) {
-        console.log('[CorpusBoard] Selection not in chat message area, not showing button');
+      if (!this.isInChatMessageArea(containerEl)) {
         return;
       }
       
@@ -753,9 +734,6 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         document.body.appendChild(selectionButton);
       }
 
-      const buttonRect = selectionButton.getBoundingClientRect();
-      const left = rect.left + rect.width / 2 - buttonRect.width / 2;
-      const top = rect.bottom + 8;
       const palette = selectionButton.querySelector(
         '.dbx-highlight-palette'
       ) as HTMLElement | null;
@@ -768,9 +746,19 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       }
       menuToggle?.classList.remove('is-open');
 
-      selectionButton.style.left = `${Math.max(8, left)}px`;
-      selectionButton.style.top = `${Math.min(top, window.innerHeight - 40)}px`;
+      // Show invisibly first so getBoundingClientRect() returns real dimensions even on first open.
+      selectionButton.style.visibility = 'hidden';
       selectionButton.style.display = 'flex';
+      const buttonRect = selectionButton.getBoundingClientRect();
+      const rawLeft = rect.left + rect.width / 2 - buttonRect.width / 2;
+      const maxLeft = Math.max(8, window.innerWidth - buttonRect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - buttonRect.height - 8);
+      const left = Math.min(Math.max(8, rawLeft), maxLeft);
+      const top = Math.min(Math.max(8, rect.bottom + 8), maxTop);
+
+      selectionButton.style.left = `${left}px`;
+      selectionButton.style.top = `${top}px`;
+      selectionButton.style.visibility = 'visible';
     };
 
     document.addEventListener('mouseup', (e: MouseEvent) => {
@@ -786,7 +774,6 @@ removeHighlightButton?.addEventListener('click', async (e) => {
 
       const selection = window.getSelection();
       const selectedText = selection?.toString().trim() || '';
-      console.log('[CorpusBoard] mouseup, selection text:', selectedText);
       
       if (selectedText.length > 0) {
         const range = selection!.getRangeAt(0);
@@ -794,51 +781,13 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
         
         if (containerEl) {
-              console.log('[CorpusBoard] Selection container:', containerEl.tagName, containerEl.className);
-              
-              if (containerEl.closest('.dbx-popup-content')) {
-                console.log('[CorpusBoard] Selection in dbx-popup-content');
-                if (selectionButton) {
-                  selectionButton.style.display = 'none';
-                }
-                return;
-              }
-              
-              const isInChatMessageArea = (el: Element | null): boolean => {
-                if (!el) return false;
-                const testid = el.getAttribute('data-testid') || '';
-                let className = '';
-                try {
-                  className = (el as HTMLElement).className?.toString() || '';
-                } catch (e) {
-                  className = '';
-                }
-                
-                if (testid.includes('message') || 
-                    testid.includes('message-list') ||
-                    testid.includes('message_content') ||
-                    testid.includes('message_text') ||
-                    className.includes('message-list') ||
-                    className.includes('message-block')) {
-                  return true;
-                }
-                
-                if (el.classList.contains('flow-markdown-body') ||
-                    el.closest('[data-testid="message-list"]')) {
-                  return true;
-                }
-                
-                return isInChatMessageArea(el.parentElement);
-              };
-              
-              if (!isInChatMessageArea(containerEl)) {
-                console.log('[CorpusBoard] Selection not in chat message area');
-                if (selectionButton) {
-                  selectionButton.style.display = 'none';
-                }
-                return;
-              }
+          if (containerEl.closest('.dbx-popup-content') || !this.isInChatMessageArea(containerEl)) {
+            if (selectionButton) {
+              selectionButton.style.display = 'none';
+            }
+            return;
           }
+        }
         
         showSelectionButton(selection!, selectedText);
       } else {
@@ -853,40 +802,13 @@ removeHighlightButton?.addEventListener('click', async (e) => {
     document.addEventListener('mousedown', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       
-      const isInChatMessageArea = (el: Element | null): boolean => {
-        if (!el) return false;
-        const testid = el.getAttribute('data-testid') || '';
-        let className = '';
-        try {
-          className = (el as HTMLElement).className?.toString() || '';
-        } catch (e) {
-          className = '';
-        }
-        
-        if (testid.includes('message') || 
-            testid.includes('message-list') ||
-            testid.includes('message_content') ||
-            testid.includes('message_text') ||
-            className.includes('message-list') ||
-            className.includes('message-block')) {
-          return true;
-        }
-        
-        if (el.classList.contains('flow-markdown-body') ||
-            el.closest('[data-testid="message-list"]')) {
-          return true;
-        }
-        
-        return isInChatMessageArea(el.parentElement);
-      };
-      
       const isInCorpusUI = target.closest('.dbx-corpus-selection-btn') || 
                           target.closest('.dbx-corpus-panel') || 
                           target.closest('.dbx-corpus-trigger');
       
       const inPopup = target.closest('.dbx-popup-content');
       
-      if (!isInCorpusUI && !isInChatMessageArea(target) && !inPopup && selectionButton) {
+      if (!isInCorpusUI && !this.isInChatMessageArea(target) && !inPopup && selectionButton) {
         selectionButton.style.display = 'none';
       }
     });
@@ -1541,8 +1463,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   private getConversationId(): string {
-    const urlMatch = window.location.pathname.match(/\/chat\/([^/?#]+)/);
-    return urlMatch ? urlMatch[1] : 'unknown';
+    return getConversationId();
   }
 
   private getConversationTitle(): string {

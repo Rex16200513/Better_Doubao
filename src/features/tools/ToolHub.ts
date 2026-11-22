@@ -33,10 +33,18 @@ export class ToolHub {
       }
     });
     window.addEventListener('resize', () => this.position());
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') {
-      document.getElementById('dbx-tools-menu')?.remove(); this.panel?.remove(); this.panel = null;
-      corpusBoard.closePanel(); trigger.setAttribute('aria-expanded', 'false'); trigger.focus();
-    } });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      const menu = document.getElementById('dbx-tools-menu');
+      const corpusPanel = document.querySelector('.dbx-corpus-panel');
+      if (!menu && !this.panel && !corpusPanel) return;
+      menu?.remove();
+      this.panel?.remove();
+      this.panel = null;
+      corpusBoard.closePanel();
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.focus();
+    });
     void browser.storage.local.get('dbxToolsGuideSeen').then(saved => { if (!saved.dbxToolsGuideSeen) this.guide(); });
   }
 
@@ -74,7 +82,12 @@ export class ToolHub {
     const close = button('×', () => { panel.remove(); this.panel = null; document.getElementById('dbx-corpus-trigger')?.focus(); });
     close.title = '关闭'; close.setAttribute('aria-label', '关闭');
     header.append(heading, close); panel.append(header);
-    panel.addEventListener('keydown', e => { if (e.key === 'Escape') panel.remove(); });
+    panel.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        panel.remove();
+        if (this.panel === panel) this.panel = null;
+      }
+    });
     document.body.appendChild(panel); this.panel = panel; this.position(); return panel;
   }
 
@@ -106,6 +119,8 @@ export class ToolHub {
   }
 
   private draggable(panel: HTMLElement): void {
+    if (panel.dataset.dragBound === 'true') return;
+    panel.dataset.dragBound = 'true';
     panel.addEventListener('pointerdown', event => {
       const target = event.target as Element;
       if (event.button !== 0 || !target.closest('.dbx-tool-header, .dbx-corpus-header') || target.closest('button, input')) return;
