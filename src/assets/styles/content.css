@@ -405,12 +405,16 @@ body[data-theme="dark"],
   transition: background-color 0.18s ease;
 }
 
-/* Global Theme Presets (covers Doubao tokens, structural white surfaces, sidebar, topbar, composer & Better Doubao UI) */
-html[data-dbx-theme="indigo"] {
+/* Global Theme Presets — drives Doubao's own native --dbx-* & --s-color-* design tokens
+   so canvas, greeting ::after reveal curtain, rounded composers, and popovers all harmonize natively. */
+html[data-dbx-theme="indigo"],
+html[data-dbx-theme="indigo"] body,
+html[data-dbx-theme="indigo"] #root,
+html[data-dbx-theme="indigo"] [data-theme] {
   --dbx-accent: #4f46e5;
   --dbx-accent-soft: rgba(79, 70, 229, 0.12);
   --dbx-surface: #ffffff;
-  --dbx-surface-glass: rgba(246, 249, 255, 0.94);
+  --dbx-surface-glass: rgba(246, 249, 255, 0.96);
   --dbx-surface-subtle: #eaf0ff;
   --dbx-surface-hover: #dfe8ff;
   --dbx-theme-bg: #f1f5ff;
@@ -422,17 +426,53 @@ html[data-dbx-theme="indigo"] {
   --dbx-theme-border-strong: rgba(79, 70, 229, 0.3);
   --dbx-theme-shadow: rgba(79, 70, 229, 0.09);
   --dbx-theme-bubble: #e3eaff;
+  /* Doubao native tokens */
+  --chat-bg-color: #f1f5ff;
+  --dbx-bg-base-5: #f1f5ff;
+  --dbx-bg-body-web: #f1f5ff;
+  --dbx-bg-body-overlay-web: #f1f5ff;
+  --dbx-bg-body-white: #f1f5ff;
+  --dbx-bg-body-overlay-white: #f1f5ff;
+  --dbx-bg-base-web: #e7eeff;
+  --dbx-bg-base-2: #e6edff;
+  --dbx-bg-float: #f8faff;
+  --dbx-fill-chat-bubble-bg: #e3eaff;
+  --dbx-fill-chat-bubble-bg2: #dce5ff;
+  --dbx-brand-default: #4f46e5;
+  --dbx-fill-primary-50: #4f46e5;
+  --dbx-fill-highlight: #4f46e5;
+  --dbx-text-highlight: #4f46e5;
+  --dbx-line-highlight: rgba(79, 70, 229, 0.25);
   --s-color-bg-primary: #f1f5ff;
+  --s-color-bg-primary-raw: 241,245,255;
   --s-color-bg-secondary: #e7eeff;
+  --s-color-bg-secondary-raw: 231,238,255;
+  --s-color-bg-body: #f1f5ff;
+  --s-color-bg-body-raw: 241,245,255;
+  --s-color-bg-content-base: #edf2ff;
+  --s-color-bg-base: #e7eeff;
+  --s-color-bg-float: #f8faff;
+  --s-color-bg-float-raw: 248,250,255;
+  --s-color-bg-dialogs: #f8faff;
+  --s-color-bg-intact-primary: #f8faff;
+  --s-color-brand-primary-default: #4f46e5;
+  --s-color-brand-primary-default-raw: 79,70,229;
+  --input-guidance-input-container-background: #f8faff;
+  --input-guidance-input-container-border-color: rgba(79, 70, 229, 0.28);
   --semi-color-bg-0: #f1f5ff;
   --semi-color-bg-1: #e7eeff;
+  --semi-color-bg-2: #f8faff;
+  --semi-color-bg-3: #f8faff;
 }
 
-html[data-dbx-theme="emerald"] {
+html[data-dbx-theme="emerald"],
+html[data-dbx-theme="emerald"] body,
+html[data-dbx-theme="emerald"] #root,
+html[data-dbx-theme="emerald"] [data-theme] {
   --dbx-accent: #059669;
   --dbx-accent-soft: rgba(5, 150, 105, 0.12);
   --dbx-surface: #ffffff;
-  --dbx-surface-glass: rgba(243, 252, 248, 0.95);
+  --dbx-surface-glass: rgba(243, 252, 248, 0.96);
   --dbx-surface-subtle: #e5f5ed;
   --dbx-surface-hover: #d7f0e4;
   --dbx-theme-bg: #eef9f3;
@@ -444,13 +484,49 @@ html[data-dbx-theme="emerald"] {
   --dbx-theme-border-strong: rgba(5, 150, 105, 0.3);
   --dbx-theme-shadow: rgba(5, 150, 105, 0.09);
   --dbx-theme-bubble: #daf2e5;
+  /* Doubao native tokens */
+  --chat-bg-color: #eef9f3;
+  --dbx-bg-base-5: #eef9f3;
+  --dbx-bg-body-web: #eef9f3;
+  --dbx-bg-body-overlay-web: #eef9f3;
+  --dbx-bg-body-white: #eef9f3;
+  --dbx-bg-body-overlay-white: #eef9f3;
+  --dbx-bg-base-web: #e2f3ea;
+  --dbx-bg-base-2: #e0f2e8;
+  --dbx-bg-float: #f6fcf9;
+  --dbx-fill-chat-bubble-bg: #daf2e5;
+  --dbx-fill-chat-bubble-bg2: #cef0de;
+  --dbx-brand-default: #059669;
+  --dbx-fill-primary-50: #059669;
+  --dbx-fill-highlight: #059669;
+  --dbx-text-highlight: #059669;
+  --dbx-line-highlight: rgba(5, 150, 105, 0.25);
   --s-color-bg-primary: #eef9f3;
+  --s-color-bg-primary-raw: 238,249,243;
   --s-color-bg-secondary: #e2f3ea;
+  --s-color-bg-secondary-raw: 226,243,234;
+  --s-color-bg-body: #eef9f3;
+  --s-color-bg-body-raw: 238,249,243;
+  --s-color-bg-content-base: #e9f6ef;
+  --s-color-bg-base: #e2f3ea;
+  --s-color-bg-float: #f6fcf9;
+  --s-color-bg-float-raw: 246,252,249;
+  --s-color-bg-dialogs: #f6fcf9;
+  --s-color-bg-intact-primary: #f6fcf9;
+  --s-color-brand-primary-default: #059669;
+  --s-color-brand-primary-default-raw: 5,150,105;
+  --input-guidance-input-container-background: #f6fcf9;
+  --input-guidance-input-container-border-color: rgba(5, 150, 105, 0.28);
   --semi-color-bg-0: #eef9f3;
   --semi-color-bg-1: #e2f3ea;
+  --semi-color-bg-2: #f6fcf9;
+  --semi-color-bg-3: #f6fcf9;
 }
 
-html[data-dbx-theme="warm"] {
+html[data-dbx-theme="warm"],
+html[data-dbx-theme="warm"] body,
+html[data-dbx-theme="warm"] #root,
+html[data-dbx-theme="warm"] [data-theme] {
   --dbx-accent: #d97706;
   --dbx-accent-soft: rgba(217, 119, 6, 0.13);
   --dbx-surface: #fffdf7;
@@ -466,17 +542,53 @@ html[data-dbx-theme="warm"] {
   --dbx-theme-border-strong: rgba(217, 119, 6, 0.3);
   --dbx-theme-shadow: rgba(180, 83, 9, 0.08);
   --dbx-theme-bubble: #f4e5c8;
+  /* Doubao native tokens */
+  --chat-bg-color: #f6efe0;
+  --dbx-bg-base-5: #f6efe0;
+  --dbx-bg-body-web: #f6efe0;
+  --dbx-bg-body-overlay-web: #f6efe0;
+  --dbx-bg-body-white: #f6efe0;
+  --dbx-bg-body-overlay-white: #f6efe0;
+  --dbx-bg-base-web: #ede4d1;
+  --dbx-bg-base-2: #ece2cd;
+  --dbx-bg-float: #fcf8ee;
+  --dbx-fill-chat-bubble-bg: #f4e5c8;
+  --dbx-fill-chat-bubble-bg2: #f2deb8;
+  --dbx-brand-default: #d97706;
+  --dbx-fill-primary-50: #d97706;
+  --dbx-fill-highlight: #d97706;
+  --dbx-text-highlight: #d97706;
+  --dbx-line-highlight: rgba(217, 119, 6, 0.25);
   --s-color-bg-primary: #f6efe0;
+  --s-color-bg-primary-raw: 246,239,224;
   --s-color-bg-secondary: #ede4d1;
+  --s-color-bg-secondary-raw: 237,228,209;
+  --s-color-bg-body: #f6efe0;
+  --s-color-bg-body-raw: 246,239,224;
+  --s-color-bg-content-base: #f2ead8;
+  --s-color-bg-base: #ede4d1;
+  --s-color-bg-float: #fcf8ee;
+  --s-color-bg-float-raw: 252,248,238;
+  --s-color-bg-dialogs: #fcf8ee;
+  --s-color-bg-intact-primary: #fcf8ee;
+  --s-color-brand-primary-default: #d97706;
+  --s-color-brand-primary-default-raw: 217,119,6;
+  --input-guidance-input-container-background: #fcf8ee;
+  --input-guidance-input-container-border-color: rgba(217, 119, 6, 0.28);
   --semi-color-bg-0: #f6efe0;
   --semi-color-bg-1: #ede4d1;
+  --semi-color-bg-2: #fcf8ee;
+  --semi-color-bg-3: #fcf8ee;
 }
 
-html[data-dbx-theme="violet"] {
+html[data-dbx-theme="violet"],
+html[data-dbx-theme="violet"] body,
+html[data-dbx-theme="violet"] #root,
+html[data-dbx-theme="violet"] [data-theme] {
   --dbx-accent: #7c3aed;
   --dbx-accent-soft: rgba(124, 58, 237, 0.12);
   --dbx-surface: #ffffff;
-  --dbx-surface-glass: rgba(249, 246, 255, 0.95);
+  --dbx-surface-glass: rgba(249, 246, 255, 0.96);
   --dbx-surface-subtle: #eee7ff;
   --dbx-surface-hover: #e4d9ff;
   --dbx-theme-bg: #f5f0ff;
@@ -488,24 +600,64 @@ html[data-dbx-theme="violet"] {
   --dbx-theme-border-strong: rgba(124, 58, 237, 0.3);
   --dbx-theme-shadow: rgba(124, 58, 237, 0.09);
   --dbx-theme-bubble: #e8dfff;
+  /* Doubao native tokens */
+  --chat-bg-color: #f5f0ff;
+  --dbx-bg-base-5: #f5f0ff;
+  --dbx-bg-body-web: #f5f0ff;
+  --dbx-bg-body-overlay-web: #f5f0ff;
+  --dbx-bg-body-white: #f5f0ff;
+  --dbx-bg-body-overlay-white: #f5f0ff;
+  --dbx-bg-base-web: #ebe3ff;
+  --dbx-bg-base-2: #e9e0ff;
+  --dbx-bg-float: #faf7ff;
+  --dbx-fill-chat-bubble-bg: #e8dfff;
+  --dbx-fill-chat-bubble-bg2: #dfd2ff;
+  --dbx-brand-default: #7c3aed;
+  --dbx-fill-primary-50: #7c3aed;
+  --dbx-fill-highlight: #7c3aed;
+  --dbx-text-highlight: #7c3aed;
+  --dbx-line-highlight: rgba(124, 58, 237, 0.25);
   --s-color-bg-primary: #f5f0ff;
+  --s-color-bg-primary-raw: 245,240,255;
   --s-color-bg-secondary: #ebe3ff;
+  --s-color-bg-secondary-raw: 235,227,255;
+  --s-color-bg-body: #f5f0ff;
+  --s-color-bg-body-raw: 245,240,255;
+  --s-color-bg-content-base: #f0eaff;
+  --s-color-bg-base: #ebe3ff;
+  --s-color-bg-float: #faf7ff;
+  --s-color-bg-float-raw: 250,247,255;
+  --s-color-bg-dialogs: #faf7ff;
+  --s-color-bg-intact-primary: #faf7ff;
+  --s-color-brand-primary-default: #7c3aed;
+  --s-color-brand-primary-default-raw: 124,58,237;
+  --input-guidance-input-container-background: #faf7ff;
+  --input-guidance-input-container-border-color: rgba(124, 58, 237, 0.28);
   --semi-color-bg-0: #f5f0ff;
   --semi-color-bg-1: #ebe3ff;
+  --semi-color-bg-2: #faf7ff;
+  --semi-color-bg-3: #faf7ff;
 }
 
-html[data-dbx-theme="midnight"] {
+html[data-dbx-theme="midnight"],
+html[data-dbx-theme="midnight"] body,
+html[data-dbx-theme="midnight"] #root,
+html[data-dbx-theme="midnight"] [data-theme] {
   --dbx-folder-text-primary: #f3f4f6;
   --dbx-folder-text-secondary: #cbd5e1;
   --dbx-folder-bg-base: #1b2030;
   --dbx-folder-bg-hover: #252c40;
   --dbx-folder-border: #303952;
   --dbx-surface: #1b2030;
-  --dbx-surface-glass: rgba(27, 32, 48, 0.95);
+  --dbx-surface-glass: rgba(27, 32, 48, 0.96);
   --dbx-surface-subtle: #23293c;
   --dbx-surface-hover: #2d3550;
   --dbx-text-primary: #edf2ff;
   --dbx-text-secondary: #c5d0e6;
+  --dbx-text-tertiary: #8b98b8;
+  --dbx-text-markdown: #e6ecf8;
+  --dbx-text-100: #edf2ff;
+  --dbx-text-60: #a5b2cc;
   --dbx-text-muted: #8b98b8;
   --dbx-border: rgba(255, 255, 255, 0.11);
   --dbx-accent: #818cf8;
@@ -519,20 +671,56 @@ html[data-dbx-theme="midnight"] {
   --dbx-theme-border-strong: rgba(129, 140, 248, 0.34);
   --dbx-theme-shadow: rgba(0, 0, 0, 0.42);
   --dbx-theme-bubble: #263052;
+  /* Doubao native tokens */
+  --chat-bg-color: #111520;
+  --dbx-bg-base-5: #111520;
+  --dbx-bg-body-web: #111520;
+  --dbx-bg-body-overlay-web: #111520;
+  --dbx-bg-body-white: #111520;
+  --dbx-bg-body-overlay-white: #111520;
+  --dbx-bg-base-web: #161b29;
+  --dbx-bg-base-2: #1f2638;
+  --dbx-bg-float: #1d2334;
+  --dbx-fill-chat-bubble-bg: #232b42;
+  --dbx-fill-chat-bubble-bg2: #283356;
+  --dbx-brand-default: #818cf8;
+  --dbx-fill-primary-50: #818cf8;
+  --dbx-fill-highlight: #818cf8;
+  --dbx-text-highlight: #818cf8;
+  --dbx-line-divider-5: rgba(255, 255, 255, 0.08);
+  --dbx-line-divider-10: rgba(255, 255, 255, 0.12);
+  --dbx-line-10: rgba(255, 255, 255, 0.12);
+  --s-color-text-primary: #edf2ff;
+  --s-color-text-secondary: #cbd5e1;
+  --s-color-text-tertiary: #8b98b8;
   --s-color-bg-primary: #111520;
+  --s-color-bg-primary-raw: 17,21,32;
   --s-color-bg-secondary: #161b29;
+  --s-color-bg-secondary-raw: 22,27,41;
+  --s-color-bg-body: #111520;
+  --s-color-bg-body-raw: 17,21,32;
+  --s-color-bg-content-base: #141926;
+  --s-color-bg-base: #161b29;
+  --s-color-bg-float: #1d2334;
+  --s-color-bg-float-raw: 29,35,52;
+  --s-color-bg-dialogs: #1d2334;
+  --s-color-bg-intact-primary: #1d2334;
+  --s-color-brand-primary-default: #818cf8;
+  --s-color-brand-primary-default-raw: 129,140,248;
+  --input-guidance-input-container-background: #1d2334;
+  --input-guidance-input-container-border-color: rgba(129, 140, 248, 0.34);
   --semi-color-bg-0: #111520;
   --semi-color-bg-1: #161b29;
+  --semi-color-bg-2: #1d2334;
+  --semi-color-bg-3: #1d2334;
   color-scheme: dark;
 }
 
 /* Shared themed surface overrides for all non-default themes */
 html[data-dbx-theme] body,
-html[data-dbx-theme] main,
-html[data-dbx-theme] [data-dbx-surface="canvas"] {
+html[data-dbx-theme] main {
   background-color: var(--dbx-theme-bg) !important;
 }
-html[data-dbx-theme] [data-dbx-surface="fade-mask"],
 html[data-dbx-theme] [data-dbx-surface="composer-dock"] {
   background-image: none !important;
   background-color: transparent !important;
@@ -542,25 +730,12 @@ html[data-dbx-theme] [data-dbx-surface="sidebar"] {
   background-color: var(--dbx-theme-sidebar) !important;
   border-color: var(--dbx-theme-border) !important;
 }
-html[data-dbx-theme] [data-dbx-surface="sidebar-active"] {
-  background-color: var(--dbx-theme-card-active) !important;
-  box-shadow: 0 1px 4px var(--dbx-theme-shadow) !important;
-}
-html[data-dbx-theme] [data-dbx-surface="topbar"] {
-  background-color: var(--dbx-theme-topbar) !important;
-  border-bottom-color: var(--dbx-theme-border) !important;
-}
 html[data-dbx-theme] [data-dbx-surface="composer"] {
   background-color: var(--dbx-theme-card) !important;
   border-color: var(--dbx-theme-border-strong) !important;
   box-shadow: 0 4px 20px var(--dbx-theme-shadow) !important;
 }
-html[data-dbx-theme] [data-dbx-surface="composer-inner"] {
-  background-color: transparent !important;
-  border-color: var(--dbx-theme-border-strong) !important;
-}
-html[data-dbx-theme] [data-dbx-surface="composer"]:focus-within,
-html[data-dbx-theme] [data-dbx-surface="composer"]:focus-within [data-dbx-surface="composer-inner"] {
+html[data-dbx-theme] [data-dbx-surface="composer"]:focus-within {
   border-color: var(--dbx-accent) !important;
   box-shadow: 0 0 0 2px var(--dbx-accent-soft) !important;
 }
@@ -1348,7 +1523,7 @@ html[data-dbx-theme="midnight"] [data-message-id] code {
   padding: 0 2px;
   width: 100%;
   box-sizing: border-box;
-  z-index: 20;
+  z-index: 5;
 }
 
 .dbx-quick-chip {
