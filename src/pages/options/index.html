@@ -5,54 +5,182 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Better Doubao - Settings</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
     }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161920;
+        --surface: #1f232c;
+        --text: #f3f4f6;
+        --muted: #9ca3af;
+        --border: #363c4a;
+        --accent: #818cf8;
+        --accent-soft: rgba(129, 140, 248, 0.16);
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      min-width: 600px;
-      padding: 24px;
+      min-height: 100vh;
+      padding: 32px 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #ffffff;
+      background: var(--bg);
+      color: var(--text);
     }
-    .header {
-      margin-bottom: 24px;
-    }
-    .title {
-      font-size: 20px;
-      font-weight: 600;
-      color: #1f2937;
-      margin-bottom: 4px;
-    }
-    .desc {
-      font-size: 14px;
-      color: #6b7280;
-    }
+    .container { max-width: 680px; margin: 0 auto; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
+    .title { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+    .desc { font-size: 13px; color: var(--muted); }
     .section {
-      padding: 16px;
-      background: #f9fafb;
-      border-radius: 8px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
       margin-bottom: 16px;
     }
-    .section-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: #1f2937;
-      margin-bottom: 8px;
+    .section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
     }
+    .row:first-of-type { border-top: none; padding-top: 4px; }
+    .row:last-of-type { padding-bottom: 4px; }
+    .row-title { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+    .row-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+    .toggle input:checked + .slider { background: var(--accent); }
+    .toggle input:checked + .slider::before { transform: translateX(18px); }
+    .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .status { font-size: 12px; color: var(--accent); opacity: 0; transition: opacity 0.2s; }
+    .status.visible { opacity: 1; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="title">Better Doubao - Settings</div>
-    <div class="desc">自定义您的豆包浏览体验</div>
+  <div class="container">
+    <div class="header">
+      <div>
+        <div class="title">Better Doubao 设置</div>
+        <div class="desc">v2.0.0 · 按需开启或关闭各增强模块（修改后刷新豆包页面生效）</div>
+      </div>
+      <span id="status" class="status" role="status"></span>
+    </div>
+
+    <div class="section">
+      <div class="section-title">功能模块开关</div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">侧边栏快捷图标栏</div>
+          <div class="row-desc">将左侧边栏常用原生入口收纳为横排图标，减少信息密度。</div>
+        </div>
+        <label class="toggle"><input id="enableSidebarLauncher" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">右侧快速定位器</div>
+          <div class="row-desc">在对话右侧显示用户消息定位圆点，支持当前阅读位置指示与消息收藏。</div>
+        </div>
+        <label class="toggle"><input id="enableQuickLocator" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">长对话自动全量索引</div>
+          <div class="row-desc">进入虚拟列表长对话时自动扫描定位点（手动滚动会立即中止）；关闭则仅按当前可见内容增量记录。</div>
+        </div>
+        <label class="toggle"><input id="autoIndexLongChat" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">语料板、文字高亮与随手工具</div>
+          <div class="row-desc">启用悬浮工具菜单（语料板、对话搜索、高亮与收藏目录、JSON 备份恢复）及划词工具条。</div>
+        </div>
+        <label class="toggle"><input id="enableCorpusAndHighlight" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">旧文件夹（过渡）</div>
+          <div class="row-desc">在侧边栏「项目」下方保留插件文件夹区域，原有归类数据不会丢失。</div>
+        </div>
+        <label class="toggle"><input id="enableFolderManager" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">多格式对话导出</div>
+          <div class="row-desc">在顶部导航栏提供 PDF / TXT / Markdown 导出入口。</div>
+        </div>
+        <label class="toggle"><input id="enableExport" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="row-title">LaTeX 公式下载与复制</div>
+          <div class="row-desc">自动识别页面数学公式与 LaTeX 代码块，提供一键复制与 .tex 下载按钮。</div>
+        </div>
+        <label class="toggle"><input id="enableLatexDownloader" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">数据与隐私说明</div>
+      <p class="row-desc">
+        所有文件夹、语料、高亮、收藏及扩展设置仅存储在浏览器扩展本地存储（<code>chrome.storage.local</code>）中，不向任何第三方服务器上传。建议在豆包页面的「随手工具 → 数据备份与恢复」定期导出 JSON 备份。
+      </p>
+      <div class="actions">
+        <button id="reset-btn" type="button" class="btn">恢复默认设置</button>
+      </div>
+    </div>
   </div>
-  <div class="section">
-    <div class="section-title">文件夹功能</div>
-    <p style="font-size: 13px; color: #6b7280;">
-      在豆包侧边栏创建文件夹，将聊天记录拖入进行分类管理。
-    </p>
-  </div>
+  <script type="module" src="./index.ts"></script>
 </body>
 </html>

@@ -44,10 +44,16 @@ export interface TextHighlight {
   createdAt: number;
 }
 
+export interface StarredMessageMeta {
+  messageId?: string;
+  text: string;
+}
+
 export interface FolderData {
   folders: Folder[];
   folderContents: Record<string, ConversationReference[]>;
   starredMessages: Record<string, number[]>;
+  starredMeta?: Record<string, Record<number, StarredMessageMeta>>;
   corpusBoard: CorpusItem[];
   textHighlights?: TextHighlight[];
   sectionCollapsed?: boolean;

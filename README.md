@@ -1,8 +1,21 @@
+<div align="center">
+
 # Better Doubao
 
-> 🔥 灵感来源于 [gemini-voyage](https://github.com/Nagi-ovo/gemini-voyager)，感谢作者的开源贡献！
+**增强豆包网页版体验的开源浏览器扩展 · 随手工具 · 对话搜索 · 多色高亮 · 语料板 · 快速定位 · 多格式导出**
 
-A powerful browser extension to enhance your Doubao chat experience
+[![CI](https://github.com/Rex16200513/Better_Doubao/actions/workflows/ci.yml/badge.svg)](https://github.com/Rex16200513/Better_Doubao/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Rex16200513/Better_Doubao?label=Release&color=4f46e5)](https://github.com/Rex16200513/Better_Doubao/releases/latest)
+[![Edge Add-ons](https://img.shields.io/badge/Edge_Add--ons-Available-0078D7?logo=microsoftedge&logoColor=white)](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN)
+[![Manifest V3](https://img.shields.io/badge/Manifest-V3-22c55e)](chrome/manifest.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[下载安装包](#安装使用) · [Edge 插件商店](https://microsoftedge.microsoft.com/addons/detail/better-doubao/ehkiambnigofgjbodfabknebbmlkblpd?hl=zh-CN) · [2.0 更新说明](#20-版本更新) · [问题反馈](https://github.com/Rex16200513/Better_Doubao/issues/new/choose)
+
+</div>
+
+> 🔥 灵感来源于 [gemini-voyage](https://github.com/Nagi-ovo/gemini-voyager)，感谢作者的开源贡献！
 
 ## 📢 现已在微软商店成功上线！
 
@@ -177,50 +190,58 @@ A powerful browser extension to enhance your Doubao chat experience
 
 ### 项目结构
 
-```
+```text
 better-doubao/
+├── .github/
+│   ├── workflows/ci.yml        # GitHub Actions CI（类型检查 / 测试 / 双端构建）
+│   ├── ISSUE_TEMPLATE/         # Issue 表单模板
+│   └── PULL_REQUEST_TEMPLATE.md
 ├── src/                        # 共享源代码
 │   ├── core/                   # 核心模块
 │   │   ├── services/
-│   │   │   └── StorageService.ts
+│   │   │   ├── StorageService.ts
+│   │   │   ├── SettingsService.ts
+│   │   │   └── PageLifecycle.ts
 │   │   ├── types/
-│   │   │   └── folder.ts
+│   │   │   ├── folder.ts
+│   │   │   └── settings.ts
+│   │   ├── utils/
+│   │   │   ├── dom.ts
+│   │   │   └── ui.ts
 │   │   └── index.ts
 │   ├── features/               # 功能模块
-│   │   ├── quicklocator/       # 快速定位
-│   │   ├── folder/            # 文件夹管理
-│   │   ├── corpusboard/       # 语料板
-│   │   ├── export/            # 导出功能
-│   │   └── latex/             # LaTeX 公式下载
+│   │   ├── tools/              # 统一随手工具菜单（搜索 / 目录 / 备份）
+│   │   ├── sidebar/            # 侧边栏快捷入口收纳
+│   │   ├── quicklocator/       # 快速定位（兼容虚拟列表）
+│   │   ├── folder/             # 旧文件夹管理（过渡）
+│   │   ├── corpusboard/        # 语料板与文字高亮引擎
+│   │   ├── export/             # 多格式导出（PDF / TXT / Markdown）
+│   │   └── latex/              # LaTeX 公式下载与复制
 │   ├── pages/
-│   │   ├── content/            # 内容脚本
-│   │   ├── background/        # 后台脚本
-│   │   ├── popup/             # 弹出页面
-│   │   └── options/           # 设置页面
+│   │   ├── content/            # 内容脚本入口
+│   │   ├── background/         # Background Service Worker
+│   │   ├── popup/              # 扩展弹出页面
+│   │   └── options/            # 扩展设置页面（功能开关）
 │   └── assets/
 │       └── styles/
 │           └── content.css
-│
-├── chrome/                     # Chrome 版本配置
-│   ├── manifest.json          # Chrome 专用清单
-│   ├── vite.config.ts        # Chrome 专用构建配置
-│   └── dist/                  # Chrome 构建输出 (gitignore)
-│
-├── edge/                       # Edge 版本配置
-│   ├── manifest.json          # Edge 专用清单
-│   ├── vite.config.ts        # Edge 专用构建配置
-│   └── dist/                  # Edge 构建输出 (gitignore)
-│
+├── tests/                      # 自动化测试与构建产物校验
+│   ├── build-artifacts.mjs
+│   ├── review-regressions.mjs
+│   └── unit.mjs
+├── chrome/                     # Chrome Manifest V3 配置与构建输出
+├── edge/                       # Edge Manifest V3 配置与构建输出
 └── package.json
 ```
 
 ### 技术栈
 
-- **语言**: TypeScript
-- **构建工具**: Vite + @crxjs/vite-plugin
-- **浏览器 API**: Chrome Extension Manifest V3
-- **存储**: chrome.storage.local
-- **样式**: 原生 CSS
+- **语言**: TypeScript (Strict Mode)
+- **构建工具**: Vite + `@crxjs/vite-plugin`
+- **浏览器 API**: Chrome / Edge Extension Manifest V3
+- **存储**: `chrome.storage.local`（纯本地扩展私有存储，不上传数据）
+- **样式**: 原生 CSS + CSS Variables（支持浅色 / 深色模式）
+- **自动化检查**: GitHub Actions CI（Node 20 / 22 矩阵：`typecheck` + `test` + `build`）
 
 ---
 
@@ -276,14 +297,21 @@ npm run dev
 npm run dev:chrome
 npm run dev:edge
 
-# 同时构建 Chrome 和 Edge
-npm run build
-
 # 类型检查
 npm run typecheck
+
+# 运行回归测试与单元测试
+npm test
+
+# 同时构建 Chrome 和 Edge 并校验构建产物完整性
+npm run build
 ```
 
 ---
+
+## 贡献与反馈
+
+欢迎提交 [Issue](https://github.com/Rex16200513/Better_Doubao/issues/new/choose) 反馈问题或提出功能建议，也欢迎 Fork 仓库后提交 Pull Request（提交前请确保 `npm run typecheck && npm test && npm run build` 全部通过）。
 
 ## 许可证
 

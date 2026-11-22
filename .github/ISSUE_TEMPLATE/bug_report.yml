@@ -1,0 +1,47 @@
+name: Bug Report
+description: 反馈 Better Doubao 的问题或异常行为
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈！请提供以下信息以便快速定位问题（请勿粘贴敏感对话内容或 Cookie）。
+  - type: dropdown
+    id: browser
+    attributes:
+      label: 浏览器
+      options:
+        - Google Chrome
+        - Microsoft Edge
+        - 其他 Chromium 内核浏览器
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 扩展版本
+      placeholder: 例如 v2.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 清晰描述发生了什么，以及你期望的行为。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开豆包对话页...
+        2. 点击...
+        3. 观察到...
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息（截图 / 控制台报错）
+      description: 如方便，可附带页面截图或 DevTools Console 报错信息。

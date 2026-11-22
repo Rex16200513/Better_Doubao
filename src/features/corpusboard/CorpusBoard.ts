@@ -1,5 +1,9 @@
 import { storageService } from '../../core/services/StorageService';
-import type { CorpusItem, TextHighlight } from '../../core/types/folder';
+import { pageLifecycle } from '../../core/services/PageLifecycle';
+import { escapeHTML, getConversationId } from '../../core/utils/dom';
+import { showConfirmDialog, showToast } from '../../core/utils/ui';
+import type { CorpusItem } from '../../core/types/folder';
+import { textHighlighter } from './TextHighlighter';
 
 export class CorpusBoard {
   private triggerBtn: HTMLElement | null = null;
@@ -12,26 +16,21 @@ export class CorpusBoard {
   private positionX = 0;
   private positionY = 0;
   private corpusItems: CorpusItem[] = [];
-  private highlightObserver: MutationObserver | null = null;
+  private unsubscribeDom: (() => void) | null = null;
+  private unsubscribeUrl: (() => void) | null = null;
   private highlightRestoreTimer: number | null = null;
-  private highlightUrlTimer: number | null = null;
-  private lastHighlightUrl = '';
-  private isRestoringHighlights = false;
   private highlightPaletteResizeHandler: (() => void) | null = null;
   private positionResizeHandler: (() => void) | null = null;
 
   init(): void {
     if (this.initialized) return;
 
-    console.log('[CorpusBoard] Initializing...');
-    
     this.loadCorpusItems();
     this.createTriggerButton();
     this.setupTextSelectionListener();
     this.setupHighlightPersistence();
     this.setupPositionTracking();
     this.initialized = true;
-    console.log('[CorpusBoard] Initialized, trigger button:', this.triggerBtn);
     
     setTimeout(() => {
       this.recalculatePosition();
@@ -42,14 +41,12 @@ export class CorpusBoard {
     // 页面初次加载时输入框可能尚未渲染，2 秒后用真实输入框位置校正。
     // 但若用户已拖动自定义过位置（localStorage 有记录），则尊重用户偏好不覆盖。
     if (localStorage.getItem('dbx_corpus_trigger_pos')) {
-      console.log('[CorpusBoard] User has custom position, skip recalculation');
       return;
     }
     const newPos = this.getDefaultPosition();
     this.positionX = newPos.x;
     this.positionY = newPos.y;
     this.applyTriggerPosition();
-    console.log('[CorpusBoard] Position recalculated to:', newPos);
   }
 
   private async loadCorpusItems(): Promise<void> {
@@ -65,9 +62,6 @@ export class CorpusBoard {
  
   private createTriggerButton(): void {
     if (this.triggerBtn) return;
-
-    console.log('[CorpusBoard] Creating trigger button...');
-    console.log('[CorpusBoard] document.body exists:', !!document.body);
 
     const savedPos = this.loadPosition();
     this.positionX = savedPos.x;
@@ -91,8 +85,6 @@ export class CorpusBoard {
     this.applyTriggerPosition();
     this.triggerBtn.style.display = 'flex';
 
-    console.log('[CorpusBoard] Trigger button created, in DOM:', document.body?.contains(this.triggerBtn));
-
     this.triggerBtn.addEventListener('click', () => {
       if (!this.isDragging) {
         document.dispatchEvent(new CustomEvent('dbx-toggle-tools'));
@@ -102,7 +94,6 @@ export class CorpusBoard {
     this.setupDrag();
 
     document.body.appendChild(this.triggerBtn);
-    console.log('[CorpusBoard] Trigger button appended to body');
   }
 
   private getTriggerStyles(): string {
@@ -111,14 +102,15 @@ export class CorpusBoard {
       z-index: 9998;
       width: 44px;
       height: 44px;
-      background: #fff;
+      background: var(--dbx-surface, #fff);
+      border: 1px solid var(--dbx-border, transparent);
       border-radius: 10px;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--dbx-shadow, 0 2px 12px rgba(0, 0, 0, 0.15));
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: grab;
-      color: #666;
+      color: var(--dbx-text-secondary, #666);
       transition: box-shadow 0.2s, transform 0.1s;
       user-select: none;
     `;
@@ -184,11 +176,9 @@ export class CorpusBoard {
 
   private loadPosition(): { x: number; y: number } {
     const defaultPos = this.getDefaultPosition();
-    console.log('[CorpusBoard] Default position calculated:', defaultPos);
 
     try {
       const saved = localStorage.getItem('dbx_corpus_trigger_pos');
-      console.log('[CorpusBoard] Loaded position from localStorage:', saved);
       if (saved) {
         const pos = JSON.parse(saved);
         // 旧版本只保存 x/y，页面改版后这些坐标已失去锚点意义，自动重置一次。
@@ -198,17 +188,14 @@ export class CorpusBoard {
         }
         // 用户自定义过的位置，需保证按钮（44x44）完整落在视口内才保留
         if (pos.x >= 0 && pos.x + 44 <= window.innerWidth && pos.y >= 0 && pos.y + 44 <= window.innerHeight) {
-          console.log('[CorpusBoard] Using saved position:', pos);
           return pos;
         } else {
-          console.log('[CorpusBoard] Saved position out of bounds, recalculating');
           localStorage.removeItem('dbx_corpus_trigger_pos');
         }
       }
-    } catch (e) {
-      console.log('[CorpusBoard] Error loading position:', e);
+    } catch {
+      // Ignore malformed stored position
     }
-    console.log('[CorpusBoard] Using default position');
     return defaultPos;
   }
 
@@ -323,9 +310,10 @@ export class CorpusBoard {
       top: ${top}px;
       width: ${panelWidth}px;
       max-height: ${panelHeight}px;
-      background: #fff;
+      background: var(--dbx-surface, #fff);
+      color: var(--dbx-text-primary, #1f2937);
       border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--dbx-shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.15));
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -362,12 +350,12 @@ export class CorpusBoard {
           </div>
         ` : ''}
         ${this.corpusItems.map(item => `
-          <div class="dbx-corpus-item ${item.selected ? 'selected' : ''}" data-id="${item.id}">
+          <div class="dbx-corpus-item ${item.selected ? 'selected' : ''}" data-id="${escapeHTML(item.id)}">
             <div class="dbx-corpus-item-checkbox">
               <input type="checkbox" ${item.selected ? 'checked' : ''}>
             </div>
             <div class="dbx-corpus-item-body">
-              <div class="dbx-corpus-item-content">${this.escapeHtml(item.text)}</div>
+              <div class="dbx-corpus-item-content">${escapeHTML(item.text)}</div>
             </div>
             <button class="dbx-corpus-item-remove" title="删除">×</button>
           </div>
@@ -426,10 +414,35 @@ export class CorpusBoard {
     });
   }
 
-  private escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  private isInChatMessageArea(el: Element | null): boolean {
+    if (!el) return false;
+    const testid = el.getAttribute('data-testid') || '';
+    let className = '';
+    try {
+      className = (el as HTMLElement).className?.toString() || '';
+    } catch {
+      className = '';
+    }
+
+    if (
+      testid.includes('message') ||
+      testid.includes('message-list') ||
+      testid.includes('message_content') ||
+      testid.includes('message_text') ||
+      className.includes('message-list') ||
+      className.includes('message-block')
+    ) {
+      return true;
+    }
+
+    if (
+      el.classList.contains('flow-markdown-body') ||
+      el.closest('[data-testid="message-list"]')
+    ) {
+      return true;
+    }
+
+    return this.isInChatMessageArea(el.parentElement);
   }
 
   private updateTriggerCount(): void {
@@ -452,12 +465,9 @@ export class CorpusBoard {
     let hideTimeout: number | null = null;
     let savedSelectionText: string = '';
     let savedSelectionRange: Range | null = null;
-    let selectedHighlightColor = '#fde047';
-    console.log('[CorpusBoard] Setting up text selection listener');
+    let selectedHighlightColor = '#FDEB00';
 
     const showSelectionButton = (selection: Selection, text: string) => {
-      console.log('[CorpusBoard] showSelectionButton called', text);
-      
       if (!text || text.trim().length === 0) {
         if (selectionButton) {
           selectionButton.style.display = 'none';
@@ -466,50 +476,19 @@ export class CorpusBoard {
       }
 
       savedSelectionText = text;
-      console.log('[CorpusBoard] Saved selection text:', savedSelectionText);
       
       const range = selection.getRangeAt(0);
       savedSelectionRange = range.cloneRange();
       const rect = range.getBoundingClientRect();
-      console.log('[CorpusBoard] Selection rect:', rect);
       
       const container = range.commonAncestorContainer;
       const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
 
       if (!containerEl || containerEl.closest('.dbx-popup-content')) {
-        console.log('[CorpusBoard] Selection in dbx-popup-content, not showing button');
         return;
       }
       
-      const isInChatMessageArea = (el: Element | null): boolean => {
-        if (!el) return false;
-        const testid = el.getAttribute('data-testid') || '';
-        let className = '';
-        try {
-          className = (el as HTMLElement).className?.toString() || '';
-        } catch (e) {
-          className = '';
-        }
-        
-        if (testid.includes('message') || 
-            testid.includes('message-list') ||
-            testid.includes('message_content') ||
-            testid.includes('message_text') ||
-            className.includes('message-list') ||
-            className.includes('message-block')) {
-          return true;
-        }
-        
-        if (el.classList.contains('flow-markdown-body') ||
-            el.closest('[data-testid="message-list"]')) {
-          return true;
-        }
-        
-        return isInChatMessageArea(el.parentElement);
-      };
-      
-      if (!isInChatMessageArea(containerEl)) {
-        console.log('[CorpusBoard] Selection not in chat message area, not showing button');
+      if (!this.isInChatMessageArea(containerEl)) {
         return;
       }
       
@@ -612,36 +591,9 @@ const highlightAction = selectionButton.querySelector(
 const applyHighlight = async (color: string) => {
   if (!savedSelectionRange || savedSelectionRange.collapsed) return;
 
-  const range = savedSelectionRange.cloneRange();
-  const root = this.findHighlightMessageRoot(range.startContainer);
-  const highlightData = this.createTextHighlightAnchor(range, color);
-  if (!root || !highlightData || !root.contains(range.endContainer)) {
-    console.warn('[CorpusBoard] Could not locate the selected message');
-    return;
-  }
-
   try {
-    await this.removeSelectedHighlightPortions(range.cloneRange());
-
-    const cleanRange = this.createRangeFromTextOffsets(
-      root,
-      highlightData.startOffset,
-      highlightData.endOffset
-    );
-    if (!cleanRange || cleanRange.toString() !== highlightData.text) {
-      console.warn('[CorpusBoard] Could not rebuild the selected range');
-      return;
-    }
-
-    const marks = this.wrapRangeWithHighlight(cleanRange, color);
-    if (marks.length === 0) return;
-
-    const item = await storageService.addTextHighlight(highlightData);
-    marks.forEach((mark) => {
-      mark.dataset.dbxHighlightId = item.id;
-      mark.dataset.dbxConversationId = item.conversationId;
-    });
-    await storageService.save();
+    const applied = await textHighlighter.applyHighlight(savedSelectionRange, color);
+    if (!applied) return;
 
     window.getSelection()?.removeAllRanges();
     selectionButton!.style.display = 'none';
@@ -742,7 +694,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   e.stopPropagation();
 
   if (!savedSelectionRange) return;
-  await this.removeSelectedHighlightPortions(savedSelectionRange.cloneRange());
+  await textHighlighter.removeSelectedHighlightPortions(savedSelectionRange.cloneRange());
 
   window.getSelection()?.removeAllRanges();
   selectionButton!.style.display = 'none';
@@ -753,9 +705,6 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         document.body.appendChild(selectionButton);
       }
 
-      const buttonRect = selectionButton.getBoundingClientRect();
-      const left = rect.left + rect.width / 2 - buttonRect.width / 2;
-      const top = rect.bottom + 8;
       const palette = selectionButton.querySelector(
         '.dbx-highlight-palette'
       ) as HTMLElement | null;
@@ -768,9 +717,19 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       }
       menuToggle?.classList.remove('is-open');
 
-      selectionButton.style.left = `${Math.max(8, left)}px`;
-      selectionButton.style.top = `${Math.min(top, window.innerHeight - 40)}px`;
+      // Show invisibly first so getBoundingClientRect() returns real dimensions even on first open.
+      selectionButton.style.visibility = 'hidden';
       selectionButton.style.display = 'flex';
+      const buttonRect = selectionButton.getBoundingClientRect();
+      const rawLeft = rect.left + rect.width / 2 - buttonRect.width / 2;
+      const maxLeft = Math.max(8, window.innerWidth - buttonRect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - buttonRect.height - 8);
+      const left = Math.min(Math.max(8, rawLeft), maxLeft);
+      const top = Math.min(Math.max(8, rect.bottom + 8), maxTop);
+
+      selectionButton.style.left = `${left}px`;
+      selectionButton.style.top = `${top}px`;
+      selectionButton.style.visibility = 'visible';
     };
 
     document.addEventListener('mouseup', (e: MouseEvent) => {
@@ -786,7 +745,6 @@ removeHighlightButton?.addEventListener('click', async (e) => {
 
       const selection = window.getSelection();
       const selectedText = selection?.toString().trim() || '';
-      console.log('[CorpusBoard] mouseup, selection text:', selectedText);
       
       if (selectedText.length > 0) {
         const range = selection!.getRangeAt(0);
@@ -794,51 +752,13 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         const containerEl = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
         
         if (containerEl) {
-              console.log('[CorpusBoard] Selection container:', containerEl.tagName, containerEl.className);
-              
-              if (containerEl.closest('.dbx-popup-content')) {
-                console.log('[CorpusBoard] Selection in dbx-popup-content');
-                if (selectionButton) {
-                  selectionButton.style.display = 'none';
-                }
-                return;
-              }
-              
-              const isInChatMessageArea = (el: Element | null): boolean => {
-                if (!el) return false;
-                const testid = el.getAttribute('data-testid') || '';
-                let className = '';
-                try {
-                  className = (el as HTMLElement).className?.toString() || '';
-                } catch (e) {
-                  className = '';
-                }
-                
-                if (testid.includes('message') || 
-                    testid.includes('message-list') ||
-                    testid.includes('message_content') ||
-                    testid.includes('message_text') ||
-                    className.includes('message-list') ||
-                    className.includes('message-block')) {
-                  return true;
-                }
-                
-                if (el.classList.contains('flow-markdown-body') ||
-                    el.closest('[data-testid="message-list"]')) {
-                  return true;
-                }
-                
-                return isInChatMessageArea(el.parentElement);
-              };
-              
-              if (!isInChatMessageArea(containerEl)) {
-                console.log('[CorpusBoard] Selection not in chat message area');
-                if (selectionButton) {
-                  selectionButton.style.display = 'none';
-                }
-                return;
-              }
+          if (containerEl.closest('.dbx-popup-content') || !this.isInChatMessageArea(containerEl)) {
+            if (selectionButton) {
+              selectionButton.style.display = 'none';
+            }
+            return;
           }
+        }
         
         showSelectionButton(selection!, selectedText);
       } else {
@@ -853,79 +773,34 @@ removeHighlightButton?.addEventListener('click', async (e) => {
     document.addEventListener('mousedown', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       
-      const isInChatMessageArea = (el: Element | null): boolean => {
-        if (!el) return false;
-        const testid = el.getAttribute('data-testid') || '';
-        let className = '';
-        try {
-          className = (el as HTMLElement).className?.toString() || '';
-        } catch (e) {
-          className = '';
-        }
-        
-        if (testid.includes('message') || 
-            testid.includes('message-list') ||
-            testid.includes('message_content') ||
-            testid.includes('message_text') ||
-            className.includes('message-list') ||
-            className.includes('message-block')) {
-          return true;
-        }
-        
-        if (el.classList.contains('flow-markdown-body') ||
-            el.closest('[data-testid="message-list"]')) {
-          return true;
-        }
-        
-        return isInChatMessageArea(el.parentElement);
-      };
-      
       const isInCorpusUI = target.closest('.dbx-corpus-selection-btn') || 
                           target.closest('.dbx-corpus-panel') || 
                           target.closest('.dbx-corpus-trigger');
       
       const inPopup = target.closest('.dbx-popup-content');
       
-      if (!isInCorpusUI && !isInChatMessageArea(target) && !inPopup && selectionButton) {
+      if (!isInCorpusUI && !this.isInChatMessageArea(target) && !inPopup && selectionButton) {
         selectionButton.style.display = 'none';
       }
     });
   }
 
   private setupHighlightPersistence(): void {
-    this.lastHighlightUrl = window.location.href;
     this.scheduleHighlightRestore(300);
 
-    this.highlightObserver = new MutationObserver((mutations) => {
-      if (window.location.href !== this.lastHighlightUrl) {
-        void this.handleHighlightConversationChange();
-        return;
-      }
-
-      const hasPageChanges = mutations.some(
-        mutation => mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0
-      );
-
-      if (hasPageChanges) {
-        this.scheduleHighlightRestore(350);
-      }
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
+      void this.handleHighlightConversationChange();
     });
 
-    this.highlightObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-
-    this.highlightUrlTimer = window.setInterval(() => {
-      if (window.location.href !== this.lastHighlightUrl) {
-        void this.handleHighlightConversationChange();
-      }
-    }, 1000);
+    this.unsubscribeDom?.();
+    this.unsubscribeDom = pageLifecycle.onDomChange(() => {
+      this.scheduleHighlightRestore(350);
+    }, 150);
   }
 
   private async handleHighlightConversationChange(): Promise<void> {
-    this.lastHighlightUrl = window.location.href;
-    this.clearRenderedHighlights();
+    textHighlighter.clearRenderedHighlights();
     await this.loadCorpusItems();
     this.updateTriggerCount();
     this.scheduleHighlightRestore(500);
@@ -938,463 +813,8 @@ removeHighlightButton?.addEventListener('click', async (e) => {
 
     this.highlightRestoreTimer = window.setTimeout(() => {
       this.highlightRestoreTimer = null;
-      void this.restoreTextHighlights();
+      void textHighlighter.restoreTextHighlights();
     }, delay);
-  }
-
-  private async restoreTextHighlights(): Promise<void> {
-    if (this.isRestoringHighlights) return;
-
-    const conversationId = this.getConversationId();
-    if (conversationId === 'unknown') return;
-
-    this.isRestoringHighlights = true;
-
-    try {
-      const highlights = await storageService.getTextHighlights(conversationId);
-
-      for (const highlight of highlights) {
-        const alreadyRendered = Array.from(
-          document.querySelectorAll<HTMLElement>('.dbx-text-highlight')
-        ).some(mark => mark.dataset.dbxHighlightId === highlight.id);
-
-        if (alreadyRendered) continue;
-
-        const root = this.findRootForSavedHighlight(highlight);
-        if (!root) continue;
-
-        const startOffset = this.findSavedHighlightOffset(root, highlight);
-        if (startOffset === null) continue;
-
-        const range = this.createRangeFromTextOffsets(
-          root,
-          startOffset,
-          startOffset + highlight.text.length
-        );
-        if (!range || range.toString() !== highlight.text) continue;
-
-        const marks = this.wrapRangeWithHighlight(range, highlight.color);
-        if (marks.length === 0) continue;
-
-        marks.forEach((mark) => {
-          mark.dataset.dbxHighlightId = highlight.id;
-          mark.dataset.dbxConversationId = highlight.conversationId;
-        });
-      }
-    } catch (error) {
-      console.error('[CorpusBoard] Failed to restore text highlights:', error);
-    } finally {
-      this.isRestoringHighlights = false;
-    }
-  }
-
-  private createTextHighlightAnchor(
-    range: Range,
-    color: string
-  ): Omit<TextHighlight, 'id' | 'createdAt'> | null {
-    const root = this.findHighlightMessageRoot(range.startContainer);
-    if (!root || !root.contains(range.endContainer)) return null;
-
-    const text = range.toString();
-    if (!text) return null;
-
-    try {
-      const beforeRange = range.cloneRange();
-      beforeRange.selectNodeContents(root);
-      beforeRange.setEnd(range.startContainer, range.startOffset);
-
-      const startOffset = beforeRange.toString().length;
-      const endOffset = startOffset + text.length;
-      const rootText = root.textContent ?? '';
-      const roots = this.getHighlightMessageRoots();
-      const messageIndex = Math.max(0, roots.indexOf(root));
-
-      return {
-        conversationId: this.getConversationId(),
-        messageId: this.getHighlightMessageId(root),
-        messageIndex,
-        text,
-        startOffset,
-        endOffset,
-        prefix: rootText.slice(Math.max(0, startOffset - 48), startOffset),
-        suffix: rootText.slice(endOffset, endOffset + 48),
-        color,
-      };
-    } catch (error) {
-      console.error('[CorpusBoard] Failed to capture highlight position:', error);
-      return null;
-    }
-  }
-
-  private findHighlightMessageRoot(node: Node): HTMLElement | null {
-    const element = node.nodeType === Node.ELEMENT_NODE
-      ? node as Element
-      : node.parentElement;
-    if (!element) return null;
-
-    const contentRoot = element.closest<HTMLElement>(
-      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
-    );
-    if (contentRoot) return contentRoot;
-
-    const messageContainer = element.closest<HTMLElement>(
-      '[data-message-id], [data-testid="union_message"], [data-testid="message-block-container"], [class*="message-block"]'
-    );
-    if (!messageContainer) return null;
-
-    return messageContainer.querySelector<HTMLElement>(
-      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
-    ) ?? messageContainer;
-  }
-
-  private getHighlightMessageRoots(): HTMLElement[] {
-    const roots: HTMLElement[] = [];
-    const addRoot = (root: HTMLElement): void => {
-      if (root.closest('.dbx-corpus-selection-btn, .dbx-corpus-panel')) return;
-      if (!roots.includes(root)) {
-        roots.push(root);
-      }
-    };
-
-    document.querySelectorAll<HTMLElement>(
-      '[data-message-id], [data-testid="union_message"], [data-testid="message-block-container"]'
-    ).forEach((container) => {
-      const root = container.querySelector<HTMLElement>(
-        '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
-      ) ?? container;
-      addRoot(root);
-    });
-
-    document.querySelectorAll<HTMLElement>(
-      '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
-    ).forEach(addRoot);
-
-    return roots;
-  }
-
-  private getHighlightMessageId(root: HTMLElement): string | undefined {
-    const messageContainer = root.closest<HTMLElement>(
-      '[data-testid="union_message"], [data-testid="message-block-container"], [class*="message-block"]'
-    );
-    const messageElement = root.closest<HTMLElement>('[data-message-id]') ??
-      root.querySelector<HTMLElement>('[data-message-id]') ??
-      messageContainer?.querySelector<HTMLElement>('[data-message-id]');
-    return messageElement?.getAttribute('data-message-id') ?? undefined;
-  }
-
-  private findRootForSavedHighlight(highlight: TextHighlight): HTMLElement | null {
-    const roots = this.getHighlightMessageRoots();
-
-    if (highlight.messageId) {
-      const matchedById = roots.find(
-        root => this.getHighlightMessageId(root) === highlight.messageId
-      );
-      if (matchedById) return matchedById;
-    }
-
-    const indexedRoot = roots[highlight.messageIndex];
-    if (indexedRoot && this.findSavedHighlightOffset(indexedRoot, highlight) !== null) {
-      return indexedRoot;
-    }
-
-    return roots.find(
-      root => this.findSavedHighlightOffset(root, highlight) !== null
-    ) ?? null;
-  }
-
-  private findSavedHighlightOffset(
-    root: HTMLElement,
-    highlight: TextHighlight
-  ): number | null {
-    const rootText = root.textContent ?? '';
-    if (!highlight.text || !rootText.includes(highlight.text)) return null;
-
-    if (
-      rootText.slice(highlight.startOffset, highlight.endOffset) === highlight.text
-    ) {
-      return highlight.startOffset;
-    }
-
-    const fullContext = `${highlight.prefix}${highlight.text}${highlight.suffix}`;
-    const contextIndex = fullContext ? rootText.indexOf(fullContext) : -1;
-    if (contextIndex >= 0) {
-      return contextIndex + highlight.prefix.length;
-    }
-
-    let bestOffset: number | null = null;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    let searchFrom = 0;
-
-    while (searchFrom <= rootText.length) {
-      const offset = rootText.indexOf(highlight.text, searchFrom);
-      if (offset < 0) break;
-
-      const prefixMatches = !highlight.prefix ||
-        rootText.slice(Math.max(0, offset - highlight.prefix.length), offset)
-          .endsWith(highlight.prefix);
-      const suffixMatches = !highlight.suffix ||
-        rootText.slice(
-          offset + highlight.text.length,
-          offset + highlight.text.length + highlight.suffix.length
-        ).startsWith(highlight.suffix);
-      const distance = Math.abs(offset - highlight.startOffset);
-      const score = (prefixMatches ? 1000 : 0) +
-        (suffixMatches ? 1000 : 0) -
-        distance;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestOffset = offset;
-      }
-
-      searchFrom = offset + Math.max(1, highlight.text.length);
-    }
-
-    return bestOffset;
-  }
-
-  private createRangeFromTextOffsets(
-    root: HTMLElement,
-    startOffset: number,
-    endOffset: number
-  ): Range | null {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let currentOffset = 0;
-    let startNode: Text | null = null;
-    let endNode: Text | null = null;
-    let startInNode = 0;
-    let endInNode = 0;
-
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-      const nextOffset = currentOffset + node.data.length;
-
-      if (!startNode && startOffset >= currentOffset && startOffset <= nextOffset) {
-        startNode = node;
-        startInNode = startOffset - currentOffset;
-      }
-
-      if (!endNode && endOffset >= currentOffset && endOffset <= nextOffset) {
-        endNode = node;
-        endInNode = endOffset - currentOffset;
-      }
-
-      currentOffset = nextOffset;
-      if (startNode && endNode) break;
-    }
-
-    if (!startNode || !endNode) return null;
-
-    const range = document.createRange();
-    range.setStart(startNode, startInNode);
-    range.setEnd(endNode, endInNode);
-    return range;
-  }
-
-  private getTextPartsInRange(
-    range: Range
-  ): Array<{ node: Text; startOffset: number; endOffset: number }> {
-    const root =
-      range.commonAncestorContainer.nodeType === Node.TEXT_NODE
-        ? range.commonAncestorContainer.parentElement
-        : range.commonAncestorContainer;
-
-    if (!root) return [];
-
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const parts: Array<{ node: Text; startOffset: number; endOffset: number }> = [];
-
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-
-      try {
-        if (!range.intersectsNode(node)) continue;
-      } catch {
-        continue;
-      }
-
-      const startOffset = node === range.startContainer ? range.startOffset : 0;
-      const endOffset = node === range.endContainer ? range.endOffset : node.data.length;
-
-      if (endOffset <= startOffset) continue;
-      if (!node.data.slice(startOffset, endOffset).trim()) continue;
-
-      parts.push({ node, startOffset, endOffset });
-    }
-
-    return parts;
-  }
-
-  private wrapRangeWithHighlight(
-    range: Range,
-    color: string
-  ): HTMLElement[] {
-    try {
-      const parts = this.getTextPartsInRange(range);
-      const marks: HTMLElement[] = [];
-
-      [...parts].reverse().forEach(({ node, startOffset, endOffset }) => {
-        const mark = document.createElement('mark');
-        mark.className = 'dbx-text-highlight';
-        mark.style.backgroundColor = color;
-
-        const textRange = document.createRange();
-        textRange.setStart(node, startOffset);
-        textRange.setEnd(node, endOffset);
-
-        const contents = textRange.extractContents();
-        mark.appendChild(contents);
-        textRange.insertNode(mark);
-        marks.unshift(mark);
-      });
-
-      return marks;
-    } catch (error) {
-      console.error('[CorpusBoard] Failed to wrap highlighted text:', error);
-      return [];
-    }
-  }
-
-  private unwrapHighlight(mark: HTMLElement): void {
-    const parent = mark.parentNode;
-    if (!parent) return;
-
-    while (mark.firstChild) {
-      parent.insertBefore(mark.firstChild, mark);
-    }
-
-    mark.remove();
-    parent.normalize();
-  }
-
-  private async removeSelectedHighlightPortions(
-    selectionRange: Range
-  ): Promise<void> {
-    const selectionAnchor = this.createTextHighlightAnchor(selectionRange, '');
-    const root = this.findHighlightMessageRoot(selectionRange.startContainer);
-    if (!selectionAnchor || !root || !root.contains(selectionRange.endContainer)) {
-      return;
-    }
-
-    const allMarks = Array.from(
-      root.querySelectorAll<HTMLElement>('.dbx-text-highlight')
-    );
-    const directlySelectedMarks = allMarks.filter((mark) => {
-      try {
-        return selectionRange.intersectsNode(mark);
-      } catch {
-        return false;
-      }
-    });
-
-    if (directlySelectedMarks.length === 0) return;
-
-    try {
-      const savedHighlights = await storageService.getTextHighlights(
-        selectionAnchor.conversationId
-      );
-      const highlightsById = new Map(
-        savedHighlights.map(highlight => [highlight.id, highlight])
-      );
-      const remainingSegments: Array<{
-        startOffset: number;
-        endOffset: number;
-        color: string;
-      }> = [];
-      const removedIds = new Set<string>();
-      const marksToUnwrap = new Set<HTMLElement>();
-
-      directlySelectedMarks.forEach((mark) => {
-        const id = mark.dataset.dbxHighlightId;
-        const highlight = id ? highlightsById.get(id) : undefined;
-
-        if (!id || !highlight) {
-          marksToUnwrap.add(mark);
-          return;
-        }
-
-        if (removedIds.has(id)) return;
-
-        const overlapStart = Math.max(
-          highlight.startOffset,
-          selectionAnchor.startOffset
-        );
-        const overlapEnd = Math.min(
-          highlight.endOffset,
-          selectionAnchor.endOffset
-        );
-
-        if (overlapStart >= overlapEnd) return;
-
-        if (highlight.startOffset < overlapStart) {
-          remainingSegments.push({
-            startOffset: highlight.startOffset,
-            endOffset: overlapStart,
-            color: highlight.color,
-          });
-        }
-
-        if (overlapEnd < highlight.endOffset) {
-          remainingSegments.push({
-            startOffset: overlapEnd,
-            endOffset: highlight.endOffset,
-            color: highlight.color,
-          });
-        }
-
-        removedIds.add(id);
-      });
-
-      allMarks.forEach((mark) => {
-        const id = mark.dataset.dbxHighlightId;
-        if (id && removedIds.has(id)) {
-          marksToUnwrap.add(mark);
-        }
-      });
-
-      marksToUnwrap.forEach(mark => this.unwrapHighlight(mark));
-
-      await Promise.all(
-        Array.from(removedIds).map(id => storageService.removeTextHighlight(id))
-      );
-
-      remainingSegments.sort(
-        (a, b) => a.startOffset - b.startOffset
-      );
-
-      for (const segment of remainingSegments) {
-        if (segment.endOffset <= segment.startOffset) continue;
-
-        const range = this.createRangeFromTextOffsets(
-          root,
-          segment.startOffset,
-          segment.endOffset
-        );
-        if (!range || !range.toString()) continue;
-
-        const anchor = this.createTextHighlightAnchor(range, segment.color);
-        if (!anchor) continue;
-
-        const marks = this.wrapRangeWithHighlight(range, segment.color);
-        if (marks.length === 0) continue;
-
-        const item = await storageService.addTextHighlight(anchor);
-        marks.forEach((mark) => {
-          mark.dataset.dbxHighlightId = item.id;
-          mark.dataset.dbxConversationId = item.conversationId;
-        });
-      }
-
-      await storageService.save();
-    } catch (error) {
-      console.error('[CorpusBoard] Failed to partially remove highlight:', error);
-    }
-  }
-
-  private clearRenderedHighlights(): void {
-    document
-      .querySelectorAll<HTMLElement>('.dbx-text-highlight')
-      .forEach(mark => this.unwrapHighlight(mark));
   }
 
   private flashTriggerButton(): void {
@@ -1412,16 +832,11 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   private async addToCorpus(text: string): Promise<void> {
-    console.log('[CorpusBoard] addToCorpus called with text:', text);
-    
     const conversationId = this.getConversationId();
     const conversationTitle = this.getConversationTitle();
-    console.log('[CorpusBoard] conversationId:', conversationId, 'conversationTitle:', conversationTitle);
 
     try {
-      console.log('[CorpusBoard] Calling storageService.addToCorpusBoard...');
       const item = await storageService.addToCorpusBoard(text, conversationId, conversationTitle);
-      console.log('[CorpusBoard] Item added:', item);
       this.corpusItems.push(item);
       this.updateTriggerCount();
       
@@ -1448,10 +863,20 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   }
 
   private async clearCorpus(): Promise<void> {
+    if (this.corpusItems.length === 0) return;
+    const confirmed = await showConfirmDialog({
+      title: '清空语料板',
+      message: '确定清空当前对话的所有语料吗？',
+      confirmText: '清空',
+      danger: true,
+    });
+    if (!confirmed) return;
+
     try {
-      await storageService.clearCorpusBoard();
+      await storageService.clearCorpusBoard(this.getConversationId());
       this.corpusItems = [];
       this.updateTriggerCount();
+      showToast('已清空当前对话的语料', 'success');
       
       if (this.isExpanded && this.panel) {
         this.updatePanelContent();
@@ -1529,17 +954,14 @@ removeHighlightButton?.addEventListener('click', async (e) => {
         return rect.width > 0 && rect.height > 0;
       });
       if (el) {
-        console.log('[CorpusBoard] findInputArea found:', sel);
         return el;
       }
     }
-    console.log('[CorpusBoard] findInputArea: no element found');
     return null;
   }
 
   private getConversationId(): string {
-    const urlMatch = window.location.pathname.match(/\/chat\/([^/?#]+)/);
-    return urlMatch ? urlMatch[1] : 'unknown';
+    return getConversationId();
   }
 
   private getConversationTitle(): string {
@@ -1556,17 +978,13 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       window.removeEventListener('resize', this.highlightPaletteResizeHandler);
       this.highlightPaletteResizeHandler = null;
     }
-    if (this.highlightObserver) {
-      this.highlightObserver.disconnect();
-      this.highlightObserver = null;
-    }
+    this.unsubscribeDom?.();
+    this.unsubscribeDom = null;
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = null;
     if (this.highlightRestoreTimer) {
       clearTimeout(this.highlightRestoreTimer);
       this.highlightRestoreTimer = null;
-    }
-    if (this.highlightUrlTimer) {
-      clearInterval(this.highlightUrlTimer);
-      this.highlightUrlTimer = null;
     }
     if (this.triggerBtn) {
       this.triggerBtn.remove();

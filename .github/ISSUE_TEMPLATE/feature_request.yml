@@ -1,0 +1,24 @@
+name: Feature Request
+description: 为 Better Doubao 提出新功能或体验改进建议
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景 / 痛点
+      description: 描述你在使用豆包网页版时遇到的问题或需求。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案
+      description: 描述你希望扩展提供的交互或功能形态。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 其他补充
+      description: 如有参考产品、截图或草图，欢迎补充。

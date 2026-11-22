@@ -6,8 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
+    name: Typecheck, Test & Build (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -28,20 +33,22 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Build Chrome
-        run: npm run build:chrome
+      - name: Run regression and unit tests
+        run: npm test
 
-      - name: Build Edge
-        run: npm run build:edge
+      - name: Build Chrome & Edge and verify artifacts
+        run: npm run build
 
       - name: Upload Chrome artifact
         uses: actions/upload-artifact@v4
         with:
           name: better-doubao-chrome-node${{ matrix.node-version }}
           path: chrome/dist/
+          retention-days: 14
 
       - name: Upload Edge artifact
         uses: actions/upload-artifact@v4
         with:
           name: better-doubao-edge-node${{ matrix.node-version }}
           path: edge/dist/
+          retention-days: 14

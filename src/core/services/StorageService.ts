@@ -1,21 +1,47 @@
 import browser from 'webextension-polyfill';
-import type { FolderData, Folder, CorpusItem, TextHighlight, ConversationReference } from '../types/folder';
+import type { FolderData, Folder, CorpusItem, TextHighlight, ConversationReference, StarredMessageMeta } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
 const ACCOUNT_KEY = 'dvAccountId';
 
-function getCurrentAccountId(): string {
+function getStableAccountId(): string | null {
   try {
-    const keys = ['token', 'auth_token', 'accessToken', 'userInfo', 'user_id', 'accountId'];
+    const stableKeys = ['userInfo', 'user_id', 'accountId'];
+    for (const key of stableKeys) {
+      const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (!value) continue;
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.id) return `user_${parsed.id}`;
+          if (parsed.userId) return `user_${parsed.userId}`;
+          if (parsed.sub) return `user_${parsed.sub}`;
+        }
+      } catch {
+        const trimmed = value.trim();
+        if (trimmed && trimmed.length <= 128 && /^[\w@.-]+$/.test(trimmed)) {
+          return `user_${trimmed}`;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Storage] Failed to get stable account ID:', e);
+  }
+  return null;
+}
+
+function getLegacyAccountId(): string | null {
+  try {
+    const keys = ['token', 'auth_token', 'accessToken'];
     for (const key of keys) {
       const value = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (value) {
         try {
           const parsed = JSON.parse(value);
-          if (parsed.id) return `user_${parsed.id}`;
-          if (parsed.userId) return `user_${parsed.userId}`;
-          if (parsed.sub) return `user_${parsed.sub}`;
+          if (parsed?.id) return `user_${parsed.id}`;
+          if (parsed?.userId) return `user_${parsed.userId}`;
+          if (parsed?.sub) return `user_${parsed.sub}`;
         } catch {
           if (value.length > 10 && value.length < 200) {
             return `token_${key}_${value.substring(0, 50)}`;
@@ -34,9 +60,13 @@ function getCurrentAccountId(): string {
       }
     }
   } catch (e) {
-    console.warn('[Storage] Failed to get account ID:', e);
+    console.warn('[Storage] Failed to get legacy account ID:', e);
   }
-  return 'default';
+  return null;
+}
+
+function getCurrentAccountId(): string {
+  return getStableAccountId() ?? 'default';
 }
 
 function validateFolderData(data: unknown): data is FolderData {
@@ -70,6 +100,17 @@ export class StorageService {
       for (const c of entries) if (!c || !id(c.conversationId) || !safeString(c.title) || !safeString(c.url) || !number(c.addedAt)) return fail();
     }
     for (const [key, entries] of Object.entries(data.starredMessages)) if (!id(key) || !Array.isArray(entries) || !entries.every(n => Number.isSafeInteger(n) && n >= 0)) return fail();
+    if (data.starredMeta !== undefined) {
+      if (!data.starredMeta || typeof data.starredMeta !== 'object' || Array.isArray(data.starredMeta)) return fail();
+      for (const [convKey, metaMap] of Object.entries(data.starredMeta)) {
+        if (!id(convKey) || !metaMap || typeof metaMap !== 'object' || Array.isArray(metaMap)) return fail();
+        for (const [idxKey, meta] of Object.entries(metaMap)) {
+          if (!/^\d{1,7}$/.test(idxKey) || !meta || typeof meta !== 'object') return fail();
+          if (!safeString(meta.text) || meta.text.length > 500) return fail();
+          if (meta.messageId !== undefined && !id(meta.messageId)) return fail();
+        }
+      }
+    }
     for (const c of data.corpusBoard) if (!c || !id(c.id) || !id(c.conversationId) || !safeString(c.text) || !safeString(c.conversationTitle) || !number(c.addedAt)) return fail();
     for (const h of data.textHighlights ?? []) if (!h || !id(h.id) || !id(h.conversationId) || !safeString(h.text) || !safeString(h.prefix) || !safeString(h.suffix) || !color(h.color) || !number(h.startOffset) || !number(h.endOffset) || !number(h.messageIndex) || !number(h.createdAt)) return fail();
     return JSON.parse(JSON.stringify(data)) as FolderData;
@@ -109,7 +150,27 @@ export class StorageService {
     const key = this.getStorageKey();
     const backupKey = `${BACKUP_KEY}_${this.currentAccountId}`;
     const stored = await browser.storage.local.get([key, backupKey]);
-    const saved = validateFolderData(stored[key]) ? stored[key] : stored[backupKey];
+    let saved: unknown = validateFolderData(stored[key]) ? stored[key] : stored[backupKey];
+
+    // Transparently migrate extension-private data from legacy volatile token/cookie keys
+    // when no data exists under the stable account key yet.
+    if (!validateFolderData(saved)) {
+      const legacyId = getLegacyAccountId();
+      if (legacyId && legacyId !== this.currentAccountId) {
+        const legacyKey = `${STORAGE_KEY}_${legacyId}`;
+        const legacyBackupKey = `${BACKUP_KEY}_${legacyId}`;
+        const legacyStored = await browser.storage.local.get([legacyKey, legacyBackupKey]);
+        const legacySaved = validateFolderData(legacyStored[legacyKey])
+          ? legacyStored[legacyKey]
+          : legacyStored[legacyBackupKey];
+        if (validateFolderData(legacySaved)) {
+          saved = legacySaved;
+          this.data = { ...legacySaved, textHighlights: legacySaved.textHighlights ?? [] };
+          await this.persist();
+        }
+      }
+    }
+
     if (validateFolderData(saved)) {
       this.data = { ...saved, textHighlights: saved.textHighlights ?? [] };
     }
@@ -187,13 +248,13 @@ export class StorageService {
     this.debouncedSave();
   }
 
-  async addConversationToFolder(folderId: string, conversation: { conversationId: string; title: string; url: string; addedAt: number }): Promise<void> {
+  async addConversationToFolder(folderId: string, conversation: ConversationReference): Promise<void> {
     if (!this.data.folderContents[folderId]) {
       this.data.folderContents[folderId] = [];
     }
     const exists = this.data.folderContents[folderId].some(c => c.conversationId === conversation.conversationId);
     if (!exists) {
-      this.data.folderContents[folderId].push(conversation as any);
+      this.data.folderContents[folderId].push(conversation);
       this.debouncedSave();
     }
   }
@@ -250,7 +311,7 @@ export class StorageService {
     return folders;
   }
 
-  async getFolderContents(folderId: string): Promise<any[]> {
+  async getFolderContents(folderId: string): Promise<ConversationReference[]> {
     return this.data.folderContents[folderId] ?? [];
   }
 
@@ -258,23 +319,48 @@ export class StorageService {
     return this.data.starredMessages[conversationId] ?? [];
   }
 
-  async addStarredMessage(conversationId: string, messageIndex: number): Promise<void> {
+  async addStarredMessage(conversationId: string, messageIndex: number, meta?: StarredMessageMeta): Promise<void> {
     if (!this.data.starredMessages[conversationId]) {
       this.data.starredMessages[conversationId] = [];
     }
+    let changed = false;
     if (!this.data.starredMessages[conversationId].includes(messageIndex)) {
       this.data.starredMessages[conversationId].push(messageIndex);
+      changed = true;
+    }
+    if (meta && meta.text) {
+      if (!this.data.starredMeta) {
+        this.data.starredMeta = {};
+      }
+      if (!this.data.starredMeta[conversationId]) {
+        this.data.starredMeta[conversationId] = {};
+      }
+      this.data.starredMeta[conversationId][messageIndex] = {
+        messageId: meta.messageId,
+        text: meta.text.slice(0, 200),
+      };
+      changed = true;
+    }
+    if (changed) {
       this.debouncedSave();
     }
   }
 
   async removeStarredMessage(conversationId: string, messageIndex: number): Promise<void> {
+    let changed = false;
     if (this.data.starredMessages[conversationId]) {
       const index = this.data.starredMessages[conversationId].indexOf(messageIndex);
       if (index > -1) {
         this.data.starredMessages[conversationId].splice(index, 1);
-        this.debouncedSave();
+        changed = true;
       }
+    }
+    if (this.data.starredMeta?.[conversationId]?.[messageIndex]) {
+      delete this.data.starredMeta[conversationId][messageIndex];
+      changed = true;
+    }
+    if (changed) {
+      this.debouncedSave();
     }
   }
 
@@ -316,8 +402,14 @@ export class StorageService {
     this.debouncedSave();
   }
 
-  async clearCorpusBoard(): Promise<void> {
-    this.data.corpusBoard = [];
+  async clearCorpusBoard(conversationId?: string): Promise<void> {
+    if (conversationId) {
+      this.data.corpusBoard = this.data.corpusBoard.filter(
+        item => item.conversationId !== conversationId
+      );
+    } else {
+      this.data.corpusBoard = [];
+    }
     this.debouncedSave();
   }
 

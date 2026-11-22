@@ -1,4 +1,6 @@
 import { storageService } from '../../core/services/StorageService';
+import { settingsService } from '../../core/services/SettingsService';
+import { pageLifecycle } from '../../core/services/PageLifecycle';
 
 export interface MessageMarker {
   id: string;
@@ -15,6 +17,11 @@ export class QuickLocator {
   private locatorBar: HTMLElement | null = null;
   private initialized = false;
   private observer: MutationObserver | null = null;
+  private unsubscribeUrl: (() => void) | null = null;
+  private activeScrollContainer: HTMLElement | null = null;
+  private scrollSyncHandler: (() => void) | null = null;
+  private scrollRafId: number | null = null;
+  private activeMarkerIndex = -1;
   private starredMarkers: Set<number> = new Set();
   private conversationId: string = 'unknown';
   private messageCache = new Map<string, Omit<MessageMarker, 'id' | 'index' | 'starred'>>();
@@ -47,20 +54,10 @@ export class QuickLocator {
   }
 
   private setupUrlChangeListener(): void {
-    let lastUrl = window.location.href;
-    new MutationObserver(() => {
-      if (window.location.href !== lastUrl) {
-        lastUrl = window.location.href;
-        this.onConversationChange();
-      }
-    }).observe(document.body, { childList: true, subtree: true });
-    
-    setInterval(() => {
-      if (window.location.href !== lastUrl) {
-        lastUrl = window.location.href;
-        this.onConversationChange();
-      }
-    }, 1000);
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = pageLifecycle.onUrlChange(() => {
+      void this.onConversationChange();
+    });
   }
 
   private async onConversationChange(): Promise<void> {
@@ -70,6 +67,8 @@ export class QuickLocator {
       
       this.markers = [];
       this.messageCache.clear();
+      this.activeMarkerIndex = -1;
+      this.detachScrollSync();
       this.observer?.disconnect();
       this.observer = null;
       if (this.locatorBar) {
@@ -99,9 +98,10 @@ export class QuickLocator {
       if (container || retries >= maxRetries) {
         if (container) {
           await this.loadStarredMessages();
-          await this.scanMessages(true);
+          await this.scanMessages(settingsService.getSettings().autoIndexLongChat);
           this.createLocatorBar();
           this.setupObserver();
+          this.setupScrollSync(container);
         }
         return;
       }
@@ -214,6 +214,12 @@ export class QuickLocator {
     if (this.isIndexing) return;
     this.isIndexing = true;
     const originalScrollTop = container.scrollTop;
+    const startConversationId = this.conversationId;
+    let cancelled = false;
+    const cancel = () => { cancelled = true; };
+    window.addEventListener('wheel', cancel, { passive: true, once: true });
+    window.addEventListener('pointerdown', cancel, { passive: true, once: true });
+    window.addEventListener('touchstart', cancel, { passive: true, once: true });
 
     try {
       this.messageCache.clear();
@@ -221,9 +227,10 @@ export class QuickLocator {
       let iterations = 0;
       let lastMax = -1;
 
-      while (iterations < 250) {
+      while (iterations < 250 && !cancelled && this.conversationId === startConversationId) {
         container.scrollTo({ top: target, behavior: 'auto' });
         await this.waitForVirtualList();
+        if (cancelled || this.conversationId !== startConversationId) break;
         this.collectVisibleMessages(container);
 
         const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
@@ -234,10 +241,17 @@ export class QuickLocator {
         iterations++;
       }
     } finally {
-      container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
-      await this.waitForVirtualList();
-      this.collectVisibleMessages(container);
-      this.rebuildMarkers();
+      window.removeEventListener('wheel', cancel);
+      window.removeEventListener('pointerdown', cancel);
+      window.removeEventListener('touchstart', cancel);
+      if (!cancelled && this.conversationId === startConversationId) {
+        container.scrollTo({ top: originalScrollTop, behavior: 'auto' });
+        await this.waitForVirtualList();
+      }
+      if (this.conversationId === startConversationId) {
+        this.collectVisibleMessages(container);
+        this.rebuildMarkers();
+      }
       this.isIndexing = false;
     }
   }
@@ -340,7 +354,7 @@ export class QuickLocator {
     if (!this.tooltipEl) {
       this.tooltipEl = document.createElement('div');
       this.tooltipEl.id = 'dbx-locator-tooltip-floating';
-      this.tooltipEl.style.cssText = 'position: fixed; z-index: 99999; background: #fff; color: #333; padding: 10px 12px; border-radius: 10px; font-size: 13px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); width: 240px; height: 90px; display: none; flex-direction: column; gap: 8px; overflow: hidden;';
+      this.tooltipEl.style.cssText = 'position: fixed; z-index: 99999; background: var(--dbx-surface, #fff); color: var(--dbx-text-primary, #333); border: 1px solid var(--dbx-border, transparent); padding: 10px 12px; border-radius: 10px; font-size: 13px; box-shadow: var(--dbx-shadow-lg, 0 4px 20px rgba(0, 0, 0, 0.15)); width: 240px; height: 90px; display: none; flex-direction: column; gap: 8px; overflow: hidden;';
       document.body.appendChild(this.tooltipEl);
       
       this.tooltipEl.addEventListener('mouseenter', () => {
@@ -361,7 +375,7 @@ export class QuickLocator {
       const text = document.createElement('div');
       text.className = 'tooltip-text';
       text.textContent = marker.text;
-      text.style.cssText = 'color: #333; line-height: 1.4; height: 54px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-wrap: break-word; word-break: break-all;';
+      text.style.cssText = 'color: var(--dbx-text-primary, #333); line-height: 1.4; height: 54px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-wrap: break-word; word-break: break-all;';
       this.tooltipEl.appendChild(text);
     }
     
@@ -369,7 +383,7 @@ export class QuickLocator {
     if (!starBtn) {
       starBtn = document.createElement('button');
       starBtn.className = 'tooltip-star';
-      starBtn.style.cssText = 'display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; margin: 0 -4px; border-radius: 6px; font-size: 12px; color: #666; cursor: pointer; background: transparent; border: none; width: fit-content;';
+      starBtn.style.cssText = 'display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; margin: 0 -4px; border-radius: 6px; font-size: 12px; color: var(--dbx-text-secondary, #666); cursor: pointer; background: transparent; border: none; width: fit-content;';
       this.tooltipEl.appendChild(starBtn);
     }
     starBtn.innerHTML = `
@@ -405,7 +419,10 @@ export class QuickLocator {
       if (this.conversationId) {
         try {
           if (isNowStarred) {
-            await storageService.addStarredMessage(this.conversationId, marker.index);
+            await storageService.addStarredMessage(this.conversationId, marker.index, {
+              messageId: marker.messageId,
+              text: marker.text,
+            });
           } else {
             await storageService.removeStarredMessage(this.conversationId, marker.index);
           }
@@ -453,6 +470,57 @@ export class QuickLocator {
     }, 2000);
     
     this.scrollLocatorToMarker(marker.index);
+    this.setActiveMarker(marker.index);
+  }
+
+  private setupScrollSync(container: HTMLElement): void {
+    this.detachScrollSync();
+    this.activeScrollContainer = container;
+    this.scrollSyncHandler = () => {
+      if (this.isIndexing || this.scrollRafId !== null) return;
+      this.scrollRafId = window.requestAnimationFrame(() => {
+        this.scrollRafId = null;
+        this.syncActiveMarkerFromScroll(container);
+      });
+    };
+    container.addEventListener('scroll', this.scrollSyncHandler, { passive: true });
+    this.syncActiveMarkerFromScroll(container);
+  }
+
+  private detachScrollSync(): void {
+    if (this.activeScrollContainer && this.scrollSyncHandler) {
+      this.activeScrollContainer.removeEventListener('scroll', this.scrollSyncHandler);
+    }
+    this.activeScrollContainer = null;
+    this.scrollSyncHandler = null;
+    if (this.scrollRafId !== null) {
+      window.cancelAnimationFrame(this.scrollRafId);
+      this.scrollRafId = null;
+    }
+  }
+
+  private syncActiveMarkerFromScroll(container: HTMLElement): void {
+    if (!this.markers.length) return;
+    const viewportMid = container.scrollTop + container.clientHeight * 0.35;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.markers.length; i++) {
+      const distance = Math.abs(this.markers[i].scrollTop - viewportMid);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    this.setActiveMarker(bestIndex);
+  }
+
+  private setActiveMarker(index: number): void {
+    if (index === this.activeMarkerIndex || !this.locatorBar) return;
+    const prev = this.locatorBar.querySelector<HTMLElement>('.dbx-locator-dot.active');
+    prev?.classList.remove('active');
+    const next = this.locatorBar.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${index}"]`);
+    next?.classList.add('active');
+    this.activeMarkerIndex = index;
   }
 
   private findMessageElement(messageId: string): HTMLElement | null {
@@ -519,9 +587,16 @@ export class QuickLocator {
   }
 
   destroy(): void {
+    this.detachScrollSync();
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
+    }
+    this.unsubscribeUrl?.();
+    this.unsubscribeUrl = null;
+    if (this.tooltipEl) {
+      this.tooltipEl.remove();
+      this.tooltipEl = null;
     }
     if (this.locatorBar) {
       this.locatorBar.remove();
