@@ -27,6 +27,16 @@ function normalizeSkillLabel(raw: string): string {
   return raw.replace(/\s+/g, ' ').replace(/[›>❯]+$/g, '').trim();
 }
 
+function isNearWhiteOpaque(bg: string): boolean {
+  const m = bg.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+  if (!m) return false;
+  const r = Number(m[1]);
+  const g = Number(m[2]);
+  const b = Number(m[3]);
+  const a = m[4] !== undefined ? Number(m[4]) : 1;
+  return a >= 0.75 && r >= 238 && g >= 238 && b >= 238;
+}
+
 export class WorkspaceCustomizer {
   private unsubscribeDom: (() => void) | null = null;
   private unsubscribeSettings: (() => void) | null = null;
@@ -43,6 +53,7 @@ export class WorkspaceCustomizer {
   ]);
   private morePopoverOpen = false;
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private resizeHandler: (() => void) | null = null;
 
   init(): void {
     if (this.unsubscribeDom) return;
@@ -55,7 +66,13 @@ export class WorkspaceCustomizer {
         this.closeMorePopover();
       }
     };
+    this.resizeHandler = () => {
+      const bar = document.getElementById('dbx-custom-quick-bar');
+      const composer = this.findComposerRoot();
+      if (bar && composer) this.syncQuickBarAlignment(bar, composer);
+    };
     document.addEventListener('click', this.outsideClickHandler);
+    window.addEventListener('resize', this.resizeHandler);
     this.applyAll();
   }
 
@@ -68,7 +85,12 @@ export class WorkspaceCustomizer {
       document.removeEventListener('click', this.outsideClickHandler);
       this.outsideClickHandler = null;
     }
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
     document.querySelectorAll('.dbx-clean-hidden').forEach(el => el.classList.remove('dbx-clean-hidden'));
+    this.clearThemeSurfaces();
     document.getElementById('dbx-custom-quick-bar')?.remove();
     delete document.documentElement.dataset.dbxTheme;
   }
@@ -92,11 +114,70 @@ export class WorkspaceCustomizer {
     this.renderCustomQuickButtons(settings.customQuickButtons);
   }
 
+  private clearThemeSurfaces(): void {
+    document.querySelectorAll<HTMLElement>('[data-dbx-surface]').forEach((el) => {
+      delete el.dataset.dbxSurface;
+    });
+  }
+
   applyTheme(preset: ThemePreset): void {
     if (!preset || preset === 'default') {
       delete document.documentElement.dataset.dbxTheme;
-    } else {
-      document.documentElement.dataset.dbxTheme = preset;
+      this.clearThemeSurfaces();
+      return;
+    }
+    document.documentElement.dataset.dbxTheme = preset;
+    this.tagThemeSurfaces();
+  }
+
+  /**
+   * Tag Doubao's structural white containers (topbar, main chat canvas, sidebar,
+   * active sidebar item, composer card) so theme CSS tints the whole workspace evenly
+   * regardless of obfuscated host class names.
+   */
+  private tagThemeSurfaces(): void {
+    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+    const composer = this.findComposerRoot();
+
+    if (sidebar) {
+      sidebar.dataset.dbxSurface = 'sidebar';
+      const sidebarChildren = sidebar.querySelectorAll<HTMLElement>('div, nav, aside, footer, section');
+      for (const el of sidebarChildren) {
+        if (el.closest('[id^="dbx-"]')) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 120 || rect.height < 28) continue;
+        const bg = window.getComputedStyle(el).backgroundColor;
+        if (!isNearWhiteOpaque(bg)) continue;
+        // Small single-row white pill in sidebar = active conversation item
+        if (rect.height <= 56 && rect.width < sidebar.getBoundingClientRect().width - 4) {
+          el.dataset.dbxSurface = 'sidebar-active';
+        } else {
+          el.dataset.dbxSurface = 'sidebar';
+        }
+      }
+    }
+
+    if (composer) {
+      composer.dataset.dbxSurface = 'composer';
+    }
+
+    const containers = document.querySelectorAll<HTMLElement>('main, header, section, div');
+    for (const el of containers) {
+      if (el.dataset.dbxSurface) continue;
+      if (el.closest('#flow_chat_sidebar, [id^="dbx-"], .dbx-unified-panel, [data-message-id], pre, code, table')) continue;
+      if (composer && (el === composer || composer.contains(el))) continue;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 280 || rect.height < 36) continue;
+
+      const bg = window.getComputedStyle(el).backgroundColor;
+      if (!isNearWhiteOpaque(bg)) continue;
+
+      if (rect.top <= 16 && rect.height <= 84 && rect.width >= 320) {
+        el.dataset.dbxSurface = 'topbar';
+      } else {
+        el.dataset.dbxSurface = 'canvas';
+      }
     }
   }
 
@@ -139,6 +220,8 @@ export class WorkspaceCustomizer {
 
     let cur: HTMLElement | null = input.parentElement;
     let fallback: HTMLElement | null = input.parentElement;
+    let bestCard: HTMLElement | null = null;
+
     for (let depth = 0; depth < 9 && cur && cur !== document.body; depth++) {
       const rect = cur.getBoundingClientRect();
       if (rect.width >= 380 && rect.height >= 72 && rect.height <= 340) {
@@ -147,12 +230,18 @@ export class WorkspaceCustomizer {
         const hasSkillMarkers =
           (text.includes('对话') || text.includes('PPT 生成') || text.includes('图像生成') || text.includes('更多技能'));
         if (hasSkillMarkers) {
-          return cur;
+          if (!bestCard) bestCard = cur;
+          const style = window.getComputedStyle(cur);
+          const radius = parseFloat(style.borderTopLeftRadius || '0');
+          const border = parseFloat(style.borderTopWidth || '0');
+          if (radius >= 12 && (border > 0 || isNearWhiteOpaque(style.backgroundColor))) {
+            return cur;
+          }
         }
       }
       cur = cur.parentElement;
     }
-    return fallback;
+    return bestCard || fallback;
   }
 
   private applyComposerSkillVisibility(compact: boolean, pinnedSkills: string[]): void {
@@ -162,8 +251,6 @@ export class WorkspaceCustomizer {
     const pinnedSet = new Set(pinnedSkills.map(normalizeSkillLabel));
     const handledTargets = new Set<HTMLElement>();
 
-    // Scan leaf text nodes inside the composer so we work regardless of whether Doubao renders
-    // each skill chip as a <button>, <div>, or <span>.
     const leaves = Array.from(composer.querySelectorAll<HTMLElement>('span, div, button, a, p'));
     for (const leaf of leaves) {
       if (leaf.closest('#dbx-custom-quick-bar, [id^="dbx-"], [contenteditable="true"]')) continue;
@@ -172,7 +259,6 @@ export class WorkspaceCustomizer {
       const label = normalizeSkillLabel(leaf.textContent || '');
       if (!label || !KNOWN_SKILL_SET.has(label)) continue;
 
-      // Walk up 1-3 levels to find the clickable skill pill wrapper (contains icon + label).
       let chip: HTMLElement | null = leaf;
       let cur: HTMLElement | null = leaf.parentElement;
       for (let depth = 0; depth < 4 && cur && cur !== composer; depth++) {
@@ -199,6 +285,22 @@ export class WorkspaceCustomizer {
     this.morePopoverOpen = false;
     document.querySelector('.dbx-quick-more-popover')?.remove();
     document.querySelector('.dbx-quick-more-btn')?.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * Align the floating capsule bar flush with the composer card's exact left edge & width.
+   */
+  private syncQuickBarAlignment(bar: HTMLElement, composer: HTMLElement): void {
+    const parent = bar.parentElement;
+    if (!parent) return;
+    const composerRect = composer.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    if (composerRect.width < 120) return;
+
+    const leftOffset = Math.max(0, Math.round(composerRect.left - parentRect.left));
+    bar.style.width = `${Math.round(composerRect.width)}px`;
+    bar.style.marginLeft = `${leftOffset}px`;
+    bar.style.marginRight = 'auto';
   }
 
   private renderCustomQuickButtons(buttons: CustomQuickButton[]): void {
@@ -278,6 +380,7 @@ export class WorkspaceCustomizer {
     if (bar.parentElement !== composer.parentElement || bar.nextElementSibling !== composer) {
       composer.parentElement.insertBefore(bar, composer);
     }
+    this.syncQuickBarAlignment(bar, composer);
   }
 
   private insertPromptIntoInput(text: string): void {

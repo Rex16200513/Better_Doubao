@@ -527,6 +527,35 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_like' })), true);
   assert.equal(isNativeLikeButton(makeBtn({ 'aria-label': '踩' })), false);
   assert.equal(isNativeLikeButton(makeBtn({ 'data-testid': 'message_action_dislike' })), false);
+
+  // Structural fallback when each icon button is wrapped in its own tooltip container
+  const makeSlot = (hasSvg, innerBtn) => {
+    const slot = {
+      getAttribute: () => null,
+      className: '',
+      textContent: '',
+      children: [innerBtn],
+      childElementCount: 1,
+      parentElement: null,
+      contains: el => el === innerBtn || el === slot,
+      querySelector: sel => (sel === 'svg' && hasSvg ? {} : innerBtn),
+    };
+    innerBtn.parentElement = slot;
+    return slot;
+  };
+  const slotBtns = Array.from({ length: 5 }, () => ({
+    getAttribute: () => null,
+    className: '',
+    textContent: '',
+    parentElement: null,
+    querySelector: sel => (sel === 'svg' ? {} : null),
+  }));
+  const slots = slotBtns.map(b => makeSlot(true, b));
+  const actionBar = { children: slots, childElementCount: slots.length, parentElement: null };
+  slots.forEach(s => { s.parentElement = actionBar; });
+  assert.equal(isNativeLikeButton(slotBtns[2]), true, 'wrapped 3rd icon in 5-icon action bar recognized as like');
+  assert.equal(isNativeLikeButton(slotBtns[0]), false, 'copy slot not recognized as like');
+  assert.equal(isNativeLikeButton(slotBtns[3]), false, 'dislike slot not recognized as like');
 }
 
 console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, native locator enhancer, latex, export, toolhub');

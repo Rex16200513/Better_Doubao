@@ -346,99 +346,221 @@ body[data-theme="dark"],
 
 /* Native quick-locator tick highlight synced with Doubao native "赞" clicks */
 .dbx-native-tick-liked {
+  position: relative !important;
   background-color: #f59e0b !important;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
-  transform: scaleX(1.35);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28) !important;
+  transform: scaleX(1.3);
   transform-origin: left center;
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
+.dbx-native-tick-liked > * {
+  background-color: #f59e0b !important;
+}
+.dbx-native-tick-liked::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f59e0b;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
 
-/* Global Theme Presets */
+/* Global Theme Presets (covers Doubao tokens, structural white surfaces, sidebar, topbar, composer & Better Doubao UI) */
 html[data-dbx-theme="indigo"] {
   --dbx-accent: #4f46e5;
   --dbx-accent-soft: rgba(79, 70, 229, 0.12);
-  --dbx-surface-hover: #eef2ff;
-}
-html[data-dbx-theme="indigo"] body,
-html[data-dbx-theme="indigo"] main {
-  background-color: #f7f9ff !important;
-}
-html[data-dbx-theme="indigo"] #flow_chat_sidebar {
-  background-color: #f1f4ff !important;
+  --dbx-surface: #ffffff;
+  --dbx-surface-glass: rgba(250, 251, 255, 0.94);
+  --dbx-surface-subtle: #eff3ff;
+  --dbx-surface-hover: #e5ebff;
+  --dbx-theme-bg: #f5f8ff;
+  --dbx-theme-sidebar: #ebf0ff;
+  --dbx-theme-topbar: #f1f5ff;
+  --dbx-theme-card: #ffffff;
+  --dbx-theme-card-active: #ffffff;
+  --dbx-theme-border: rgba(79, 70, 229, 0.14);
+  --dbx-theme-border-strong: rgba(79, 70, 229, 0.24);
+  --dbx-theme-shadow: rgba(79, 70, 229, 0.08);
+  --dbx-theme-bubble: #e7ecff;
+  --s-color-bg-primary: #f5f8ff;
+  --s-color-bg-secondary: #ebf0ff;
+  --semi-color-bg-0: #f5f8ff;
+  --semi-color-bg-1: #ebf0ff;
 }
 
 html[data-dbx-theme="emerald"] {
   --dbx-accent: #059669;
   --dbx-accent-soft: rgba(5, 150, 105, 0.12);
-  --dbx-surface-hover: #ecfdf5;
-}
-html[data-dbx-theme="emerald"] body,
-html[data-dbx-theme="emerald"] main {
-  background-color: #f5fbf8 !important;
-}
-html[data-dbx-theme="emerald"] #flow_chat_sidebar {
-  background-color: #edf7f2 !important;
+  --dbx-surface: #ffffff;
+  --dbx-surface-glass: rgba(247, 253, 250, 0.94);
+  --dbx-surface-subtle: #e9f7f0;
+  --dbx-surface-hover: #dcf3e8;
+  --dbx-theme-bg: #f3fbf7;
+  --dbx-theme-sidebar: #e7f4ed;
+  --dbx-theme-topbar: #edf8f2;
+  --dbx-theme-card: #ffffff;
+  --dbx-theme-card-active: #ffffff;
+  --dbx-theme-border: rgba(5, 150, 105, 0.15);
+  --dbx-theme-border-strong: rgba(5, 150, 105, 0.26);
+  --dbx-theme-shadow: rgba(5, 150, 105, 0.08);
+  --dbx-theme-bubble: #dff5ea;
+  --s-color-bg-primary: #f3fbf7;
+  --s-color-bg-secondary: #e7f4ed;
+  --semi-color-bg-0: #f3fbf7;
+  --semi-color-bg-1: #e7f4ed;
 }
 
 html[data-dbx-theme="warm"] {
   --dbx-accent: #d97706;
   --dbx-accent-soft: rgba(217, 119, 6, 0.13);
-  --dbx-surface: #fffdf8;
-  --dbx-surface-glass: rgba(255, 253, 248, 0.94);
-  --dbx-surface-subtle: #f5efe3;
-  --dbx-surface-hover: #fef3c7;
-}
-html[data-dbx-theme="warm"] body,
-html[data-dbx-theme="warm"] main {
-  background-color: #faf6ee !important;
-}
-html[data-dbx-theme="warm"] #flow_chat_sidebar {
-  background-color: #f3ede0 !important;
+  --dbx-surface: #fffdf7;
+  --dbx-surface-glass: rgba(255, 251, 242, 0.95);
+  --dbx-surface-subtle: #f5ecdc;
+  --dbx-surface-hover: #f9e6c4;
+  --dbx-theme-bg: #f9f4e9;
+  --dbx-theme-sidebar: #f1e9d8;
+  --dbx-theme-topbar: #f5efe1;
+  --dbx-theme-card: #fffdf8;
+  --dbx-theme-card-active: #fffdf8;
+  --dbx-theme-border: rgba(180, 83, 9, 0.14);
+  --dbx-theme-border-strong: rgba(217, 119, 6, 0.26);
+  --dbx-theme-shadow: rgba(180, 83, 9, 0.08);
+  --dbx-theme-bubble: #f7ead1;
+  --s-color-bg-primary: #f9f4e9;
+  --s-color-bg-secondary: #f1e9d8;
+  --semi-color-bg-0: #f9f4e9;
+  --semi-color-bg-1: #f1e9d8;
 }
 
 html[data-dbx-theme="violet"] {
   --dbx-accent: #7c3aed;
   --dbx-accent-soft: rgba(124, 58, 237, 0.12);
-  --dbx-surface-hover: #f5f3ff;
-}
-html[data-dbx-theme="violet"] body,
-html[data-dbx-theme="violet"] main {
-  background-color: #f9f7ff !important;
-}
-html[data-dbx-theme="violet"] #flow_chat_sidebar {
-  background-color: #f3efff !important;
+  --dbx-surface: #ffffff;
+  --dbx-surface-glass: rgba(251, 249, 255, 0.94);
+  --dbx-surface-subtle: #f1ecff;
+  --dbx-surface-hover: #e9e0ff;
+  --dbx-theme-bg: #f8f5ff;
+  --dbx-theme-sidebar: #efe9ff;
+  --dbx-theme-topbar: #f3eeff;
+  --dbx-theme-card: #fdfcff;
+  --dbx-theme-card-active: #ffffff;
+  --dbx-theme-border: rgba(124, 58, 237, 0.14);
+  --dbx-theme-border-strong: rgba(124, 58, 237, 0.26);
+  --dbx-theme-shadow: rgba(124, 58, 237, 0.08);
+  --dbx-theme-bubble: #ede6ff;
+  --s-color-bg-primary: #f8f5ff;
+  --s-color-bg-secondary: #efe9ff;
+  --semi-color-bg-0: #f8f5ff;
+  --semi-color-bg-1: #efe9ff;
 }
 
 html[data-dbx-theme="midnight"] {
   --dbx-folder-text-primary: #f3f4f6;
-  --dbx-folder-text-secondary: #d1d5db;
-  --dbx-folder-bg-base: #1b1f2a;
-  --dbx-folder-bg-hover: #272d3c;
-  --dbx-folder-border: #333a4c;
-  --dbx-surface: #1b1f2a;
-  --dbx-surface-glass: rgba(27, 31, 42, 0.94);
-  --dbx-surface-subtle: #252a38;
-  --dbx-surface-hover: #2f3649;
-  --dbx-text-primary: #f3f4f6;
-  --dbx-text-secondary: #cbd5e1;
-  --dbx-text-muted: #94a3b8;
+  --dbx-folder-text-secondary: #cbd5e1;
+  --dbx-folder-bg-base: #1b2030;
+  --dbx-folder-bg-hover: #252c40;
+  --dbx-folder-border: #303952;
+  --dbx-surface: #1b2030;
+  --dbx-surface-glass: rgba(27, 32, 48, 0.95);
+  --dbx-surface-subtle: #23293c;
+  --dbx-surface-hover: #2d3550;
+  --dbx-text-primary: #edf2ff;
+  --dbx-text-secondary: #c5d0e6;
+  --dbx-text-muted: #8b98b8;
   --dbx-border: rgba(255, 255, 255, 0.11);
   --dbx-accent: #818cf8;
-  --dbx-accent-soft: rgba(129, 140, 248, 0.2);
+  --dbx-accent-soft: rgba(129, 140, 248, 0.22);
+  --dbx-theme-bg: #111520;
+  --dbx-theme-sidebar: #161b29;
+  --dbx-theme-topbar: #141926;
+  --dbx-theme-card: #1d2334;
+  --dbx-theme-card-active: #262e45;
+  --dbx-theme-border: rgba(148, 163, 184, 0.16);
+  --dbx-theme-border-strong: rgba(129, 140, 248, 0.32);
+  --dbx-theme-shadow: rgba(0, 0, 0, 0.42);
+  --dbx-theme-bubble: #263052;
+  --s-color-bg-primary: #111520;
+  --s-color-bg-secondary: #161b29;
+  --semi-color-bg-0: #111520;
+  --semi-color-bg-1: #161b29;
+  color-scheme: dark;
 }
-html[data-dbx-theme="midnight"] body {
-  filter: invert(0.92) hue-rotate(180deg);
-  background-color: #111318 !important;
+
+/* Shared themed surface overrides for all non-default themes */
+html[data-dbx-theme] body,
+html[data-dbx-theme] main,
+html[data-dbx-theme] [data-dbx-surface="canvas"] {
+  background-color: var(--dbx-theme-bg) !important;
 }
-html[data-dbx-theme="midnight"] img,
-html[data-dbx-theme="midnight"] video,
-html[data-dbx-theme="midnight"] canvas,
-html[data-dbx-theme="midnight"] #dbx-layout-studio-overlay,
-html[data-dbx-theme="midnight"] #dbx-tools-panel,
-html[data-dbx-theme="midnight"] #dbx-tools-menu,
-html[data-dbx-theme="midnight"] .dbx-corpus-panel,
-html[data-dbx-theme="midnight"] #dbx-toast-container {
-  filter: invert(1) hue-rotate(180deg);
+html[data-dbx-theme] #flow_chat_sidebar,
+html[data-dbx-theme] [data-dbx-surface="sidebar"] {
+  background-color: var(--dbx-theme-sidebar) !important;
+  border-color: var(--dbx-theme-border) !important;
+}
+html[data-dbx-theme] [data-dbx-surface="sidebar-active"] {
+  background-color: var(--dbx-theme-card-active) !important;
+  box-shadow: 0 1px 4px var(--dbx-theme-shadow) !important;
+}
+html[data-dbx-theme] [data-dbx-surface="topbar"] {
+  background-color: var(--dbx-theme-topbar) !important;
+  border-bottom-color: var(--dbx-theme-border) !important;
+}
+html[data-dbx-theme] [data-dbx-surface="composer"] {
+  background-color: var(--dbx-theme-card) !important;
+  border-color: var(--dbx-theme-border-strong) !important;
+  box-shadow: 0 4px 20px var(--dbx-theme-shadow) !important;
+}
+html[data-dbx-theme] [data-dbx-surface="composer"]:focus-within {
+  border-color: var(--dbx-accent) !important;
+  box-shadow: 0 0 0 3px var(--dbx-accent-soft), 0 4px 20px var(--dbx-theme-shadow) !important;
+}
+html[data-dbx-theme] [class*="send-msg"] [class*="bubble"],
+html[data-dbx-theme] [class*="send_message"] [class*="bubble"],
+html[data-dbx-theme] [class*="user-bubble"] {
+  background-color: var(--dbx-theme-bubble) !important;
+}
+html[data-dbx-theme] #dbx-corpus-trigger {
+  background: var(--dbx-surface-glass) !important;
+  border: 1px solid var(--dbx-theme-border-strong) !important;
+  color: var(--dbx-accent) !important;
+}
+
+/* Genuine dark-mode contrast for midnight preset (no body filter so fixed overlays stay intact) */
+html[data-dbx-theme="midnight"] body,
+html[data-dbx-theme="midnight"] main,
+html[data-dbx-theme="midnight"] #flow_chat_sidebar,
+html[data-dbx-theme="midnight"] [data-message-id],
+html[data-dbx-theme="midnight"] [data-dbx-surface="topbar"],
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"],
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] [contenteditable="true"],
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] textarea {
+  color: #e6ecf8 !important;
+}
+html[data-dbx-theme="midnight"] #flow_chat_sidebar a,
+html[data-dbx-theme="midnight"] #flow_chat_sidebar span,
+html[data-dbx-theme="midnight"] [data-dbx-surface="topbar"] button,
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] button,
+html[data-dbx-theme="midnight"] [data-message-id] h1,
+html[data-dbx-theme="midnight"] [data-message-id] h2,
+html[data-dbx-theme="midnight"] [data-message-id] h3,
+html[data-dbx-theme="midnight"] [data-message-id] p,
+html[data-dbx-theme="midnight"] [data-message-id] li,
+html[data-dbx-theme="midnight"] [data-message-id] strong {
+  color: #e6ecf8 !important;
+}
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] #input-engine-container,
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] [contenteditable="true"],
+html[data-dbx-theme="midnight"] [data-dbx-surface="composer"] textarea {
+  background-color: transparent !important;
+}
+html[data-dbx-theme="midnight"] [data-message-id] pre,
+html[data-dbx-theme="midnight"] [data-message-id] code {
+  background-color: #0d1018 !important;
+  color: #dce4f5 !important;
 }
 
 .dbx-message-highlight {
@@ -1079,13 +1201,13 @@ html[data-dbx-theme="midnight"] #dbx-toast-container {
   padding: 8px 14px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  background: var(--dbx-accent);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
   text-align: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.24);
+  box-shadow: 0 2px 8px var(--dbx-accent-soft);
   transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 .dbx-unified-panel .dbx-corpus-add-btn:hover:not(:disabled),
@@ -1173,12 +1295,12 @@ html[data-dbx-theme="midnight"] #dbx-toast-container {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
   gap: 8px;
-  margin: 0 auto 10px;
-  padding: 0 6px;
+  margin: 0 0 8px 0;
+  padding: 0 2px;
   width: 100%;
-  max-width: 780px;
   box-sizing: border-box;
   z-index: 20;
 }
@@ -1188,16 +1310,16 @@ html[data-dbx-theme="midnight"] #dbx-toast-container {
   align-items: center;
   justify-content: center;
   width: auto !important;
-  min-width: 48px;
-  max-width: 150px;
-  height: 30px;
-  padding: 0 14px !important;
-  border: 1px solid var(--dbx-border);
+  min-width: 0;
+  max-width: 160px;
+  height: 29px;
+  padding: 0 13px !important;
+  border: 1px solid var(--dbx-theme-border-strong, var(--dbx-border));
   border-radius: 999px !important;
   background: var(--dbx-surface-glass);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
   color: var(--dbx-text-secondary);
   font: 500 12px/1 -apple-system, BlinkMacSystemFont, 'PingFang SC', system-ui, sans-serif;
   white-space: nowrap;
@@ -1639,9 +1761,9 @@ html[data-dbx-theme="midnight"] #dbx-toast-container {
 }
 .dbx-studio-btn-primary {
   border: 0;
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  background: var(--dbx-accent);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 2px 8px var(--dbx-accent-soft);
 }
 
 /* Non-blocking Toast notifications */
