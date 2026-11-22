@@ -17,6 +17,8 @@ export function hasNativeLocatorTimestamp(text: string): boolean {
 export class NativeLocatorEnhancer {
   private unsubscribeDom: (() => void) | null = null;
   private unsubscribeUrl: (() => void) | null = null;
+  private pointerOverHandler: (() => void) | null = null;
+  private pointerScanTimer: number | null = null;
   private conversationId = 'unknown';
   private starredSet = new Set<number>();
   private filterQuery = '';
@@ -39,7 +41,17 @@ export class NativeLocatorEnhancer {
 
     this.unsubscribeDom = pageLifecycle.onDomChange(() => {
       this.scanAndEnhance();
-    }, 120);
+    }, 100);
+
+    // Doubao's native quick-locator cards may toggle via CSS hover/opacity without childList mutations.
+    this.pointerOverHandler = () => {
+      if (this.pointerScanTimer !== null) return;
+      this.pointerScanTimer = window.setTimeout(() => {
+        this.pointerScanTimer = null;
+        this.scanAndEnhance();
+      }, 90);
+    };
+    document.addEventListener('pointerover', this.pointerOverHandler, { passive: true });
 
     this.scanAndEnhance();
   }
@@ -49,6 +61,14 @@ export class NativeLocatorEnhancer {
     this.unsubscribeDom = null;
     this.unsubscribeUrl?.();
     this.unsubscribeUrl = null;
+    if (this.pointerOverHandler) {
+      document.removeEventListener('pointerover', this.pointerOverHandler);
+      this.pointerOverHandler = null;
+    }
+    if (this.pointerScanTimer !== null) {
+      clearTimeout(this.pointerScanTimer);
+      this.pointerScanTimer = null;
+    }
     document.querySelectorAll('.dbx-native-locator-toolbar, .dbx-native-card-star').forEach(el => el.remove());
     document.querySelectorAll<HTMLElement>('[data-dbx-native-card]').forEach(el => {
       el.classList.remove('dbx-native-card-starred', 'dbx-native-card-filtered');
@@ -75,20 +95,6 @@ export class NativeLocatorEnhancer {
     );
   }
 
-  private hasFloatingAncestor(el: HTMLElement): boolean {
-    let cur: HTMLElement | null = el;
-    for (let depth = 0; depth < 6 && cur && cur !== document.body; depth++) {
-      const pos = getComputedStyle(cur).position;
-      if (pos === 'fixed' || pos === 'absolute') return true;
-      const cls = cur.className?.toString() || '';
-      if (/popover|tooltip|portal|outline|catalog|toc|anchor|locator|floating/i.test(cls)) {
-        return true;
-      }
-      cur = cur.parentElement;
-    }
-    return false;
-  }
-
   private extractCardTitle(card: HTMLElement): string {
     const clone = card.cloneNode(true) as HTMLElement;
     clone.querySelectorAll('.dbx-native-card-star, button, svg').forEach(n => n.remove());
@@ -100,62 +106,79 @@ export class NativeLocatorEnhancer {
     return title.length > 68 ? `${title.slice(0, 68)}…` : title;
   }
 
+  /**
+   * Locate Doubao's native quick-locator cards by starting from timestamp leaf elements
+   * (e.g. "3月12日 17:19") and walking upward to the individual rounded card element.
+   */
   private findNativeLocatorGroups(): Array<{ container: HTMLElement; cards: HTMLElement[] }> {
     const groups = new Map<HTMLElement, HTMLElement[]>();
-    const candidates = document.querySelectorAll<HTMLElement>('div, li, a, button');
+    const seenCards = new Set<HTMLElement>();
 
-    candidates.forEach((el) => {
-      if (this.isInsideIgnoredArea(el)) return;
-      if (el.childElementCount < 2 || el.childElementCount > 6) return;
+    const leaves = document.querySelectorAll<HTMLElement>('div, span, time, p');
+    leaves.forEach((leaf) => {
+      if (leaf.childElementCount > 0) return;
+      if (this.isInsideIgnoredArea(leaf)) return;
+      const leafText = leaf.textContent?.trim() || '';
+      if (leafText.length < 5 || leafText.length > 26 || !hasNativeLocatorTimestamp(leafText)) return;
 
-      const text = el.textContent?.trim() || '';
-      if (text.length < 8 || text.length > 420) return;
-      if (!hasNativeLocatorTimestamp(text)) return;
+      const leafRect = leaf.getBoundingClientRect();
+      if (leafRect.width === 0 || leafRect.height === 0) return;
 
-      // Ensure the timestamp lives in a direct/near leaf so we pick the card itself, not a huge wrapper.
-      const hasDirectTimeLeaf = Array.from(el.querySelectorAll<HTMLElement>('div, span, time, p')).some((child) => {
-        if (child.childElementCount > 0) return false;
-        const leafText = child.textContent?.trim() || '';
-        return leafText.length <= 24 && hasNativeLocatorTimestamp(leafText);
-      });
-      if (!hasDirectTimeLeaf) return;
+      // Walk up to find the card element that holds the prompt title + snippet + timestamp.
+      let card: HTMLElement | null = leaf.parentElement;
+      for (let depth = 0; depth < 6 && card && card !== document.body; depth++) {
+        if (this.isInsideIgnoredArea(card)) {
+          card = null;
+          break;
+        }
+        const rect = card.getBoundingClientRect();
+        const text = card.textContent?.trim() || '';
+        const style = getComputedStyle(card);
+        const radius = Number.parseFloat(style.borderRadius || '0');
+        const hasCardLook = radius >= 6 || style.borderWidth !== '0px' || style.cursor === 'pointer';
 
-      const rect = el.getBoundingClientRect();
-      if (rect.width < 160 || rect.width > 480 || rect.height < 48 || rect.height > 230) return;
-      if (!this.hasFloatingAncestor(el)) return;
-
-      const parent = el.parentElement;
-      if (!parent || this.isInsideIgnoredArea(parent)) return;
-
-      // Avoid nested card matching if an ancestor is already captured.
-      if (Array.from(groups.values()).some(list => list.some(existing => existing.contains(el) || el.contains(existing)))) {
-        return;
+        if (
+          rect.width >= 150 &&
+          rect.width <= 640 &&
+          rect.height >= 44 &&
+          rect.height <= 280 &&
+          text.length > leafText.length + 4 &&
+          text.length <= 600 &&
+          hasCardLook
+        ) {
+          break;
+        }
+        card = card.parentElement;
       }
 
+      if (!card || card === document.body || seenCards.has(card)) return;
+      const parent = card.parentElement;
+      if (!parent || this.isInsideIgnoredArea(parent)) return;
+
+      seenCards.add(card);
       const list = groups.get(parent) ?? [];
-      list.push(el);
+      list.push(card);
       groups.set(parent, list);
     });
 
-    return Array.from(groups.entries())
-      .filter(([, cards]) => cards.length >= 1)
-      .map(([container, cards]) => ({ container, cards }));
+    return Array.from(groups.entries()).map(([container, cards]) => ({ container, cards }));
   }
 
   private scanAndEnhance(): void {
     const groups = this.findNativeLocatorGroups();
     for (const { container, cards } of groups) {
-      this.ensureToolbar(container, cards);
+      if (cards.length > 1) {
+        this.ensureToolbar(container, cards);
+      }
       cards.forEach((card, index) => {
-        this.enhanceCard(card, index, container, cards);
+        this.enhanceCard(card, index, cards);
       });
       this.applyFilter(cards);
     }
   }
 
   private ensureToolbar(container: HTMLElement, cards: HTMLElement[]): void {
-    let toolbar = container.parentElement?.querySelector<HTMLElement>(':scope > .dbx-native-locator-toolbar')
-      || container.querySelector<HTMLElement>(':scope > .dbx-native-locator-toolbar');
+    let toolbar = container.querySelector<HTMLElement>(':scope > .dbx-native-locator-toolbar');
 
     if (!toolbar) {
       toolbar = document.createElement('div');
@@ -201,7 +224,7 @@ export class NativeLocatorEnhancer {
     }
   }
 
-  private enhanceCard(card: HTMLElement, index: number, _container: HTMLElement, allCards: HTMLElement[]): void {
+  private enhanceCard(card: HTMLElement, index: number, allCards: HTMLElement[]): void {
     const isStarred = this.starredSet.has(index);
     card.dataset.dbxNativeCard = String(index);
     card.classList.toggle('dbx-native-card-starred', isStarred);
@@ -239,7 +262,7 @@ export class NativeLocatorEnhancer {
       this.starredSet.delete(index);
     }
 
-    this.enhanceCard(card, index, card.parentElement as HTMLElement, allCards);
+    this.enhanceCard(card, index, allCards);
     this.applyFilter(allCards);
 
     if (this.conversationId && this.conversationId !== 'unknown') {

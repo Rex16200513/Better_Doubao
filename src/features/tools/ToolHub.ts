@@ -1,6 +1,8 @@
 import { storageService } from '../../core/services/StorageService';
+import { settingsService } from '../../core/services/SettingsService';
 import { showConfirmDialog, showToast } from '../../core/utils/ui';
 import { corpusBoard } from '../corpusboard/CorpusBoard';
+import { workspaceCustomizer } from '../workspace/WorkspaceCustomizer';
 import browser from 'webextension-polyfill';
 
 const HIGHLIGHT_SWATCHES = [
@@ -18,6 +20,7 @@ const icons = [
   '<path d="M8 3h8l4 4v14H4V3h4m6 0v6h6M8 13h8M8 17h6"/>',
   '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/>',
+  '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
   '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
 ];
 
@@ -72,6 +75,7 @@ export class ToolHub {
       ['▤', '语料板', () => { this.panel?.remove(); corpusBoard.openPanel(); this.styleCorpus(); }],
       ['⌕', '对话搜索', () => this.search()],
       ['☆', '高亮与收藏', () => void this.saved()],
+      ['⚙', '界面与按钮定制', () => this.customize()],
       ['⇩', '数据备份与恢复', () => this.backup()],
     ] as const) {
       const item = button(label, () => { menu.remove(); toggle.setAttribute('aria-expanded', 'false'); action(); });
@@ -400,6 +404,139 @@ export class ToolHub {
     renderFilters();
     panel.append(input, filterBar, list);
     await render();
+  }
+
+  private customize(): void {
+    const body = this.open('界面与按钮定制');
+
+    const render = () => {
+      const settings = settingsService.getSettings();
+      body.replaceChildren();
+
+      // Section 1: Minimalism switches
+      const cleanSection = document.createElement('div');
+      cleanSection.className = 'dbx-customize-section';
+      const cleanTitle = document.createElement('div');
+      cleanTitle.className = 'dbx-customize-heading';
+      cleanTitle.textContent = '页面极简净化';
+      cleanSection.appendChild(cleanTitle);
+
+      const addSwitch = (label: string, checked: boolean, onChange: (next: boolean) => void) => {
+        const row = document.createElement('label');
+        row.className = 'dbx-customize-toggle';
+        const span = document.createElement('span');
+        span.textContent = label;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = checked;
+        input.addEventListener('change', () => onChange(input.checked));
+        row.append(span, input);
+        cleanSection.appendChild(row);
+      };
+
+      addSwitch('隐藏「下载电脑版」与底部推广', settings.hideDownloadPromo, (next) => {
+        void settingsService.updateSettings({ hideDownloadPromo: next }).then(render);
+      });
+      addSwitch('精简输入框底栏技能按钮', settings.compactInputToolbar, (next) => {
+        void settingsService.updateSettings({ compactInputToolbar: next }).then(render);
+      });
+      body.appendChild(cleanSection);
+
+      // Section 2: Personalized composer skill pins
+      const skillSection = document.createElement('div');
+      skillSection.className = 'dbx-customize-section';
+      const skillTitle = document.createElement('div');
+      skillTitle.className = 'dbx-customize-heading';
+      skillTitle.textContent = '底栏保留的原生按钮（点选实时生效）';
+      skillSection.appendChild(skillTitle);
+
+      const chipGrid = document.createElement('div');
+      chipGrid.className = 'dbx-skill-chip-grid';
+      const skills = workspaceCustomizer.getDetectedSkills();
+      for (const skill of skills) {
+        const active = settings.pinnedComposerSkills.includes(skill);
+        const chip = button(skill, () => {
+          const current = settingsService.getSettings().pinnedComposerSkills;
+          const next = current.includes(skill)
+            ? current.filter(s => s !== skill)
+            : [...current, skill];
+          void settingsService.updateSettings({
+            compactInputToolbar: true,
+            pinnedComposerSkills: next,
+          }).then(render);
+        });
+        chip.className = `dbx-skill-pin-chip${active ? ' is-active' : ''}`;
+        chipGrid.appendChild(chip);
+      }
+      skillSection.appendChild(chipGrid);
+      body.appendChild(skillSection);
+
+      // Section 3: Custom quick prompt buttons
+      const customSection = document.createElement('div');
+      customSection.className = 'dbx-customize-section';
+      const customTitle = document.createElement('div');
+      customTitle.className = 'dbx-customize-heading';
+      customTitle.textContent = '自定义快捷按钮（显示在输入框上方）';
+      customSection.appendChild(customTitle);
+
+      const list = document.createElement('div');
+      list.className = 'dbx-custom-btn-list';
+      if (settings.customQuickButtons.length === 0) {
+        const hint = document.createElement('p');
+        hint.textContent = '暂无自定义按钮，可添加常用指令一键插入输入框。';
+        list.appendChild(hint);
+      } else {
+        for (const item of settings.customQuickButtons) {
+          const row = document.createElement('div');
+          row.className = 'dbx-saved-row';
+          const info = document.createElement('div');
+          info.className = 'dbx-custom-btn-info';
+          info.textContent = `${item.label} · ${item.prompt}`;
+          const del = button('×', () => {
+            const next = settingsService.getSettings().customQuickButtons.filter(b => b.id !== item.id);
+            void settingsService.updateSettings({ customQuickButtons: next }).then(() => {
+              showToast(`已移除按钮「${item.label}」`, 'success');
+              render();
+            });
+          });
+          del.className = 'dbx-saved-delete';
+          del.title = '删除按钮';
+          row.append(info, del);
+          list.appendChild(row);
+        }
+      }
+      customSection.appendChild(list);
+
+      const form = document.createElement('div');
+      form.className = 'dbx-custom-btn-form';
+      const nameInput = document.createElement('input');
+      nameInput.placeholder = '按钮名称（如：总结要点）';
+      nameInput.maxLength = 20;
+      const promptInput = document.createElement('input');
+      promptInput.placeholder = '点击插入的指令（如：请用要点总结以上内容：）';
+      const addBtn = button('添加快捷按钮', () => {
+        const label = nameInput.value.trim();
+        const prompt = promptInput.value.trim();
+        if (!label || !prompt) {
+          showToast('请填写按钮名称和指令内容', 'warning');
+          return;
+        }
+        const next = [
+          ...settingsService.getSettings().customQuickButtons,
+          { id: `btn_${Date.now()}`, label, prompt },
+        ];
+        void settingsService.updateSettings({ customQuickButtons: next }).then(() => {
+          showToast(`已添加快捷按钮「${label}」`, 'success');
+          render();
+        });
+      });
+      addBtn.className = 'dbx-tool-primary-btn';
+      form.append(nameInput, promptInput, addBtn);
+      customSection.appendChild(form);
+      body.appendChild(customSection);
+    };
+
+    render();
   }
 
   private backup(): void {

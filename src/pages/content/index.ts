@@ -1,5 +1,6 @@
 import { sidebarLauncher } from '../../features/sidebar/SidebarLauncher';
 import { nativeLocatorEnhancer } from '../../features/quicklocator/NativeLocatorEnhancer';
+import { workspaceCustomizer } from '../../features/workspace/WorkspaceCustomizer';
 import { corpusBoard } from '../../features/corpusboard/CorpusBoard';
 import { exportManager } from '../../features/export/ExportManager';
 import { latexDownloader } from '../../features/latex/LatexDownloader';
@@ -9,6 +10,7 @@ import { toolHub } from '../../features/tools/ToolHub';
 
 function initFeatures() {
   const settings = settingsService.getSettings();
+  workspaceCustomizer.init();
   if (settings.enableSidebarLauncher) sidebarLauncher.init();
   if (settings.enableNativeLocatorEnhancer) nativeLocatorEnhancer.init();
   if (settings.enableCorpusAndHighlight) {

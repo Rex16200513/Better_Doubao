@@ -77,7 +77,7 @@ export class CorpusBoard {
         <line x1="16" y1="17" x2="8" y2="17"></line>
         <polyline points="10 9 9 9 8 9"></polyline>
       </svg>
-      <span class="dbx-corpus-count">${this.corpusItems.length}</span>
+      <span class="dbx-corpus-count${this.corpusItems.length === 0 ? ' is-empty' : ''}">${this.corpusItems.length}</span>
     `;
 
     this.triggerBtn.style.cssText = this.getTriggerStyles();
@@ -100,17 +100,19 @@ export class CorpusBoard {
     return `
       position: fixed;
       z-index: 9998;
-      width: 44px;
-      height: 44px;
-      background: var(--dbx-surface, #fff);
-      border: 1px solid var(--dbx-border, transparent);
-      border-radius: 10px;
-      box-shadow: var(--dbx-shadow, 0 2px 12px rgba(0, 0, 0, 0.15));
+      width: 40px;
+      height: 40px;
+      background: var(--dbx-surface-glass, #fff);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--dbx-border, rgba(15, 23, 42, 0.09));
+      border-radius: 12px;
+      box-shadow: var(--dbx-shadow, 0 4px 16px rgba(15, 23, 42, 0.08));
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: grab;
-      color: var(--dbx-text-secondary, #666);
+      color: var(--dbx-text-secondary, #4b5563);
       transition: box-shadow 0.2s, transform 0.1s;
       user-select: none;
     `;
@@ -453,6 +455,7 @@ export class CorpusBoard {
     const countEl = this.triggerBtn?.querySelector('.dbx-corpus-count');
     if (countEl) {
       countEl.textContent = String(this.corpusItems.length);
+      countEl.classList.toggle('is-empty', this.corpusItems.length === 0);
     }
   }
 

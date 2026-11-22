@@ -1,12 +1,23 @@
 import { settingsService } from '../../core/services/SettingsService';
 import type { ExtensionSettings } from '../../core/types/settings';
 
-const SETTING_KEYS: Array<keyof ExtensionSettings> = [
+type BooleanSettingKey =
+  | 'enableSidebarLauncher'
+  | 'enableNativeLocatorEnhancer'
+  | 'enableCorpusAndHighlight'
+  | 'enableExport'
+  | 'enableLatexDownloader'
+  | 'hideDownloadPromo'
+  | 'compactInputToolbar';
+
+const SETTING_KEYS: BooleanSettingKey[] = [
   'enableSidebarLauncher',
   'enableNativeLocatorEnhancer',
   'enableCorpusAndHighlight',
   'enableExport',
   'enableLatexDownloader',
+  'hideDownloadPromo',
+  'compactInputToolbar',
 ];
 
 async function initOptions(): Promise<void> {

@@ -282,6 +282,8 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   };
   const { ToolHub } = loadTs('src/features/tools/ToolHub.ts', name => {
     if (name.includes('StorageService')) return { storageService: {} };
+    if (name.includes('SettingsService')) return { settingsService: { getSettings: () => ({}) } };
+    if (name.includes('WorkspaceCustomizer')) return { workspaceCustomizer: { getDetectedSkills: () => [] } };
     if (name.includes('CorpusBoard')) return { corpusBoard: { closePanel() {} } };
     if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
     return { default: { storage: { local: { get: async () => ({ dbxToolsGuideSeen: true }) } } } };
@@ -329,10 +331,20 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
     return { default: browser };
   });
 
-  const merged = mergeSettings({ enableExport: false, enableNativeLocatorEnhancer: 'bad-type' });
+  const merged = mergeSettings({
+    enableExport: false,
+    enableNativeLocatorEnhancer: 'bad-type',
+    pinnedComposerSkills: ['对话', '图像生成', 123, '对话'],
+    customQuickButtons: [
+      { id: 'b1', label: '总结', prompt: '请总结要点' },
+      { id: 'b2', label: '', prompt: 'invalid' },
+    ],
+  });
   assert.equal(merged.enableExport, false);
   assert.equal(merged.enableNativeLocatorEnhancer, true, 'non-boolean falls back to default');
   assert.equal(merged.enableSidebarLauncher, true);
+  assert.deepEqual([...merged.pinnedComposerSkills], ['对话', '图像生成'], 'pinned skills deduplicated & sanitized');
+  assert.equal(merged.customQuickButtons.length, 1, 'invalid custom button filtered out');
 
   const svc = new SettingsService();
   await svc.load();

@@ -1,15 +1,74 @@
 import browser from 'webextension-polyfill';
-import { DEFAULT_SETTINGS, type ExtensionSettings } from '../types/settings';
+import {
+  DEFAULT_PINNED_SKILLS,
+  DEFAULT_SETTINGS,
+  type CustomQuickButton,
+  type ExtensionSettings,
+} from '../types/settings';
 
 const SETTINGS_KEY = 'dbxSettings';
 
+type SettingsListener = (settings: ExtensionSettings) => void;
+
+const BOOLEAN_KEYS = [
+  'enableSidebarLauncher',
+  'enableNativeLocatorEnhancer',
+  'enableCorpusAndHighlight',
+  'enableExport',
+  'enableLatexDownloader',
+  'hideDownloadPromo',
+  'compactInputToolbar',
+] as const;
+
+function sanitizePinnedSkills(value: unknown): string[] {
+  if (!Array.isArray(value)) return [...DEFAULT_PINNED_SKILLS];
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && s.length <= 40)
+    )
+  );
+}
+
+function sanitizeCustomButtons(value: unknown): CustomQuickButton[] {
+  if (!Array.isArray(value)) return [];
+  const result: CustomQuickButton[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+    if (
+      typeof obj.id === 'string' &&
+      typeof obj.label === 'string' &&
+      typeof obj.prompt === 'string'
+    ) {
+      const label = obj.label.trim().slice(0, 24);
+      const prompt = obj.prompt.trim().slice(0, 2000);
+      if (label && prompt) {
+        result.push({ id: obj.id.slice(0, 80), label, prompt });
+      }
+    }
+    if (result.length >= 20) break;
+  }
+  return result;
+}
+
 export function mergeSettings(raw: unknown): ExtensionSettings {
   if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_SETTINGS };
+    return {
+      ...DEFAULT_SETTINGS,
+      pinnedComposerSkills: [...DEFAULT_PINNED_SKILLS],
+      customQuickButtons: [],
+    };
   }
   const input = raw as Record<string, unknown>;
-  const merged: ExtensionSettings = { ...DEFAULT_SETTINGS };
-  for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof ExtensionSettings>) {
+  const merged: ExtensionSettings = {
+    ...DEFAULT_SETTINGS,
+    pinnedComposerSkills: sanitizePinnedSkills(input.pinnedComposerSkills),
+    customQuickButtons: sanitizeCustomButtons(input.customQuickButtons),
+  };
+  for (const key of BOOLEAN_KEYS) {
     if (typeof input[key] === 'boolean') {
       merged[key] = input[key] as boolean;
     }
@@ -18,8 +77,9 @@ export function mergeSettings(raw: unknown): ExtensionSettings {
 }
 
 export class SettingsService {
-  private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
+  private settings: ExtensionSettings = mergeSettings(null);
   private loaded: Promise<ExtensionSettings> | null = null;
+  private listeners = new Set<SettingsListener>();
 
   load(): Promise<ExtensionSettings> {
     if (!this.loaded) {
@@ -33,25 +93,49 @@ export class SettingsService {
       const stored = await browser.storage.local.get(SETTINGS_KEY);
       this.settings = mergeSettings(stored[SETTINGS_KEY]);
     } catch {
-      this.settings = { ...DEFAULT_SETTINGS };
+      this.settings = mergeSettings(null);
     }
-    return { ...this.settings };
+    return this.getSettings();
   }
 
   getSettings(): ExtensionSettings {
-    return { ...this.settings };
+    return {
+      ...this.settings,
+      pinnedComposerSkills: [...this.settings.pinnedComposerSkills],
+      customQuickButtons: this.settings.customQuickButtons.map(b => ({ ...b })),
+    };
+  }
+
+  subscribe(listener: SettingsListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    const snapshot = this.getSettings();
+    for (const listener of this.listeners) {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        console.error('[SettingsService] Listener error:', error);
+      }
+    }
   }
 
   async updateSettings(partial: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
     this.settings = mergeSettings({ ...this.settings, ...partial });
     await browser.storage.local.set({ [SETTINGS_KEY]: this.settings });
-    return { ...this.settings };
+    this.notify();
+    return this.getSettings();
   }
 
   async resetSettings(): Promise<ExtensionSettings> {
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = mergeSettings(null);
     await browser.storage.local.set({ [SETTINGS_KEY]: this.settings });
-    return { ...this.settings };
+    this.notify();
+    return this.getSettings();
   }
 }
 
