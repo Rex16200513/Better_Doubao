@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { FolderData, Folder, CorpusItem, TextHighlight, ConversationReference } from '../types/folder';
+import type { FolderData, Folder, CorpusItem, TextHighlight, ConversationReference, StarredMessageMeta } from '../types/folder';
 
 const STORAGE_KEY = 'dvFolderData';
 const BACKUP_KEY = 'dvFolderBackup';
@@ -100,6 +100,17 @@ export class StorageService {
       for (const c of entries) if (!c || !id(c.conversationId) || !safeString(c.title) || !safeString(c.url) || !number(c.addedAt)) return fail();
     }
     for (const [key, entries] of Object.entries(data.starredMessages)) if (!id(key) || !Array.isArray(entries) || !entries.every(n => Number.isSafeInteger(n) && n >= 0)) return fail();
+    if (data.starredMeta !== undefined) {
+      if (!data.starredMeta || typeof data.starredMeta !== 'object' || Array.isArray(data.starredMeta)) return fail();
+      for (const [convKey, metaMap] of Object.entries(data.starredMeta)) {
+        if (!id(convKey) || !metaMap || typeof metaMap !== 'object' || Array.isArray(metaMap)) return fail();
+        for (const [idxKey, meta] of Object.entries(metaMap)) {
+          if (!/^\d{1,7}$/.test(idxKey) || !meta || typeof meta !== 'object') return fail();
+          if (!safeString(meta.text) || meta.text.length > 500) return fail();
+          if (meta.messageId !== undefined && !id(meta.messageId)) return fail();
+        }
+      }
+    }
     for (const c of data.corpusBoard) if (!c || !id(c.id) || !id(c.conversationId) || !safeString(c.text) || !safeString(c.conversationTitle) || !number(c.addedAt)) return fail();
     for (const h of data.textHighlights ?? []) if (!h || !id(h.id) || !id(h.conversationId) || !safeString(h.text) || !safeString(h.prefix) || !safeString(h.suffix) || !color(h.color) || !number(h.startOffset) || !number(h.endOffset) || !number(h.messageIndex) || !number(h.createdAt)) return fail();
     return JSON.parse(JSON.stringify(data)) as FolderData;
@@ -308,23 +319,48 @@ export class StorageService {
     return this.data.starredMessages[conversationId] ?? [];
   }
 
-  async addStarredMessage(conversationId: string, messageIndex: number): Promise<void> {
+  async addStarredMessage(conversationId: string, messageIndex: number, meta?: StarredMessageMeta): Promise<void> {
     if (!this.data.starredMessages[conversationId]) {
       this.data.starredMessages[conversationId] = [];
     }
+    let changed = false;
     if (!this.data.starredMessages[conversationId].includes(messageIndex)) {
       this.data.starredMessages[conversationId].push(messageIndex);
+      changed = true;
+    }
+    if (meta && meta.text) {
+      if (!this.data.starredMeta) {
+        this.data.starredMeta = {};
+      }
+      if (!this.data.starredMeta[conversationId]) {
+        this.data.starredMeta[conversationId] = {};
+      }
+      this.data.starredMeta[conversationId][messageIndex] = {
+        messageId: meta.messageId,
+        text: meta.text.slice(0, 200),
+      };
+      changed = true;
+    }
+    if (changed) {
       this.debouncedSave();
     }
   }
 
   async removeStarredMessage(conversationId: string, messageIndex: number): Promise<void> {
+    let changed = false;
     if (this.data.starredMessages[conversationId]) {
       const index = this.data.starredMessages[conversationId].indexOf(messageIndex);
       if (index > -1) {
         this.data.starredMessages[conversationId].splice(index, 1);
-        this.debouncedSave();
+        changed = true;
       }
+    }
+    if (this.data.starredMeta?.[conversationId]?.[messageIndex]) {
+      delete this.data.starredMeta[conversationId][messageIndex];
+      changed = true;
+    }
+    if (changed) {
+      this.debouncedSave();
     }
   }
 

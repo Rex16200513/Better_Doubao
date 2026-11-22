@@ -1,4 +1,5 @@
 import { storageService } from '../../core/services/StorageService';
+import { settingsService } from '../../core/services/SettingsService';
 
 export interface MessageMarker {
   id: string;
@@ -17,6 +18,10 @@ export class QuickLocator {
   private observer: MutationObserver | null = null;
   private urlObserver: MutationObserver | null = null;
   private urlPollTimer: number | null = null;
+  private activeScrollContainer: HTMLElement | null = null;
+  private scrollSyncHandler: (() => void) | null = null;
+  private scrollRafId: number | null = null;
+  private activeMarkerIndex = -1;
   private starredMarkers: Set<number> = new Set();
   private conversationId: string = 'unknown';
   private messageCache = new Map<string, Omit<MessageMarker, 'id' | 'index' | 'starred'>>();
@@ -75,6 +80,8 @@ export class QuickLocator {
       
       this.markers = [];
       this.messageCache.clear();
+      this.activeMarkerIndex = -1;
+      this.detachScrollSync();
       this.observer?.disconnect();
       this.observer = null;
       if (this.locatorBar) {
@@ -104,9 +111,10 @@ export class QuickLocator {
       if (container || retries >= maxRetries) {
         if (container) {
           await this.loadStarredMessages();
-          await this.scanMessages(true);
+          await this.scanMessages(settingsService.getSettings().autoIndexLongChat);
           this.createLocatorBar();
           this.setupObserver();
+          this.setupScrollSync(container);
         }
         return;
       }
@@ -424,7 +432,10 @@ export class QuickLocator {
       if (this.conversationId) {
         try {
           if (isNowStarred) {
-            await storageService.addStarredMessage(this.conversationId, marker.index);
+            await storageService.addStarredMessage(this.conversationId, marker.index, {
+              messageId: marker.messageId,
+              text: marker.text,
+            });
           } else {
             await storageService.removeStarredMessage(this.conversationId, marker.index);
           }
@@ -472,6 +483,57 @@ export class QuickLocator {
     }, 2000);
     
     this.scrollLocatorToMarker(marker.index);
+    this.setActiveMarker(marker.index);
+  }
+
+  private setupScrollSync(container: HTMLElement): void {
+    this.detachScrollSync();
+    this.activeScrollContainer = container;
+    this.scrollSyncHandler = () => {
+      if (this.isIndexing || this.scrollRafId !== null) return;
+      this.scrollRafId = window.requestAnimationFrame(() => {
+        this.scrollRafId = null;
+        this.syncActiveMarkerFromScroll(container);
+      });
+    };
+    container.addEventListener('scroll', this.scrollSyncHandler, { passive: true });
+    this.syncActiveMarkerFromScroll(container);
+  }
+
+  private detachScrollSync(): void {
+    if (this.activeScrollContainer && this.scrollSyncHandler) {
+      this.activeScrollContainer.removeEventListener('scroll', this.scrollSyncHandler);
+    }
+    this.activeScrollContainer = null;
+    this.scrollSyncHandler = null;
+    if (this.scrollRafId !== null) {
+      window.cancelAnimationFrame(this.scrollRafId);
+      this.scrollRafId = null;
+    }
+  }
+
+  private syncActiveMarkerFromScroll(container: HTMLElement): void {
+    if (!this.markers.length) return;
+    const viewportMid = container.scrollTop + container.clientHeight * 0.35;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.markers.length; i++) {
+      const distance = Math.abs(this.markers[i].scrollTop - viewportMid);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    this.setActiveMarker(bestIndex);
+  }
+
+  private setActiveMarker(index: number): void {
+    if (index === this.activeMarkerIndex || !this.locatorBar) return;
+    const prev = this.locatorBar.querySelector<HTMLElement>('.dbx-locator-dot.active');
+    prev?.classList.remove('active');
+    const next = this.locatorBar.querySelector<HTMLElement>(`.dbx-locator-dot[data-marker-index="${index}"]`);
+    next?.classList.add('active');
+    this.activeMarkerIndex = index;
   }
 
   private findMessageElement(messageId: string): HTMLElement | null {
@@ -538,6 +600,7 @@ export class QuickLocator {
   }
 
   destroy(): void {
+    this.detachScrollSync();
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
