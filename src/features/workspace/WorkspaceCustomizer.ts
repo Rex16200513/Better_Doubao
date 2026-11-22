@@ -247,6 +247,21 @@ export class WorkspaceCustomizer {
     const pinnedSet = new Set(pinnedSkills.map(normalizeSkillLabel));
     const handledTargets = new Set<HTMLElement>();
 
+    // Restore or re-evaluate previously tagged skill chips first (even when hidden with height 0).
+    composer.querySelectorAll<HTMLElement>('[data-dbx-skill-chip]').forEach((chip) => {
+      if (isSkillPopupContainer(chip)) {
+        chip.classList.remove('dbx-clean-hidden');
+        delete chip.dataset.dbxSkillChip;
+        return;
+      }
+      const label = chip.dataset.dbxSkillChip || '';
+      if (!label) return;
+      handledTargets.add(chip);
+      this.detectedSkills.add(label);
+      const shouldHide = compact && !pinnedSet.has(label);
+      chip.classList.toggle('dbx-clean-hidden', shouldHide);
+    });
+
     const leaves = Array.from(composer.querySelectorAll<HTMLElement>('span, div, button, a, p'));
     for (const leaf of leaves) {
       if (leaf.closest('#dbx-custom-quick-bar, [id^="dbx-"], [contenteditable="true"]')) continue;
@@ -269,7 +284,12 @@ export class WorkspaceCustomizer {
         }
         const rect = cur.getBoundingClientRect();
         const curText = normalizeSkillLabel(cur.textContent || '');
-        if (curText === label && rect.width <= 165 && rect.height >= 20 && rect.height <= 48) {
+        const isTrackedHidden =
+          cur.dataset.dbxSkillChip === label || cur.classList.contains('dbx-clean-hidden');
+        if (
+          curText === label &&
+          (isTrackedHidden || (rect.width <= 165 && rect.height >= 20 && rect.height <= 48))
+        ) {
           chip = cur;
         } else if (curText !== label) {
           break;
@@ -279,6 +299,7 @@ export class WorkspaceCustomizer {
 
       if (!chip || handledTargets.has(chip)) continue;
       handledTargets.add(chip);
+      chip.dataset.dbxSkillChip = label;
       this.detectedSkills.add(label);
 
       const shouldHide = compact && !pinnedSet.has(label);

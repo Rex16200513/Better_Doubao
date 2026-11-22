@@ -359,14 +359,16 @@ export class FolderManager {
       const conversationId = this.getConversationId(row);
       if (!conversationId) continue;
 
-      // Setup drag into folders
+      // Setup drag into folders (read conversationId dynamically in case Doubao recycles row nodes)
       if (row.dataset.dbxDragBound !== 'true') {
         row.dataset.dbxDragBound = 'true';
         row.draggable = true;
         row.addEventListener('dragstart', (e) => {
+          const liveId = this.getConversationId(row);
+          if (!liveId) return;
           const title = this.getConversationTitle(row);
-          const url = row.getAttribute('href') || `/chat/${conversationId}`;
-          this.dragData = { conversationId, title, url };
+          const url = row.getAttribute('href') || `/chat/${encodeURIComponent(liveId)}`;
+          this.dragData = { conversationId: liveId, title, url };
           e.dataTransfer?.setData('application/x-dbx-chat', JSON.stringify(this.dragData));
         });
         row.addEventListener('dragend', () => {
@@ -389,10 +391,12 @@ export class FolderManager {
         dot.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
+          const liveId = this.getConversationId(row);
+          if (!liveId) return;
           this.openChatCategoryPopover(
-            conversationId,
+            liveId,
             this.getConversationTitle(row),
-            row.getAttribute('href') || `/chat/${conversationId}`,
+            row.getAttribute('href') || `/chat/${encodeURIComponent(liveId)}`,
             dot!
           );
         });
@@ -635,7 +639,7 @@ export class FolderManager {
     card.querySelector('.dbx-popup-btn-cancel')?.addEventListener('click', () => this.closeDialog());
     card.querySelector('.dbx-popup-btn-confirm')?.addEventListener('click', () => void submit());
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void submit();
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) void submit();
       if (e.key === 'Escape') this.closeDialog();
     });
     overlay.addEventListener('click', (e) => {
@@ -694,14 +698,23 @@ export class FolderManager {
   }
 
   private openConversation(conversationId: string, url?: string): void {
-    const existingLink = document.querySelector<HTMLElement>(
-      `#flow_chat_sidebar a[id="conversation_${conversationId}"], #flow_chat_sidebar a[href="/chat/${conversationId}"]`
-    );
-    if (existingLink) {
-      existingLink.click();
-      return;
+    const sidebar = document.querySelector<HTMLElement>('#flow_chat_sidebar');
+    if (sidebar) {
+      const targetId = `conversation_${conversationId}`;
+      const targetHref = `/chat/${conversationId}`;
+      const existingLink = Array.from(sidebar.querySelectorAll<HTMLElement>('a[id], a[href]'))
+        .find(el => el.id === targetId || el.getAttribute('href') === targetHref);
+      if (existingLink) {
+        existingLink.click();
+        return;
+      }
     }
-    const targetUrl = url && url.startsWith('/') ? url : `/chat/${conversationId}`;
+    const isSafeRelativePath =
+      typeof url === 'string' &&
+      url.startsWith('/') &&
+      !url.startsWith('//') &&
+      !url.startsWith('/\\');
+    const targetUrl = isSafeRelativePath ? url : `/chat/${encodeURIComponent(conversationId)}`;
     window.location.href = targetUrl;
   }
 }

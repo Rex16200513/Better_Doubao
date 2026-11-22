@@ -69,14 +69,18 @@ function getCurrentAccountId(): string {
   return getStableAccountId() ?? 'default';
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function validateFolderData(data: unknown): data is FolderData {
-  if (typeof data !== 'object' || data === null) return false;
-  const d = data as Record<string, unknown>;
-  return Array.isArray(d.folders) &&
-    typeof d.folderContents === 'object' &&
-    typeof d.starredMessages === 'object' &&
-    Array.isArray(d.corpusBoard) &&
-    (d.textHighlights === undefined || Array.isArray(d.textHighlights));
+  if (!isPlainRecord(data)) return false;
+  return Array.isArray(data.folders) &&
+    isPlainRecord(data.folderContents) &&
+    isPlainRecord(data.starredMessages) &&
+    Array.isArray(data.corpusBoard) &&
+    (data.textHighlights === undefined || Array.isArray(data.textHighlights)) &&
+    (data.starredMeta === undefined || isPlainRecord(data.starredMeta));
 }
 
 export class StorageService {
@@ -335,8 +339,9 @@ export class StorageService {
       if (!this.data.starredMeta[conversationId]) {
         this.data.starredMeta[conversationId] = {};
       }
+      const normalizedMessageId = meta.messageId?.trim() || undefined;
       this.data.starredMeta[conversationId][messageIndex] = {
-        messageId: meta.messageId,
+        ...(normalizedMessageId ? { messageId: normalizedMessageId } : {}),
         text: meta.text.slice(0, 200),
       };
       changed = true;

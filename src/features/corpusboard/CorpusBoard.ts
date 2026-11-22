@@ -58,6 +58,10 @@ export class CorpusBoard {
       console.error('[CorpusBoard] Failed to load corpus items:', error);
       this.corpusItems = [];
     }
+    this.updateTriggerCount();
+    if (this.isExpanded && this.panel) {
+      this.updatePanelContent();
+    }
   }
  
   private createTriggerButton(): void {
@@ -746,7 +750,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       }
       
       const target = e.target as HTMLElement;
-      if (target.closest('.dbx-corpus-panel') || target.closest('.dbx-corpus-trigger') || target.closest('.dbx-corpus-selection-btn')) {
+      if (target.closest('.dbx-corpus-panel') || target.closest('#dbx-corpus-trigger') || target.closest('.dbx-corpus-selection-btn')) {
         return;
       }
 
@@ -782,7 +786,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
       
       const isInCorpusUI = target.closest('.dbx-corpus-selection-btn') || 
                           target.closest('.dbx-corpus-panel') || 
-                          target.closest('.dbx-corpus-trigger');
+                          target.closest('#dbx-corpus-trigger');
       
       const inPopup = target.closest('.dbx-popup-content');
       
@@ -809,7 +813,6 @@ removeHighlightButton?.addEventListener('click', async (e) => {
   private async handleHighlightConversationChange(): Promise<void> {
     textHighlighter.clearRenderedHighlights();
     await this.loadCorpusItems();
-    this.updateTriggerCount();
     this.scheduleHighlightRestore(500);
   }
 
@@ -956,7 +959,7 @@ removeHighlightButton?.addEventListener('click', async (e) => {
 
     for (const sel of selectors) {
       const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find((candidate) => {
-        if (candidate.closest('#dbx-corpus-panel, #dbx-corpus-trigger')) return false;
+        if (candidate.closest('.dbx-corpus-panel, #dbx-corpus-trigger')) return false;
         const rect = candidate.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
       });

@@ -1,17 +1,39 @@
 import { downloadFile } from '../../core/utils/dom';
 
+const DOWNLOAD_ICON_SVG = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+`;
+
+const COPY_ICON_SVG = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+  </svg>
+`;
+
+const CHECK_ICON_SVG = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+`;
+
 export class LatexDownloader {
   private initialized = false;
   private processedElements = new WeakSet<HTMLElement>();
+  private copyResetTimers = new WeakMap<HTMLElement, number>();
+  private copyOriginalIcon = new WeakMap<HTMLElement, { html: string; color: string }>();
   private observer: MutationObserver | null = null;
   private debounceTimer: number | null = null;
 
   init(): void {
     if (this.initialized) return;
     this.initialized = true;
-    
+
     this.setupObserver();
-    // Try multiple times with increasing delays
     setTimeout(() => this.processExistingFormulas(), 500);
     setTimeout(() => this.processExistingFormulas(), 1500);
     setTimeout(() => this.processExistingFormulas(), 3000);
@@ -21,27 +43,32 @@ export class LatexDownloader {
     this.observer?.disconnect();
     this.observer = new MutationObserver((mutations) => {
       let shouldProcess = false;
-      
+
       for (const mutation of mutations) {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           for (const node of mutation.addedNodes) {
             if (node instanceof Element) {
-              if (node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex, [copy-text], [data-custom-copy-text]') ||
-                  node.classList?.contains('math-inline') || node.classList?.contains('math-block')) {
+              if (
+                node.classList?.contains('math-inline') ||
+                node.classList?.contains('math-block') ||
+                node.classList?.contains('custom-code-block-container--latex') ||
+                node.hasAttribute?.('copy-text') ||
+                node.hasAttribute?.('data-custom-copy-text') ||
+                node.querySelector('.math-inline, .math-block, .custom-code-block-container--latex, [copy-text], [data-custom-copy-text]')
+              ) {
                 shouldProcess = true;
                 break;
               }
             }
           }
         }
-        // Detect when copy-text attribute is added to existing elements
         if (mutation.type === 'attributes' && (mutation.attributeName === 'copy-text' || mutation.attributeName === 'data-custom-copy-text')) {
           shouldProcess = true;
           break;
         }
         if (shouldProcess) break;
       }
-      
+
       if (shouldProcess) {
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.debounceTimer = window.setTimeout(() => {
@@ -60,17 +87,16 @@ export class LatexDownloader {
   }
 
   private processExistingFormulas(): void {
-    // Find .math-inline or .math-block elements that have copy-text attribute
     const formulaElements = document.querySelectorAll('.math-inline[copy-text], .math-block[copy-text], .math-inline[data-custom-copy-text], .math-block[data-custom-copy-text]');
 
     formulaElements.forEach(el => {
       const element = el as HTMLElement;
-      if (!this.processedElements.has(element) && this.addDownloadButton(element, 'inline')) {
+      const kind = element.classList?.contains('math-block') ? 'block' : 'inline';
+      if (!this.processedElements.has(element) && this.addDownloadButton(element, kind)) {
         this.processedElements.add(element);
       }
     });
 
-    // Also handle LaTeX code blocks
     const latexCodeBlocks = document.querySelectorAll('.custom-code-block-container--latex');
     latexCodeBlocks.forEach(el => {
       const element = el as HTMLElement;
@@ -84,14 +110,12 @@ export class LatexDownloader {
     const copyText = element.getAttribute('copy-text') || element.getAttribute('data-custom-copy-text');
     if (!copyText) return null;
 
-    // Try to extract content between \( and \) or \[ and \]
     let match = copyText.match(/\\\(([\s\S]*?)\\\)/);
     if (match) return match[1].trim();
 
     match = copyText.match(/\\\[([\s\S]*?)\\\]/);
     if (match) return match[1].trim();
 
-    // If no delimiters found, return as-is
     return copyText.trim();
   }
 
@@ -100,8 +124,8 @@ export class LatexDownloader {
       return true;
     }
 
-    const latex = this.extractLatexCode(element);
-    if (!latex) return false;
+    const initialLatex = this.extractLatexCode(element);
+    if (!initialLatex) return false;
 
     const btnContainer = document.createElement('span');
     btnContainer.className = 'dbx-latex-btn-container';
@@ -109,13 +133,7 @@ export class LatexDownloader {
 
     const downloadBtn = document.createElement('span');
     downloadBtn.className = 'dbx-latex-download-btn';
-    downloadBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 10 12 15 17 10"/>
-        <line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-    `;
+    downloadBtn.innerHTML = DOWNLOAD_ICON_SVG;
     downloadBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
@@ -141,17 +159,13 @@ export class LatexDownloader {
 
     downloadBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.downloadLatex(latex);
+      const liveLatex = this.extractLatexCode(element) || initialLatex;
+      this.downloadLatex(liveLatex);
     });
 
     const copyBtn = document.createElement('span');
     copyBtn.className = 'dbx-latex-copy-btn';
-    copyBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-      </svg>
-    `;
+    copyBtn.innerHTML = COPY_ICON_SVG;
     copyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
@@ -164,6 +178,7 @@ export class LatexDownloader {
       transition: all 0.2s;
       flex-shrink: 0;
     `;
+    this.copyOriginalIcon.set(copyBtn, { html: COPY_ICON_SVG, color: '#888' });
 
     copyBtn.addEventListener('mouseenter', () => {
       copyBtn.style.backgroundColor = '#f0f0f0';
@@ -177,13 +192,13 @@ export class LatexDownloader {
 
     copyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.copyToClipboard(latex, copyBtn);
+      const liveLatex = this.extractLatexCode(element) || initialLatex;
+      void this.copyToClipboard(liveLatex, copyBtn);
     });
 
     btnContainer.appendChild(downloadBtn);
     btnContainer.appendChild(copyBtn);
 
-    // Insert after the formula element
     if (element.parentNode) {
       const nextSibling = element.nextSibling;
       if (nextSibling) {
@@ -203,11 +218,13 @@ export class LatexDownloader {
     const codeArea = element.querySelector('code');
     if (!codeArea) return false;
 
-    const latexCode = codeArea.textContent?.trim() || '';
-    if (!latexCode) return false;
+    const initialCode = codeArea.textContent?.trim() || '';
+    if (!initialCode) return false;
 
     const header = element.querySelector('.header-wrapper-Mbk8s6, .header-IAeXdE');
     if (!header) return false;
+
+    const readLiveCode = () => element.querySelector('code')?.textContent?.trim() || initialCode;
 
     const btnContainer = document.createElement('span');
     btnContainer.className = 'dbx-latex-code-btn-container';
@@ -215,13 +232,7 @@ export class LatexDownloader {
 
     const downloadBtn = document.createElement('span');
     downloadBtn.className = 'dbx-latex-code-download-btn';
-    downloadBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 10 12 15 17 10"/>
-        <line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-    `;
+    downloadBtn.innerHTML = DOWNLOAD_ICON_SVG;
     downloadBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
@@ -233,7 +244,6 @@ export class LatexDownloader {
       border-radius: 4px;
       transition: all 0.2s;
     `;
-
     downloadBtn.title = 'Download LaTeX';
 
     downloadBtn.addEventListener('mouseenter', () => {
@@ -248,17 +258,12 @@ export class LatexDownloader {
 
     downloadBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.downloadLatexCode(latexCode);
+      this.downloadLatexCode(readLiveCode());
     });
 
     const copyBtn = document.createElement('span');
     copyBtn.className = 'dbx-latex-code-copy-btn';
-    copyBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-      </svg>
-    `;
+    copyBtn.innerHTML = COPY_ICON_SVG;
     copyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
@@ -270,8 +275,8 @@ export class LatexDownloader {
       border-radius: 4px;
       transition: all 0.2s;
     `;
-
     copyBtn.title = 'Copy LaTeX';
+    this.copyOriginalIcon.set(copyBtn, { html: COPY_ICON_SVG, color: '#666' });
 
     copyBtn.addEventListener('mouseenter', () => {
       copyBtn.style.backgroundColor = '#f0f0f0';
@@ -285,7 +290,7 @@ export class LatexDownloader {
 
     copyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.copyToClipboard(latexCode, copyBtn);
+      void this.copyToClipboard(readLiveCode(), copyBtn);
     });
 
     btnContainer.appendChild(downloadBtn);
@@ -301,13 +306,13 @@ export class LatexDownloader {
   }
 
   private downloadLatex(latex: string): void {
-    const content = this.wrapLatexDocument(latex);
+    const content = this.wrapLatexDocument(latex, true);
     const filename = `formula_${Date.now()}.tex`;
     downloadFile(content, filename, 'text/plain');
   }
 
   private downloadLatexCode(code: string): void {
-    const content = this.wrapLatexDocument(code);
+    const content = this.wrapLatexDocument(code, false);
     const filename = `latex_${Date.now()}.tex`;
     downloadFile(content, filename, 'text/plain');
   }
@@ -315,23 +320,46 @@ export class LatexDownloader {
   private async copyToClipboard(text: string, btnElement: HTMLElement): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      const originalHTML = btnElement.innerHTML;
-      btnElement.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-      `;
+      const saved = this.copyOriginalIcon.get(btnElement) ?? {
+        html: COPY_ICON_SVG,
+        color: btnElement.style.color || '#666',
+      };
+      if (!this.copyOriginalIcon.has(btnElement)) {
+        this.copyOriginalIcon.set(btnElement, saved);
+      }
+
+      const prevTimer = this.copyResetTimers.get(btnElement);
+      if (prevTimer !== undefined) {
+        clearTimeout(prevTimer);
+      }
+
+      btnElement.innerHTML = CHECK_ICON_SVG;
       btnElement.style.color = '#4CAF50';
-      setTimeout(() => {
-        btnElement.innerHTML = originalHTML;
-        btnElement.style.color = '#666';
+
+      const timer = window.setTimeout(() => {
+        btnElement.innerHTML = saved.html;
+        btnElement.style.color = saved.color;
+        this.copyResetTimers.delete(btnElement);
       }, 1500);
+      this.copyResetTimers.set(btnElement, timer);
     } catch (err) {
       console.error('[LatexDownloader] Copy failed:', err);
     }
   }
 
-  private wrapLatexDocument(latex: string): string {
+  wrapLatexDocument(latex: string, isMathExpression = true): string {
+    const trimmed = latex.trim();
+    // Already a complete standalone LaTeX document — do not double-wrap.
+    if (/\\documentclass\b/.test(trimmed)) {
+      return `${trimmed}\n`;
+    }
+
+    const hasMathOrEnvDelimiters =
+      /^(\\\[|\$\$|\$|\\begin\{|\\section\b|\\subsection\b|\\paragraph\b)/.test(trimmed);
+    const body = isMathExpression && !hasMathOrEnvDelimiters
+      ? `\\[\n${trimmed}\n\\]`
+      : trimmed;
+
     return `% LaTeX Document
 % Generated by Better Doubao
 % Date: ${new Date().toLocaleString()}
@@ -342,7 +370,7 @@ export class LatexDownloader {
 
 \\begin{document}
 
-${latex}
+${body}
 
 \\end{document}
 `;

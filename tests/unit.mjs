@@ -172,6 +172,11 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
     get attributes() {
       return Object.entries(this.attrs).map(([name, value]) => ({ name, value }));
     }
+    get previousSibling() {
+      if (!this.parentElement) return null;
+      const idx = this.parentElement.childNodes.indexOf(this);
+      return idx > 0 ? this.parentElement.childNodes[idx - 1] : null;
+    }
     getAttribute(name) { return this.attrs[name] ?? null; }
     setAttribute(name, value) { this.attrs[name] = value; }
     removeAttribute(name) { delete this.attrs[name]; }
@@ -180,7 +185,15 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
         this.parentElement.childNodes = this.parentElement.childNodes.filter(c => c !== this);
       }
     }
-    closest() { return null; }
+    closest(selector) {
+      const tags = selector.split(',').map(s => s.trim().toUpperCase());
+      let cur = this;
+      while (cur) {
+        if (cur.nodeType === 1 && tags.includes(cur.tagName)) return cur;
+        cur = cur.parentElement;
+      }
+      return null;
+    }
     get textContent() {
       return this.childNodes.map(c => c.nodeType === 3 ? c.textContent : c.textContent).join('');
     }
@@ -266,6 +279,47 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(sanitized[0].attrs.class, undefined, 'host class stripped');
   assert.equal(sanitized[1].attrs.onerror, undefined, 'onerror handler stripped');
   assert.equal(sanitized[1].attrs.src, 'https://www.doubao.com/img/ok.png', 'relative img src resolved cleanly');
+
+  // Bug #2 regression: inline <p> formatting, <pre><code> indentation, and <ul> whitespace text nodes
+  nextRoot = new FakeElement('div', {}, [
+    new FakeElement('p', {}, [
+      textNode('Hello '),
+      new FakeElement('strong', {}, [textNode('world')]),
+      textNode(' '),
+      new FakeElement('code', {}, [textNode('a  +  b')]),
+    ]),
+    new FakeElement('pre', {}, [
+      new FakeElement('code', { class: 'language-js' }, [textNode('  if (ok) {\n    run();\n  }')]),
+    ]),
+    new FakeElement('ul', {}, [
+      textNode('\n  '),
+      new FakeElement('li', {}, [textNode('Item 1')]),
+      textNode('\n  '),
+      new FakeElement('li', {}, [textNode('Item 2')]),
+      textNode('\n'),
+    ]),
+  ]);
+  const mdFormat = exporter.htmlToMarkdown('ignored');
+  assert(mdFormat.includes('Hello **world** `a  +  b`'), 'inline elements inside <p> stay on one line with code spaces intact');
+  assert(mdFormat.includes('```js\n  if (ok) {\n    run();\n  }\n```'), 'code block indentation preserved');
+  assert(!mdFormat.includes('- \n'), 'whitespace text nodes in <ul> do not produce empty bullets');
+  assert(mdFormat.includes('- Item 1\n- Item 2'), 'list items rendered cleanly');
+
+  // Bug #7 regression: sanitizeHtmlForPdf collapses consecutive <br> without dropping separated <br>
+  nextRoot = new FakeElement('div', {}, [
+    textNode('Line 1'),
+    new FakeElement('br'),
+    new FakeElement('br'),
+    new FakeElement('span', {}, [textNode('Middle')]),
+    new FakeElement('br'),
+    textNode('Line 3'),
+  ]);
+  Object.defineProperty(nextRoot, 'innerHTML', {
+    get() { return JSON.stringify(this.childNodes.map(c => (c.nodeType === 1 ? c.tagName : c.textContent))); },
+    set() {},
+  });
+  const brSanitized = JSON.parse(exporter.sanitizeHtmlForPdf('ignored'));
+  assert.equal(brSanitized.filter(x => x === 'BR').length, 2, 'keeps first <br> and post-span <br>, drops consecutive duplicate');
 }
 
 // 5. ToolHub: Escape key only steals focus when a ToolHub/Corpus UI is actually open
@@ -504,4 +558,186 @@ assert.equal(domUtils.isSafeHttpUrl('data:text/html,<script>alert(1)</script>'),
   assert.equal(keyHandlers.size, 0, 'Escape listener cleaned up');
 }
 
-console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub');
+// 11. Regression suite for audited bugs (#3, #4, #5, #8, #10)
+{
+  // Bug #3: LatexDownloader wrapLatexDocument & rapid double-click copy icon reset
+  const timers = [];
+  let copiedText = '';
+  const { LatexDownloader } = loadTs('src/features/latex/LatexDownloader.ts', () => domUtils, {
+    document: { querySelectorAll: () => [], createElement: () => ({ style: {}, addEventListener() {}, appendChild() {} }) },
+    navigator: { clipboard: { writeText: async text => { copiedText = text; } } },
+    window: {
+      setTimeout: fn => { timers.push(fn); return timers.length; },
+    },
+    clearTimeout: id => { if (timers[id - 1]) timers[id - 1] = null; },
+  });
+  const dl = new LatexDownloader();
+  const wrappedMath = dl.wrapLatexDocument('E = mc^2', true);
+  assert(wrappedMath.includes('\\[\nE = mc^2\n\\]'), 'bare math expression wrapped in \\[ ... \\]');
+  const existingDoc = '\\documentclass{article}\n\\begin{document}Hi\\end{document}';
+  assert.equal(dl.wrapLatexDocument(existingDoc, false).trim(), existingDoc, 'existing \\documentclass not double-wrapped');
+
+  const copyBtn = { innerHTML: '<svg>COPY</svg>', style: { color: '#888' } };
+  await dl.copyToClipboard('a+b', copyBtn);
+  await dl.copyToClipboard('a+b+c', copyBtn);
+  assert.equal(copiedText, 'a+b+c');
+  for (const fn of timers) if (fn) fn();
+  assert(copyBtn.innerHTML.includes('<rect') && !copyBtn.innerHTML.includes('polyline'), 'rapid double-click restores copy SVG, not checkmark');
+  assert.equal(copyBtn.style.color, '#888');
+
+  // Bug #4: TextHighlighter messageId isolation & multi-block support & cross-root context requirement
+  const makeRoot = (text, msgId) => {
+    const msgEl = { getAttribute: attr => (attr === 'data-message-id' ? msgId : null) };
+    const root = {
+      textContent: text,
+      closest: sel => (sel.includes('data-message-id') ? msgEl : null),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    };
+    return root;
+  };
+  const rootMsg1Block1 = makeRoot('First block intro', 'msg-1');
+  const rootMsg1Block2 = makeRoot('Before target phrase after', 'msg-1');
+  const rootMsg2 = makeRoot('Unrelated target phrase elsewhere', 'msg-2');
+  const msg1Container = {
+    getAttribute: attr => (attr === 'data-message-id' ? 'msg-1' : null),
+    closest: () => null,
+    querySelectorAll: () => [rootMsg1Block1, rootMsg1Block2],
+  };
+  const msg2Container = {
+    getAttribute: attr => (attr === 'data-message-id' ? 'msg-2' : null),
+    closest: () => null,
+    querySelectorAll: () => [rootMsg2],
+  };
+
+  const { TextHighlighter } = loadTs('src/features/corpusboard/TextHighlighter.ts', name => {
+    if (name.includes('StorageService')) return { storageService: {} };
+    if (name.includes('utils/dom')) return domUtils;
+    return {};
+  }, {
+    NodeFilter: { SHOW_TEXT: 4 },
+    document: {
+      querySelectorAll: sel => (sel.includes('data-message-id') ? [msg1Container, msg2Container] : [rootMsg1Block1, rootMsg1Block2, rootMsg2]),
+    },
+  });
+  const hl = new TextHighlighter();
+  // Finds 2nd .flow-markdown-body inside msg-1
+  const foundMulti = hl.findRootForSavedHighlight({
+    text: 'target phrase',
+    messageId: 'msg-1',
+    prefix: 'Before ',
+    suffix: ' after',
+  });
+  assert.equal(foundMulti, rootMsg1Block2, 'finds highlight in second .flow-markdown-body of same message');
+
+  // Unloaded messageId must NOT fall back and mis-attach to msg-2
+  const foundUnloaded = hl.findRootForSavedHighlight({
+    text: 'target phrase',
+    messageId: 'msg-unloaded',
+    prefix: 'Before ',
+    suffix: ' after',
+  });
+  assert.equal(foundUnloaded, null, 'unloaded messageId returns null instead of attaching to wrong message');
+
+  // Without messageId, mismatched prefix/suffix must not attach blindly
+  const foundNoContext = hl.findRootForSavedHighlight({
+    text: 'target phrase',
+    prefix: 'TotallyDifferent ',
+    suffix: ' Context',
+  });
+  assert.equal(foundNoContext, null, 'legacy highlight without messageId requires context match');
+
+  // Bug #5: SettingsService merges latest storage & reacts to storage.onChanged
+  const settingsStore = {};
+  const onChangedListeners = [];
+  const mockBrowser = {
+    storage: {
+      local: {
+        get: async key => ({ [key]: settingsStore[key] }),
+        set: async items => { Object.assign(settingsStore, items); },
+      },
+      onChanged: {
+        addListener: fn => onChangedListeners.push(fn),
+      },
+    },
+  };
+  const settingsTypes = loadTs('src/core/types/settings.ts');
+  const { SettingsService } = loadTs('src/core/services/SettingsService.ts', name => {
+    if (name.includes('types/settings')) return settingsTypes;
+    return { default: mockBrowser };
+  });
+  const svcA = new SettingsService();
+  await svcA.load();
+  // Simulate another tab updating themePreset directly in storage
+  settingsStore.dbxSettings = { ...svcA.getSettings(), themePreset: 'emerald' };
+  await svcA.updateSettings({ enableExport: false });
+  assert.equal(settingsStore.dbxSettings.themePreset, 'emerald', 'preserves concurrent changes from another tab');
+  assert.equal(settingsStore.dbxSettings.enableExport, false, 'applies local partial patch');
+
+  let notifiedTheme = '';
+  svcA.subscribe(s => { notifiedTheme = s.themePreset; });
+  onChangedListeners.forEach(fn => fn({ dbxSettings: { newValue: { ...settingsStore.dbxSettings, themePreset: 'midnight' } } }, 'local'));
+  assert.equal(notifiedTheme, 'midnight', 'storage.onChanged updates subscribers');
+
+  // Bug #8: FolderManager.openConversation blocks protocol-relative //evil.com redirect
+  let navigatedHref = '';
+  const { FolderManager } = loadTs('src/features/folder/FolderManager.ts', name => {
+    if (name.includes('StorageService')) return { storageService: {} };
+    if (name.includes('PageLifecycle')) return { pageLifecycle: { onDomChange: () => () => {} } };
+    if (name.includes('utils/dom')) return domUtils;
+    if (name.includes('utils/ui')) return { showConfirmDialog: async () => true, showToast() {} };
+    return {};
+  }, {
+    document: { querySelector: () => null, querySelectorAll: () => [] },
+    window: { location: { get href() { return navigatedHref; }, set href(v) { navigatedHref = v; } } },
+  });
+  const fm = new FolderManager();
+  fm.openConversation('conv 123', '//evil.com/phish');
+  assert.equal(navigatedHref, '/chat/conv%20123', 'blocks //evil.com open redirect and encodes fallback path');
+  fm.openConversation('conv123', '/chat/conv123');
+  assert.equal(navigatedHref, '/chat/conv123', 'allows safe single-slash relative path');
+
+  // Bug #10: StorageService rejects null/array folderContents & normalizes empty messageId
+  const corruptStore = {
+    dvFolderData_default: { folders: [], folderContents: null, starredMessages: [], corpusBoard: [] },
+    dvFolderBackup_default: {
+      folders: [{ id: 'ok', name: 'Recovered', parentId: null, isExpanded: false, color: 'blue', createdAt: 1, updatedAt: 1 }],
+      folderContents: {},
+      starredMessages: {},
+      corpusBoard: [],
+      textHighlights: [],
+    },
+  };
+  const corruptBrowser = {
+    storage: {
+      local: {
+        get: async keys => {
+          if (Array.isArray(keys)) {
+            const out = {};
+            for (const k of keys) if (k in corruptStore) out[k] = corruptStore[k];
+            return out;
+          }
+          return { [keys]: corruptStore[keys] };
+        },
+        set: async items => { Object.assign(corruptStore, items); },
+      },
+    },
+  };
+  const { StorageService } = loadTs('src/core/services/StorageService.ts', () => ({ default: corruptBrowser }), {
+    localStorage: { getItem: () => null, removeItem: () => {} },
+    sessionStorage: { getItem: () => null },
+    document: { cookie: '' },
+    window: { setTimeout: fn => { fn(); return 1; } },
+    clearTimeout: () => {},
+  });
+  const storageSvc = new StorageService();
+  await storageSvc.init();
+  assert.equal((await storageSvc.getFolders())[0]?.id, 'ok', 'corrupt null/array folderContents triggers backup recovery');
+
+  await storageSvc.addStarredMessage('c1', 0, { messageId: '   ', text: 'Note' });
+  const savedData = await storageSvc.getData();
+  assert.equal(savedData.starredMeta?.c1?.[0]?.messageId, undefined, 'empty messageId normalized to undefined');
+  assert.doesNotThrow(() => storageSvc.validateBackup({ format: 'better-doubao-backup', version: 1, data: savedData }));
+}
+
+console.log('PASS: dom utils, storage isolation & migration, settings, starredMeta, highlighter boundary, page lifecycle, confirm dialog, latex, export, toolhub, audit-10-bugs regressions');

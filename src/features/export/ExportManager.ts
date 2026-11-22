@@ -118,6 +118,16 @@ export class ExportManager {
       this.toggleDropdown();
     });
 
+    if (!this.outsideClickHandler) {
+      this.outsideClickHandler = (e: MouseEvent) => {
+        if (this.dropdownMenu && !this.dropdownMenu.contains(e.target as Node) &&
+            !this.exportButton?.contains(e.target as Node)) {
+          this.hideDropdown();
+        }
+      };
+      document.addEventListener('click', this.outsideClickHandler);
+    }
+
     if (topbar === document.body) {
       this.exportButton.style.cssText += 'position:fixed;right:20px;top:80px;z-index:10001;background:var(--dbx-surface, #fff);border:1px solid var(--dbx-border, #ddd);';
       document.body.appendChild(this.exportButton);
@@ -136,16 +146,6 @@ export class ExportManager {
     } else {
       topbar.appendChild(this.exportButton);
     }
-
-    if (!this.outsideClickHandler) {
-      this.outsideClickHandler = (e: MouseEvent) => {
-        if (this.dropdownMenu && !this.dropdownMenu.contains(e.target as Node) &&
-            !this.exportButton?.contains(e.target as Node)) {
-          this.hideDropdown();
-        }
-      };
-      document.addEventListener('click', this.outsideClickHandler);
-    }
   }
 
   private toggleDropdown(): void {
@@ -161,18 +161,15 @@ export class ExportManager {
       this.dropdownMenu = document.createElement('div');
       this.dropdownMenu.id = 'dbx-export-dropdown';
       this.dropdownMenu.style.cssText = `
-        position: absolute;
-        top: 100%;
-        right: 0;
-        margin-top: 4px;
-        min-width: 140px;
+        position: fixed;
+        min-width: 148px;
         background: var(--dbx-folder-bg-base, #fff);
         border: 1px solid var(--dbx-line-7, #e5e7eb);
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         display: flex;
         flex-direction: column;
-        z-index: 10000;
+        z-index: 10002;
         overflow: hidden;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       `;
@@ -188,10 +185,18 @@ export class ExportManager {
 
     const rect = this.exportButton!.getBoundingClientRect();
     this.dropdownMenu.style.position = 'fixed';
-    this.dropdownMenu.style.left = `${rect.left}px`;
-    this.dropdownMenu.style.top = `${rect.bottom}px`;
+    this.dropdownMenu.style.right = 'auto';
     this.dropdownMenu.style.display = 'flex';
     document.body.appendChild(this.dropdownMenu);
+
+    const menuWidth = this.dropdownMenu.offsetWidth || 156;
+    const menuHeight = this.dropdownMenu.offsetHeight || 132;
+    const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
+    const clampedLeft = Math.min(Math.max(8, rect.left), maxLeft);
+    const clampedTop = Math.min(Math.max(8, rect.bottom + 4), maxTop);
+    this.dropdownMenu.style.left = `${clampedLeft}px`;
+    this.dropdownMenu.style.top = `${clampedTop}px`;
   }
 
   private hideDropdown(): void {
@@ -270,9 +275,11 @@ export class ExportManager {
 
       if (!isRegular && !isThinking && !hasSkillContent && !hasMessageBubble && !hasMarkdownBody && !hasImageBox) return;
 
-      const wrapperHtml = wrapper.innerHTML?.toLowerCase() || '';
-      const role: 'user' | 'assistant' = wrapperHtml.includes('send_message') ||
-        wrapper.querySelector('[class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]') ? 'user' : 'assistant';
+      const userRoleSelector = '[data-testid*="send_message"], [class*="send-msg"], [class*="send_message"], [class*="user-bubble"], [class*="bubble-bg"]';
+      const role: 'user' | 'assistant' = (
+        (typeof wrapper.matches === 'function' && wrapper.matches(userRoleSelector)) ||
+        !!wrapper.querySelector(userRoleSelector)
+      ) ? 'user' : 'assistant';
 
       const clone = wrapper.cloneNode(true) as HTMLElement;
 
@@ -364,9 +371,10 @@ export class ExportManager {
     const temp = document.createElement('div');
     temp.innerHTML = html;
 
-    const processNode = (node: Node): string => {
+    const processNode = (node: Node, insidePre = false): string => {
       if (node.nodeType === Node.TEXT_NODE) {
-        return node.textContent || '';
+        const raw = node.textContent || '';
+        return insidePre ? raw : raw.replace(/[ \t]{2,}/g, ' ');
       }
 
       if (node.nodeType !== Node.ELEMENT_NODE) {
@@ -379,34 +387,39 @@ export class ExportManager {
       switch (tagName) {
         case 'br':
           return '\n';
-        case 'p':
-          return Array.from(el.childNodes).map(processNode).join('\n\n') + '\n';
+        case 'p': {
+          const text = Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('').trim();
+          return text ? `${text}\n\n` : '';
+        }
         case 'div':
-          return Array.from(el.childNodes).map(processNode).join('\n') + '\n';
+          return Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('') + '\n';
         case 'span':
-          return Array.from(el.childNodes).map(processNode).join('');
+          return Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('');
         case 'strong':
         case 'b':
-          return `**${Array.from(el.childNodes).map(processNode).join('')}**`;
+          return `**${Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('')}**`;
         case 'em':
         case 'i':
-          return `*${Array.from(el.childNodes).map(processNode).join('')}*`;
-        case 'code':
-          const codeContent = Array.from(el.childNodes).map(processNode).join('');
-          if (el.closest('pre')) {
+          return `*${Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('')}*`;
+        case 'code': {
+          const codeContent = Array.from(el.childNodes).map(c => processNode(c, true)).join('');
+          if (insidePre || el.closest?.('pre')) {
             return `\n\`\`\`\n${codeContent}\n\`\`\`\n`;
           }
           return `\`${codeContent}\``;
-        case 'pre':
+        }
+        case 'pre': {
           const preCode = el.querySelector('code');
           const codeText = preCode ? preCode.textContent || '' : el.textContent || '';
-          const langClass = preCode?.className.match(/language-(\w+)/);
+          const langClass = preCode?.className?.match(/language-(\w+)/);
           const lang = langClass ? langClass[1] : '';
-          return `\n\`\`\`${lang}\n${codeText.trim()}\n\`\`\`\n`;
-        case 'a':
+          return `\n\`\`\`${lang}\n${codeText.replace(/^\n+|\n+$/g, '')}\n\`\`\`\n\n`;
+        }
+        case 'a': {
           const href = el.getAttribute('href') || '';
           return `[${el.textContent || ''}](${href})`;
-        case 'img':
+        }
+        case 'img': {
           const rawSrc = el.getAttribute('src') || el.getAttribute('data-src') || '';
           if (!rawSrc || rawSrc.startsWith('data:') || rawSrc.toLowerCase().includes('base64')) {
             return '';
@@ -414,31 +427,48 @@ export class ExportManager {
           const src = resolveUrl(rawSrc);
           const alt = el.getAttribute('alt') || 'image';
           return src ? `![${alt}](${src})` : '';
-        case 'ul':
-          return Array.from(el.childNodes).map(li => `  - ${processNode(li)}`).join('\n') + '\n';
-        case 'ol':
+        }
+        case 'ul': {
+          const items = Array.from(el.childNodes).filter(
+            c => c.nodeType === Node.ELEMENT_NODE && (c as Element).tagName.toLowerCase() === 'li'
+          );
+          if (items.length === 0) return '';
+          return items.map(li => {
+            const body = processNode(li, false).trim().replace(/\n/g, '\n  ');
+            return `- ${body}`;
+          }).join('\n') + '\n\n';
+        }
+        case 'ol': {
+          const items = Array.from(el.childNodes).filter(
+            c => c.nodeType === Node.ELEMENT_NODE && (c as Element).tagName.toLowerCase() === 'li'
+          );
+          if (items.length === 0) return '';
           let idx = 1;
-          return Array.from(el.childNodes).map(li => `  ${idx++}. ${processNode(li).replace(/^\s*-\s*/, '')}`).join('\n') + '\n';
+          return items.map(li => {
+            const body = processNode(li, false).trim().replace(/^\s*-\s*/, '').replace(/\n/g, '\n  ');
+            return `${idx++}. ${body}`;
+          }).join('\n') + '\n\n';
+        }
         case 'li':
-          return Array.from(el.childNodes).map(processNode).join('');
+          return Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('');
         case 'h1':
-          return `# ${el.textContent || ''}\n`;
+          return `# ${el.textContent || ''}\n\n`;
         case 'h2':
-          return `## ${el.textContent || ''}\n`;
+          return `## ${el.textContent || ''}\n\n`;
         case 'h3':
-          return `### ${el.textContent || ''}\n`;
+          return `### ${el.textContent || ''}\n\n`;
         case 'h4':
-          return `#### ${el.textContent || ''}\n`;
+          return `#### ${el.textContent || ''}\n\n`;
         case 'blockquote':
-          return `> ${el.textContent || ''}\n`;
+          return `> ${el.textContent || ''}\n\n`;
         case 'hr':
-          return '---\n';
-        case 'table':
+          return '---\n\n';
+        case 'table': {
           const rows: string[][] = [];
           el.querySelectorAll('tr').forEach(tr => {
             const cells: string[] = [];
             tr.querySelectorAll('th, td').forEach(cell => {
-              cells.push(processNode(cell).trim().replace(/\|/g, '\\|'));
+              cells.push(processNode(cell, false).trim().replace(/\|/g, '\\|'));
             });
             if (cells.length > 0) rows.push(cells);
           });
@@ -446,14 +476,15 @@ export class ExportManager {
           const header = rows[0].join(' | ');
           const separator = rows[0].map(() => '---').join(' | ');
           const body = rows.slice(1).map(row => `| ${row.join(' | ')} |`).join('\n');
-          return `\n| ${header} |\n| ${separator} |\n${body ? `${body}\n` : ''}`;
+          return `\n| ${header} |\n| ${separator} |\n${body ? `${body}\n` : ''}\n`;
+        }
         default:
-          return Array.from(el.childNodes).map(processNode).join('');
+          return Array.from(el.childNodes).map(c => processNode(c, insidePre)).join('');
       }
     };
 
-    let markdown = processNode(temp);
-    markdown = markdown.replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim();
+    let markdown = processNode(temp, false);
+    markdown = markdown.replace(/\n{3,}/g, '\n\n').trim();
     return markdown;
   }
 
@@ -544,15 +575,14 @@ export class ExportManager {
       }
     }
 
-    // Collapse runs of consecutive <br> tags into a single line break.
-    let prevWasBr = false;
+    // Collapse runs of consecutive <br> tags into a single line break (ignoring whitespace-only text nodes between them).
     Array.from(temp.querySelectorAll('br')).forEach((br) => {
-      const prevSibling = br.previousSibling;
-      const isConsecutive = prevSibling && prevSibling.nodeType === Node.ELEMENT_NODE && (prevSibling as Element).tagName === 'BR';
-      if (isConsecutive || (prevWasBr && !br.previousSibling?.textContent?.trim())) {
+      let prev: Node | null = br.previousSibling;
+      while (prev && prev.nodeType === Node.TEXT_NODE && !(prev.textContent || '').trim()) {
+        prev = prev.previousSibling;
+      }
+      if (prev && prev.nodeType === Node.ELEMENT_NODE && (prev as Element).tagName.toUpperCase() === 'BR') {
         br.remove();
-      } else {
-        prevWasBr = true;
       }
     });
 

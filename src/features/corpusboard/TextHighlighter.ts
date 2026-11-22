@@ -154,10 +154,14 @@ export class TextHighlighter {
     document.querySelectorAll<HTMLElement>(
       '[data-message-id], [data-testid="union_message"], [data-testid="message-block-container"]'
     ).forEach((container) => {
-      const root = container.querySelector<HTMLElement>(
+      const blocks = container.querySelectorAll<HTMLElement>(
         '.flow-markdown-body, [data-testid="message_content"], [data-testid="message_text"]'
-      ) ?? container;
-      addRoot(root);
+      );
+      if (blocks.length > 0) {
+        blocks.forEach(addRoot);
+      } else {
+        addRoot(container);
+      }
     });
 
     document.querySelectorAll<HTMLElement>(
@@ -180,37 +184,55 @@ export class TextHighlighter {
   findRootForSavedHighlight(highlight: TextHighlight): HTMLElement | null {
     const roots = this.getHighlightMessageRoots();
 
+    // When a highlight is anchored to a specific messageId, strictly scope matching to
+    // that message's content blocks (supports multi-block messages and prevents cross-message
+    // mis-attachment when the original message is virtual-scroll unloaded).
     if (highlight.messageId) {
-      const matchedById = roots.find(
+      const sameMessageRoots = roots.filter(
         root => this.getHighlightMessageId(root) === highlight.messageId
       );
-      if (matchedById) return matchedById;
+      if (sameMessageRoots.length === 0) return null;
+      return sameMessageRoots.find(
+        root => this.findSavedHighlightOffset(root, highlight, false) !== null
+      ) ?? null;
     }
 
     const indexedRoot = roots[highlight.messageIndex];
-    if (indexedRoot && this.findSavedHighlightOffset(indexedRoot, highlight) !== null) {
+    if (indexedRoot && this.findSavedHighlightOffset(indexedRoot, highlight, false) !== null) {
       return indexedRoot;
     }
 
+    // Cross-root fallback without messageId requires context confirmation so common short
+    // phrases cannot attach to an unrelated message.
     return roots.find(
-      root => this.findSavedHighlightOffset(root, highlight) !== null
+      root => this.findSavedHighlightOffset(root, highlight, true) !== null
     ) ?? null;
   }
 
   findSavedHighlightOffset(
     root: HTMLElement,
-    highlight: TextHighlight
+    highlight: TextHighlight,
+    requireContext = false
   ): number | null {
     const rootText = root.textContent ?? '';
     if (!highlight.text || !rootText.includes(highlight.text)) return null;
 
+    const fullContext = `${highlight.prefix}${highlight.text}${highlight.suffix}`;
     if (
       rootText.slice(highlight.startOffset, highlight.endOffset) === highlight.text
     ) {
-      return highlight.startOffset;
+      if (!requireContext) return highlight.startOffset;
+      const prefixOk = !!highlight.prefix &&
+        rootText.slice(Math.max(0, highlight.startOffset - highlight.prefix.length), highlight.startOffset)
+          .endsWith(highlight.prefix);
+      const suffixOk = !!highlight.suffix &&
+        rootText.slice(highlight.endOffset, highlight.endOffset + highlight.suffix.length)
+          .startsWith(highlight.suffix);
+      if (prefixOk || suffixOk || (!highlight.prefix && !highlight.suffix)) {
+        return highlight.startOffset;
+      }
     }
 
-    const fullContext = `${highlight.prefix}${highlight.text}${highlight.suffix}`;
     const contextIndex = fullContext ? rootText.indexOf(fullContext) : -1;
     if (contextIndex >= 0) {
       return contextIndex + highlight.prefix.length;
@@ -224,14 +246,20 @@ export class TextHighlighter {
       const offset = rootText.indexOf(highlight.text, searchFrom);
       if (offset < 0) break;
 
-      const prefixMatches = !highlight.prefix ||
+      const prefixMatches = !!highlight.prefix &&
         rootText.slice(Math.max(0, offset - highlight.prefix.length), offset)
           .endsWith(highlight.prefix);
-      const suffixMatches = !highlight.suffix ||
+      const suffixMatches = !!highlight.suffix &&
         rootText.slice(
           offset + highlight.text.length,
           offset + highlight.text.length + highlight.suffix.length
         ).startsWith(highlight.suffix);
+
+      if (requireContext && (highlight.prefix || highlight.suffix) && !prefixMatches && !suffixMatches) {
+        searchFrom = offset + Math.max(1, highlight.text.length);
+        continue;
+      }
+
       const distance = Math.abs(offset - highlight.startOffset);
       const score = (prefixMatches ? 1000 : 0) +
         (suffixMatches ? 1000 : 0) -
@@ -412,6 +440,35 @@ export class TextHighlighter {
       const removedIds = new Set<string>();
       const marksToUnwrap = new Set<HTMLElement>();
 
+      const getLiveOffsetsForHighlight = (
+        highlightId: string,
+        fallbackStart: number,
+        fallbackEnd: number
+      ): { startOffset: number; endOffset: number } => {
+        const marksForId = allMarks.filter(m => m.dataset.dbxHighlightId === highlightId);
+        if (marksForId.length === 0) {
+          return { startOffset: fallbackStart, endOffset: fallbackEnd };
+        }
+        try {
+          const first = marksForId[0];
+          const last = marksForId[marksForId.length - 1];
+          const beforeFirst = document.createRange();
+          beforeFirst.selectNodeContents(root);
+          beforeFirst.setEndBefore(first);
+          const beforeAfterLast = document.createRange();
+          beforeAfterLast.selectNodeContents(root);
+          beforeAfterLast.setEndAfter(last);
+          const liveStart = beforeFirst.toString().length;
+          const liveEnd = beforeAfterLast.toString().length;
+          if (liveEnd > liveStart) {
+            return { startOffset: liveStart, endOffset: liveEnd };
+          }
+        } catch {
+          // Fall back to stored offsets if range construction fails.
+        }
+        return { startOffset: fallbackStart, endOffset: fallbackEnd };
+      };
+
       directlySelectedMarks.forEach((mark) => {
         const id = mark.dataset.dbxHighlightId;
         const highlight = id ? highlightsById.get(id) : undefined;
@@ -423,29 +480,29 @@ export class TextHighlighter {
 
         if (removedIds.has(id)) return;
 
-        const overlapStart = Math.max(
+        const { startOffset: liveStart, endOffset: liveEnd } = getLiveOffsetsForHighlight(
+          id,
           highlight.startOffset,
-          selectionAnchor.startOffset
+          highlight.endOffset
         );
-        const overlapEnd = Math.min(
-          highlight.endOffset,
-          selectionAnchor.endOffset
-        );
+
+        const overlapStart = Math.max(liveStart, selectionAnchor.startOffset);
+        const overlapEnd = Math.min(liveEnd, selectionAnchor.endOffset);
 
         if (overlapStart >= overlapEnd) return;
 
-        if (highlight.startOffset < overlapStart) {
+        if (liveStart < overlapStart) {
           remainingSegments.push({
-            startOffset: highlight.startOffset,
+            startOffset: liveStart,
             endOffset: overlapStart,
             color: highlight.color,
           });
         }
 
-        if (overlapEnd < highlight.endOffset) {
+        if (overlapEnd < liveEnd) {
           remainingSegments.push({
             startOffset: overlapEnd,
-            endOffset: highlight.endOffset,
+            endOffset: liveEnd,
             color: highlight.color,
           });
         }

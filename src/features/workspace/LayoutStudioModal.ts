@@ -320,10 +320,18 @@ export class LayoutStudioModal {
       resetBtn.className = 'dbx-studio-btn-ghost';
       resetBtn.textContent = '恢复默认';
       resetBtn.addEventListener('click', () => {
+        // Reset only Studio-managed layout/theme fields; preserve non-Studio options switches.
         draft = {
-          ...DEFAULT_SETTINGS,
+          ...draft,
+          enableSidebarLauncher: DEFAULT_SETTINGS.enableSidebarLauncher,
+          enableFolders: DEFAULT_SETTINGS.enableFolders,
+          enableExport: DEFAULT_SETTINGS.enableExport,
+          hideDownloadPromo: DEFAULT_SETTINGS.hideDownloadPromo,
+          hideSidebarFooter: DEFAULT_SETTINGS.hideSidebarFooter,
+          compactInputToolbar: DEFAULT_SETTINGS.compactInputToolbar,
           pinnedComposerSkills: [...DEFAULT_PINNED_SKILLS],
           customQuickButtons: [],
+          themePreset: DEFAULT_SETTINGS.themePreset,
         };
         render();
       });
@@ -347,7 +355,17 @@ export class LayoutStudioModal {
           draft.enableFolders !== initial.enableFolders ||
           draft.enableExport !== initial.enableExport;
 
-        await settingsService.updateSettings(draft);
+        await settingsService.updateSettings({
+          enableSidebarLauncher: draft.enableSidebarLauncher,
+          enableFolders: draft.enableFolders,
+          enableExport: draft.enableExport,
+          hideDownloadPromo: draft.hideDownloadPromo,
+          hideSidebarFooter: draft.hideSidebarFooter,
+          compactInputToolbar: draft.compactInputToolbar,
+          pinnedComposerSkills: draft.pinnedComposerSkills,
+          customQuickButtons: draft.customQuickButtons,
+          themePreset: draft.themePreset,
+        });
         this.close();
         if (needsReload) {
           showToast('布局配置已保存，正在刷新页面生效…', 'success');
