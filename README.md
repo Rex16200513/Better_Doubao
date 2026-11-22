@@ -148,9 +148,9 @@ Better Doubao 致力于让豆包网页版更克制、更顺手、更具个性。
 
 | 浏览器 | 安装包 | 说明 |
 | --- | --- | --- |
-| Chrome | [Better_Doubao_Chrome_v2.2.1.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.1/Better_Doubao_Chrome_v2.2.1.zip) | 在 `chrome://extensions/` 加载解压目录 |
-| Edge | [Better_Doubao_Edge_v2.2.1.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.1/Better_Doubao_Edge_v2.2.1.zip) | 在 `edge://extensions/` 加载解压目录 |
-| 校验和 | [SHA256SUMS_v2.2.1.txt](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.1/SHA256SUMS_v2.2.1.txt) | 安装包 SHA-256 完整性校验 |
+| Chrome | [Better_Doubao_Chrome_v2.2.2.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.2/Better_Doubao_Chrome_v2.2.2.zip) | 在 `chrome://extensions/` 加载解压目录 |
+| Edge | [Better_Doubao_Edge_v2.2.2.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.2/Better_Doubao_Edge_v2.2.2.zip) | 在 `edge://extensions/` 加载解压目录 |
+| 校验和 | [SHA256SUMS_v2.2.2.txt](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.2/SHA256SUMS_v2.2.2.txt) | 安装包 SHA-256 完整性校验 |
 
 > 加载步骤：解压 ZIP 到固定目录 → 打开扩展管理页并开启「开发者模式」→ 点击「加载已解压的扩展程序」→ 选择包含 `manifest.json` 的文件夹（安装后请保留该目录）。
 
@@ -218,6 +218,13 @@ better-doubao/
 ---
 
 ## 版本记录
+
+### v2.2.2
+
+- **界面与侧边栏稳定性**：修复输入框技能按钮隐藏后无法实时恢复的问题；修复侧边栏快捷入口在豆包 React 重挂载后点击失效的问题；修复跨标签页/设置页保存相互覆盖与 Studio 恢复默认误重置其他模块开关的问题。
+- **导出与 LaTeX 质量**：修复 Markdown/TXT 导出内联拆段、代码块与列表缩进损坏、菜单溢出视口、PDF 清洗误删 `<br>` 与角色误判；修复 LaTeX 流式输出截断、`.tex` 未包入数学环境/重复包裹 `\documentclass` 及连续双击复制图标卡死问题。
+- **高亮、语料板与安全加固**：修复文本高亮跨消息错贴、多块消息匹配与漂移后移除失败；修复语料板角标卡在 0、SPA 切换未刷新及搜索 Range 越界；修复文件夹跳转开放重定向与选择器注入、IME 回车误提交，并加固损坏存储的备份恢复校验。
+- 安装包：[Release v2.2.2](https://github.com/Rex16200513/Better_Doubao/releases/tag/v2.2.2)
 
 ### v2.2.1
 
