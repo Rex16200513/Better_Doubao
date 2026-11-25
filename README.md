@@ -152,7 +152,18 @@ Better Doubao 致力于让豆包网页版更克制、更顺手、更具个性。
 | Edge | [Better_Doubao_Edge_v2.2.2.zip](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.2/Better_Doubao_Edge_v2.2.2.zip) | 在 `edge://extensions/` 加载解压目录 |
 | 校验和 | [SHA256SUMS_v2.2.2.txt](https://github.com/Rex16200513/Better_Doubao/releases/download/v2.2.2/SHA256SUMS_v2.2.2.txt) | 安装包 SHA-256 完整性校验 |
 
-> 加载步骤：解压 ZIP 到固定目录 → 打开扩展管理页并开启「开发者模式」→ 点击「加载已解压的扩展程序」→ 选择包含 `manifest.json` 的文件夹（安装后请保留该目录）。
+**首次安装步骤：**
+
+1. 将下载的 ZIP 解压到一个**固定目录**（安装后请保留该目录，勿删除或移动）。
+2. 打开浏览器扩展管理页并启用开发者模式：
+   - Chrome：地址栏输入 `chrome://extensions/`，开启右上角 **「开发者模式」**
+   - Edge：地址栏输入 `edge://extensions/`，开启左下角 **「开发人员模式」**
+3. 点击 **「加载已解压的扩展程序」**（Edge 为 **「加载解压缩的扩展」**），选择解压后包含 `manifest.json` 的目录。
+4. 刷新已打开的豆包网页（`https://www.doubao.com/`）即可使用。
+
+**覆盖升级步骤：**
+
+- 将新版 ZIP 解压并覆盖原先的扩展目录，在扩展管理页点击 Better Doubao 卡片上的 **刷新** 按钮并刷新豆包网页即可；已保存的分类文件夹、高亮、语料板与布局配置不会丢失。
 
 ### 从源码构建
 
