@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import fs from 'fs';
 
 const projectRoot = resolve(__dirname, '..');
+const outDir = resolve(projectRoot, 'edge/dist');
 const manifest = JSON.parse(fs.readFileSync(resolve(projectRoot, 'edge/manifest.json'), 'utf-8'));
 
 export default defineConfig({
@@ -21,6 +22,12 @@ export default defineConfig({
     crx({
       manifest,
     }),
+    {
+      name: 'strip-vite-manifest',
+      closeBundle() {
+        fs.rmSync(resolve(outDir, '.vite'), { recursive: true, force: true });
+      },
+    },
   ],
   resolve: {
     alias: {
@@ -28,7 +35,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(projectRoot, 'edge/dist'),
+    outDir,
     emptyOutDir: true,
   },
 });

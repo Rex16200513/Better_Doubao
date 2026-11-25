@@ -36,19 +36,48 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           mkdir -p release-assets
-          (cd chrome/dist && zip -r "../../release-assets/Better_Doubao_Chrome_${TAG}.zip" .)
-          (cd edge/dist && zip -r "../../release-assets/Better_Doubao_Edge_${TAG}.zip" .)
-          sha256sum release-assets/*.zip > "release-assets/SHA256SUMS_${TAG}.txt"
+          (cd chrome/dist && zip -r "../../release-assets/Better_Doubao_Chrome_${TAG}.zip" . -x '.vite' '.vite/*')
+          (cd edge/dist && zip -r "../../release-assets/Better_Doubao_Edge_${TAG}.zip" . -x '.vite' '.vite/*')
+          (cd release-assets && sha256sum *.zip > "SHA256SUMS_${TAG}.txt")
 
       - name: Publish or update GitHub Release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
+          cat > release-notes.template.md <<'EOF'
+          ## 安装包使用说明
+
+          下载对应浏览器的预编译 ZIP 压缩包后，无需 Node.js 环境，按以下步骤加载即可：
+
+          ### 首次安装
+          1. 将 `Better_Doubao_Chrome___TAG__.zip`（或 `Better_Doubao_Edge___TAG__.zip`）解压到一个**固定目录**（请勿放在临时下载目录或安装后删除）。
+          2. 在浏览器地址栏打开扩展管理页：
+             - **Chrome**：访问 `chrome://extensions/`，开启右上角 **「开发者模式」**
+             - **Edge**：访问 `edge://extensions/`，开启左下角 **「开发人员模式」**
+          3. 点击 **「加载已解压的扩展程序」**（Edge 为 **「加载解压缩的扩展」**），选择解压后包含 `manifest.json` 的文件夹。
+          4. 刷新已打开的豆包网页（`https://www.doubao.com/`）即可生效。
+
+          ### 从旧版本升级
+          1. 将新版本 ZIP 解压并**覆盖**原先加载的目录（或先在扩展页移除旧版再加载新目录）。
+          2. 在扩展管理页点击 Better Doubao 卡片上的 **刷新** 图标，随后刷新豆包页面即可。
+          3. 你的文件夹分类、高亮、语料板与主题布局配置均保存在浏览器本地存储中，升级不会丢失；重大升级前也建议先在「更多工具 → 备份/恢复」中导出 JSON 备份。
+
+          ### 校验完整性（可选）
+          下载对应压缩包与 `SHA256SUMS___TAG__.txt` 到同一目录后执行：
+          ```bash
+          shasum -a 256 -c SHA256SUMS___TAG__.txt
+          ```
+
+          ---
+          EOF
+          sed "s/__TAG__/${TAG}/g" release-notes.template.md > release-notes.md
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release-assets/* --clobber
           else
             gh release create "$TAG" release-assets/* \
               --title "Better Doubao ${TAG}" \
+              --notes-file release-notes.md \
               --generate-notes
           fi
